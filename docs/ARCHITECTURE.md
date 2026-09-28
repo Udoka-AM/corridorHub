@@ -247,7 +247,7 @@ This is the combined "1 + 3" strategy. It puts Corridor in the Zcash track witho
 **Flow:**
 1. The B2B payout is flagged `privacy: shielded`.
 2. The saga converts USD stablecoin to ZEC through a swap route (NEAR Intents supports ZEC swaps).
-3. ZEC is sent from Corridor's shielded (Orchard) address to the supplier's shielded address, with an encrypted memo that carries the invoice reference.
+3. ZEC is sent from Corridor's shielded (Ironwood pool) address to the supplier's shielded address, with an encrypted memo that carries the invoice reference.
 4. The supplier receives shielded ZEC, or it is swapped out to a stablecoin at the destination.
 5. Corridor issues the PSP a **viewing key** per payment batch, which gives auditors selective disclosure.
 6. The ledger books the shielded leg against a `venue=zcash_shielded` account. Recon matches on the decrypted memo using the viewing key.
