@@ -4,6 +4,15 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap" rel="stylesheet" />
+<script>
+  (() => {
+    const stored = localStorage.getItem("corridor-theme");
+    const theme = stored === "dark" || stored === "light"
+      ? stored
+      : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+  })();
+</script>
 <style>
   :root {
     color-scheme: dark;
@@ -221,6 +230,7 @@
     --on-surface-muted: #66707A;
     --border: #E4E4E7;
     --accent: #203838;
+    --accent-soft: #EDF2F1;
     --error: #B42318;
     --radius-sm: 4px;
     --radius-md: 8px;
@@ -243,11 +253,27 @@
     --muted: var(--on-surface-muted);
     --faint: var(--tertiary);
     --brass: var(--accent);
-    --brass-soft: #EDF2F1;
+    --brass-soft: var(--accent-soft);
     --settled: var(--secondary);
     --display: "Space Mono", ui-monospace, monospace;
     --body: "Space Mono", ui-monospace, monospace;
     --mono: "Space Mono", ui-monospace, monospace;
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --primary: #F4F1E8;
+    --secondary: #8EB6A9;
+    --tertiary: #829091;
+    --neutral: #2B3A3B;
+    --surface: #0E1216;
+    --surface-strong: #141B1E;
+    --on-surface: #F4F1E8;
+    --on-surface-muted: #AAB4B5;
+    --border: #2B3A3B;
+    --accent: #8EB6A9;
+    --accent-soft: #203838;
+    --error: #F97066;
   }
 
   * { box-sizing: border-box; }
@@ -300,6 +326,25 @@
   .links { display: flex; gap: 28px; margin-left: auto; font: 400 12px/16px var(--mono); letter-spacing: 2.75px; text-transform: uppercase; color: var(--on-surface-muted); }
   .links a { text-decoration: none; }
   .links a:hover { color: var(--accent); }
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--on-surface-muted);
+    cursor: pointer;
+    font: 400 10px/14px var(--mono);
+    letter-spacing: 2.75px;
+    text-transform: uppercase;
+    transition: border-color 160ms ease-out, color 160ms ease-out;
+  }
+  .theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+  .theme-toggle-symbol { color: var(--accent); font-size: 16px; line-height: 16px; letter-spacing: 0; }
   .btn {
     display: inline-flex;
     align-items: center;
@@ -395,7 +440,7 @@
   .frost { display: grid; grid-template-columns: auto 1fr; gap: 20px 28px; align-items: center; margin-top: 20px; padding: 26px 28px; border: 1px solid var(--border); border-radius: var(--radius-md); }
   .keys { display: flex; gap: 10px; }
   .key { display: grid; place-items: center; width: 46px; height: 46px; border: 1px solid var(--border); border-radius: 50%; color: var(--on-surface-muted); font: 400 13px/16px var(--mono); }
-  .key.on { border-color: var(--accent); background: #EDF2F1; color: var(--accent); }
+  .key.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
   .frost p { max-width: 72ch; color: var(--on-surface-muted); font-size: 14px; line-height: 20px; text-wrap: pretty; }
   .frost p b { color: var(--on-surface); font-weight: 700; }
 
@@ -456,7 +501,8 @@
     .closing { grid-template-columns: 1fr; }
     .closing > div + div { border-left: none; border-top: 1px solid var(--border); }
   }
-  @media (max-width: 760px) { .links { display: none; } nav .btn { margin-left: auto; } }
+  @media (max-width: 760px) { .links { display: none; } nav .theme-toggle { margin-left: auto; } nav .btn { margin-left: 0; } }
+  @media (max-width: 560px) { .theme-toggle { padding-inline: 10px; } .theme-toggle-label { display: none; } }
   @media (max-width: 640px) { .frost { grid-template-columns: 1fr; } }
   @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } .steps li:nth-child(even) { padding-left: 0; border-left: none; } }
   @media (max-width: 520px) { .region { grid-template-columns: 1fr; gap: 4px; } }
@@ -476,6 +522,10 @@
       <a href="#economics">Economics</a>
       <a href="https://github.com/Udoka-AM/corridor" target="_blank" rel="noopener">GitHub</a>
     </div>
+    <button class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+      <span class="theme-toggle-symbol" aria-hidden="true">◐</span>
+      <span class="theme-toggle-label">Dark mode</span>
+    </button>
     <a class="btn solid" href="#access">Request access <span class="arr">→</span></a>
   </div>
 </nav>
@@ -732,6 +782,28 @@
 (() => {
   document.documentElement.classList.add("js");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const themeToggle = document.querySelector(".theme-toggle");
+  const themeLabel = themeToggle?.querySelector(".theme-toggle-label");
+  const themeSymbol = themeToggle?.querySelector(".theme-toggle-symbol");
+
+  function setTheme(theme, persist = true) {
+    const next = theme === "dark" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    if (persist) localStorage.setItem("corridor-theme", next);
+    if (themeToggle) {
+      const dark = next === "dark";
+      themeToggle.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+      themeToggle.setAttribute("aria-pressed", String(dark));
+      if (themeLabel) themeLabel.textContent = dark ? "Light mode" : "Dark mode";
+      if (themeSymbol) themeSymbol.textContent = dark ? "☀" : "◐";
+    }
+    window.dispatchEvent(new Event("corridor-theme-change"));
+  }
+
+  setTheme(document.documentElement.dataset.theme || "light", false);
+  themeToggle?.addEventListener("click", () => {
+    setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark");
+  });
 
   // Sections fade up once, from a visible resting state if observers never fire.
   const els = [...document.querySelectorAll(".reveal")];
@@ -823,6 +895,8 @@
     ctx.fillStyle = text; ctx.font = `400 ${Math.max(18, r * 0.42)}px ${css("--display")}`; ctx.fillText("Tempo", hub.x, hub.y + r * 0.04);
     ctx.fillStyle = faint; ctx.font = `400 ${Math.max(9, r * 0.12)}px ${css("--mono")}`; ctx.fillText("pathUSD · 0.6 s", hub.x, hub.y + r * 0.42);
   }
+
+  window.addEventListener("corridor-theme-change", () => reduce && draw(performance.now()));
 
   let last = 0;
   function frame(now) {
