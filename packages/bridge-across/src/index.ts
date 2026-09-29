@@ -165,7 +165,7 @@ export async function depositStatus(
     const s = await getJson(`${ACROSS_API[env]}/deposit/status?${qs}`, fetchImpl);
     return {
       status: s.status as FillStatus,
-      fillTx: s.fillTx ?? s.fillTxHash ?? undefined,
+      fillTx: s.fillTx ?? s.fillTxnRef ?? s.fillTxHash ?? undefined,
       depositId: s.depositId != null ? String(s.depositId) : undefined,
       destinationChainId: s.destinationChainId,
     };
