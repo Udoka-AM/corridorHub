@@ -99,6 +99,8 @@ corridor/
 | `@corridor/routing` | Route graph over (venue, asset); public and shielded payouts use the same planner |
 | `@corridor/saga` | Durable settlement saga: retries, reverse-order compensation, idempotent booking, leases |
 | `@corridor/chain-tempo` | TIP-20 `transferWithMemo`, pathUSD gas, memo-topic lookups, vault observer |
+| `@corridor/chain-zcash` | Ironwood shielded batches (ZIP-321, one tx / N recipients), ZIP-32 period accounts, viewing-key observer |
+| `@corridor/bridge-across` | Across Swap API: quotes, approvals + deposit, fill tracking (testnet and mainnet) |
 | `@corridor/legs` | Executable legs (reserve, bridge, partner) |
 | `@corridor/recon` | Matches chain observations against the ledger |
 
@@ -112,7 +114,11 @@ pnpm test               # unit tests (embedded Postgres, no setup)
 pnpm tempo:smoke        # live: memo-tagged transfer on Tempo Moderato, booked once
 pnpm payout:demo        # live: payout saga + forced failure + compensation + reconciliation
 pnpm mainnet:wallets    # create/inspect mainnet demo wallets (keys stay in .env.local / .keys/)
+pnpm across:testnet     # live Across testnet hop: Base Sepolia USDC → Solana devnet USDC
+pnpm zcash:spike        # shielded lane: one Ironwood tx pays a batch; auditor reconciles via viewing key
 ```
+
+The shielded lane uses [`zcash-devtool`](https://github.com/zcash/zcash-devtool) (librustzcash, Ironwood-aware). Build it with `cargo build --release` and point `ZCASH_DEVTOOL` at the binary.
 
 Testnet keys are generated into `.env.local` on first run, and the faucet funds them. Nothing secret is committed.
 

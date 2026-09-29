@@ -8,7 +8,9 @@
     "typecheck": "tsc -b",
     "tempo:smoke": "tsx scripts/tempo-smoke.ts",
     "payout:demo": "tsx scripts/payout-demo.ts",
-    "mainnet:wallets": "tsx scripts/mainnet-wallets.ts"
+    "mainnet:wallets": "tsx scripts/mainnet-wallets.ts",
+    "across:testnet": "tsx scripts/across-testnet.ts",
+    "zcash:spike": "tsx scripts/zcash-spike.ts"
   },
   "devDependencies": {
     "@types/node": "22",
@@ -25,6 +27,8 @@
     "@corridor/routing": "workspace:^",
     "@corridor/saga": "workspace:^",
     "@electric-sql/pglite": "^0.5.8",
-    "viem": "2.56.9"
+    "viem": "2.56.9",
+    "@corridor/bridge-across": "workspace:*",
+    "@corridor/chain-zcash": "workspace:*"
   }
 }

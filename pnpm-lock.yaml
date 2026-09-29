@@ -8,9 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@corridor/bridge-across':
+        specifier: workspace:*
+        version: link:packages/bridge-across
       '@corridor/chain-tempo':
         specifier: workspace:^
         version: link:packages/chain-tempo
+      '@corridor/chain-zcash':
+        specifier: workspace:*
+        version: link:packages/chain-zcash
       '@corridor/core':
         specifier: workspace:^
         version: link:packages/core
@@ -49,7 +55,15 @@ importers:
         specifier: '3'
         version: 3.2.7(@types/node@22.20.4)(tsx@4.23.15)
 
+  packages/bridge-across: {}
+
   packages/chain-tempo:
+    dependencies:
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/chain-zcash:
     dependencies:
       '@corridor/core':
         specifier: workspace:*

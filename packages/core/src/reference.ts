@@ -99,34 +99,36 @@ export function fromSolanaMemo(memo: string): Hex | null {
 }
 
 export const ZCASH_MEMO_BYTES = 512;
-/** ZIP-302: a leading 0xFF marks the memo as arbitrary (non-text) data. */
-const ZIP302_ARBITRARY = 0xff;
-const ZCASH_MEMO_MAGIC = [0x43, 0x52] as const; // "CR"
 
 /**
- * Zcash: the reference plus an invoice reference, packed into the 512-byte
- * encrypted memo of each shielded output. Only the recipient and holders of
- * the viewing key can read it.
+ * Zcash: the reference plus an invoice reference, carried as a ZIP-302 text
+ * memo on each shielded output. It is encrypted to the recipient (and to
+ * holders of the viewing key), and the recipient's wallet shows it as text:
+ *
+ *   INV-2026-0042
+ *   corridor:<64 hex>
  */
 export function toZcashMemo(ref: Hex, invoiceRef = ""): Uint8Array {
-  const inv = new TextEncoder().encode(invoiceRef);
-  if (inv.length > 255) throw new Error("invoiceRef must be at most 255 bytes");
-  const memo = new Uint8Array(ZCASH_MEMO_BYTES);
-  memo[0] = ZIP302_ARBITRARY;
-  memo.set(ZCASH_MEMO_MAGIC, 1);
-  memo.set(fromHex(ref), 3);
-  memo[35] = inv.length;
-  memo.set(inv, 36);
+  if (/[\r\n]/.test(invoiceRef)) throw new Error("invoiceRef must be a single line");
+  const text = `${invoiceRef ? invoiceRef + "\n" : ""}corridor:${ref.slice(2)}`;
+  const bytes = new TextEncoder().encode(text);
+  if (bytes.length > ZCASH_MEMO_BYTES) throw new Error("memo exceeds 512 bytes");
+  const memo = new Uint8Array(ZCASH_MEMO_BYTES); // ZIP-302: text is zero-padded to 512 bytes
+  memo.set(bytes);
   return memo;
 }
 
 export function fromZcashMemo(memo: Uint8Array): { ref: Hex; invoiceRef: string } | null {
-  if (memo.length !== ZCASH_MEMO_BYTES || memo[0] !== ZIP302_ARBITRARY) return null;
-  if (memo[1] !== ZCASH_MEMO_MAGIC[0] || memo[2] !== ZCASH_MEMO_MAGIC[1]) return null;
-  const ref = toHex(memo.subarray(3, 35));
+  // ZIP-302: a first byte above 0xF4 means the memo is not UTF-8 text.
+  if (memo.length === 0 || memo.length > ZCASH_MEMO_BYTES || memo[0]! > 0xf4) return null;
+  const end = memo.indexOf(0);
+  const text = new TextDecoder().decode(end === -1 ? memo : memo.subarray(0, end));
+  const m = /(?:^|\n)corridor:([0-9a-f]{64})\s*$/.exec(text);
+  if (!m) return null;
+  const ref = `0x${m[1]}` as Hex;
   if (!tryDecodeRef(ref)) return null;
-  const len = memo[35]!;
-  return { ref, invoiceRef: new TextDecoder().decode(memo.subarray(36, 36 + len)) };
+  const invoiceRef = text.slice(0, m.index).trim();
+  return { ref, invoiceRef };
 }
 
 // ---- helpers ----

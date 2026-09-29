@@ -69,14 +69,17 @@ describe("Corridor Reference", () => {
 
     const memo = toZcashMemo(hex, "INV-2026-0042");
     expect(memo.length).toBe(512);
-    expect(memo[0]).toBe(0xff); // ZIP-302 arbitrary data
+    expect(memo[0]).toBeLessThanOrEqual(0xf4); // ZIP-302 text memo, readable in the recipient's wallet
+    expect(new TextDecoder().decode(memo.subarray(0, memo.indexOf(0)))).toBe(`INV-2026-0042\ncorridor:${hex.slice(2)}`);
     expect(fromZcashMemo(memo)).toEqual({ ref: hex, invoiceRef: "INV-2026-0042" });
   });
 
-  it("rejects Zcash memos that are text or foreign data", () => {
+  it("ignores Zcash memos that are not Corridor references", () => {
     const text = new Uint8Array(512);
     text.set(new TextEncoder().encode("hello"));
     expect(fromZcashMemo(text)).toBeNull();
+    const binary = new Uint8Array(512).fill(0xff);
+    expect(fromZcashMemo(binary)).toBeNull();
   });
 });
 
