@@ -216,6 +216,11 @@ export function nearSwapTestnetLeg(opts: NearSwapOptions): Leg<PayoutData> {
       }
       const ready = await opts.zcash.syncUntil(() => opts.zcash.spendable(opts.vaultAccount) >= zat, { timeoutMs: opts.confirmTimeoutMs });
       if (!ready) throw new Error(`ZEC delivery ${deliveryTx} not yet spendable in the vault`);
+      // Book the delivery under the output the observers (and an auditor's viewing key) will see.
+      const received = shieldedObservations(
+        opts.zcash.outputs().filter((o) => o.txid === deliveryTx && o.toAccount === opts.vaultAccount),
+      )[0];
+      if (!received) throw new Error(`delivery ${deliveryTx} has no output to the vault yet`);
 
       const acct = await zecAccounts(ctx, opts.vaultName);
       return {
@@ -235,7 +240,7 @@ export function nearSwapTestnetLeg(opts: NearSwapOptions): Leg<PayoutData> {
             kind: "near.swap.delivery",
             reference: d.reference,
             sagaId: ctx.sagaId,
-            external: { venue: "zcash_ironwood", ref: `${deliveryTx}:delivery` },
+            external: { venue: "zcash_ironwood", ref: received.externalRef },
             metadata: { quote, testnetDelivery: true },
             lines: [
               { account: acct.vault, direction: "D", money: money("ZEC", zat) },
