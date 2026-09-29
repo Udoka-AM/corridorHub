@@ -174,6 +174,48 @@ export class ZcashWallet {
     }
   }
 
+  /** Track an externally controlled account (e.g. a FROST treasury) from its UFVK. */
+  importUfvk(name: string, ufvk: string, birthday: number): ZcashAccount {
+    const existing = this.accounts().find((a) => a.ufvk === ufvk);
+    if (existing) return existing;
+    this.run(this.withServer(["import-ufvk", "--name", name, ufvk, String(birthday)]));
+    return this.account(name);
+  }
+
+  // ---- PCZT (partially created Zcash transaction) flow, for spends signed outside the wallet ----
+
+  private pczt(args: string[]): string {
+    const out = execFileSync(this.opts.bin, ["pczt", "-w", this.opts.walletDir, ...args], {
+      encoding: "utf8",
+      env: { ...process.env, NO_COLOR: "1", RUST_LOG: "warn" },
+      stdio: ["ignore", "pipe", "pipe"],
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return out.replace(/\x1b\[[0-9;]*m/g, "");
+  }
+
+  /** Build an unsigned batch transaction (one output + memo per payment) from an account. */
+  pcztCreateBatch(accountUuid: string, payments: ShieldedPayment[], outPath: string): void {
+    this.pczt(["create", accountUuid, "--payment-uri", buildPaymentRequest(payments), "--output", outPath]);
+  }
+
+  /** Add zero-knowledge proofs. Needs no spending key. */
+  pcztProve(inPath: string, outPath: string): void {
+    this.pczt(["prove", inPath, "--output", outPath]);
+  }
+
+  pcztCombine(inPaths: string[], outPath: string): void {
+    this.pczt(["combine", ...inPaths.flatMap((p) => ["-i", p]), "-o", outPath]);
+  }
+
+  /** Extract the finished transaction, broadcast it, and return its txid. */
+  pcztSend(inPath: string): string {
+    const out = this.pczt(this.opts.server ? ["send", inPath, "-s", this.opts.server] : ["send", inPath]);
+    const txid = /\b([0-9a-f]{64})\b/.exec(out.trim().split("\n").at(-1) ?? "")?.[1];
+    if (!txid) throw new Error(`could not read txid from pczt send output:\n${out}`);
+    return txid;
+  }
+
   /** Initialise a view-only wallet from a viewing key: what an auditor runs. */
   initViewOnly(name: string, ufvk: string, birthday: number): void {
     this.run(this.withServer(["init-fvk", "--name", name, "--fvk", ufvk, "--birthday", String(birthday)]));

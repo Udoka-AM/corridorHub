@@ -10,7 +10,8 @@
     "payout:demo": "tsx scripts/payout-demo.ts",
     "mainnet:wallets": "tsx scripts/mainnet-wallets.ts",
     "across:testnet": "tsx scripts/across-testnet.ts",
-    "zcash:spike": "tsx scripts/zcash-spike.ts"
+    "zcash:spike": "tsx scripts/zcash-spike.ts",
+    "zcash:frost": "tsx scripts/zcash-frost.ts"
   },
   "devDependencies": {
     "@types/node": "22",

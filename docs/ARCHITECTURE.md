@@ -226,13 +226,18 @@ bytes 28–31 checksum (first 4 bytes of sha256 over bytes 0–27)
 - `@solana/kit`, USDC SPL transfer plus a Memo instruction carrying the Corridor Reference.
 - Partner adapter interface: `quote()`, `createPayout()`, `status()`, `verifyWebhook()`. First adapter: **Paj** (Solana USDC → NGN bank, business API with offramp orders and webhooks). The mock adapter follows the same interface.
 
-### 6.6 Shielded legs (`packages/chain-zcash`, Rust sidecar `services/zcash`)
-- **Z3 stack** (Zebra, Zaino, Zallet) on Zcash testnet, targeting the **Ironwood** pool. Orchard has been sealed since NU6.3 in July 2026.
-- **Account model:** ZIP-32 account per `(customer, period)`. Exporting a viewing key discloses only that customer's period.
-- **Batch payout:** one shielded transaction with N outputs, each carrying the encrypted Corridor Reference and invoice ref.
-- **FROST 2-of-3** (RedPallas) authorizes the batch spend: customer approver, customer finance lead, and Corridor as co-signer.
-- **Funding leg:** pathUSD/USDC to ZEC through NEAR Intents (mainnet only, since there is no testnet liquidity). On testnet it is simulated behind the real API shape. FX exposure is bounded by an immediate swap-and-send window.
-- **Observer:** a viewing-key scanner feeds the same reconciliation engine.
+### 6.6 Shielded legs (`packages/chain-zcash`, `services/zcash-frost`)
+- **Wallet tooling:** [`zcash-devtool`](https://github.com/zcash/zcash-devtool), which is librustzcash and Ironwood-aware, syncing through `testnet.zec.rocks`. Its wallet database is read read-only for observation. The Z3 node stack is the production path. Orchard has been sealed since NU6.3 (July 2026), so all new notes land in **Ironwood**.
+- **Vault model:** each `(customer, period)` gets its own shielded **vault** (a ZIP-32 account or a FROST vault). Its viewing key discloses exactly that customer's period and nothing else.
+- **Batch payout:** a ZIP-321 payment request becomes **one shielded transaction with N outputs**. Each output carries a ZIP-302 text memo (`INV-… / corridor:<ref>`) that is encrypted to the recipient and readable in their wallet.
+- **Threshold control (FROST 2-of-3):** the vault's spend-authorizing key `ak` *is* a FROST group key (RedPallas ciphersuite). Nobody holds the whole spending key, and any 2 of {customer approver, customer finance lead, Corridor} can authorize.
+  1. `corridor-frost keygen` produces 3 shares. The group verifying key must have a positive-y encoding, which the keygen retries until it does. The Orchard FVK `ak ‖ nk ‖ rivk` then goes into `FullViewingKey::from_bytes` (a public API, no crate fork), and from there into the UFVK and vault address.
+  2. `zcash-devtool` imports the UFVK (view-only) and builds the batch as an unsigned **PCZT** (`pczt create --payment-uri`, a small patch kept in `services/zcash-frost/patches/`), then proves it.
+  3. `corridor-frost sign` reads each unsigned Ironwood action's `alpha`. It checks `rk == ak + [alpha]G`, so it only signs this vault's spends. It runs FROST rounds 1 and 2 **rerandomized by alpha**, aggregates, verifies the RedPallas signature against `rk`, and applies it with `Signer::apply_ironwood_signature`. A signer set below the threshold is refused.
+  4. `zcash-devtool pczt combine` merges proofs and signatures, then `pczt send` broadcasts.
+  - *Hackathon scope:* the dealer is trusted, and both FROST rounds run in one process over separate share files. *Production:* DKG, and each signer on their own device relaying through `frostd`. The PCZT interface and the cryptography are unchanged.
+- **Funding leg:** pathUSD/USDC to ZEC through NEAR Intents (mainnet only, since there is no testnet liquidity). On testnet it is simulated: a hot funding account sweeps TAZ into the vault. FX exposure is bounded by an immediate swap-and-send window.
+- **Observer:** any wallet that holds the vault's viewing key, including an auditor's view-only wallet, emits Observations into the same reconciliation engine.
 
 ### 6.7 Reconciliation (`packages/recon`)
 Observers emit `Observation {venue, externalRef, reference, amount, asset, at}`. The matcher joins observations with ledger expectations on `reference` and produces `matched`, `partial`, `unmatched` or `amount_mismatch`. It works the same way for both lanes.
@@ -316,6 +321,7 @@ Corridor board · venue balances (including shielded, visible only to the custom
 | — | ✅ 30 Sep | **Global network:** hub-and-spoke routing (collections and payouts), 30+ currencies across Africa, Asia, the Americas and Europe, Corridor Reference v2 with currency pairs, and hub enforcement tests. Importer flows NGN → CNY/HKD/INR/AED/USD/BRL/MXN plan end to end. |
 | D5 (in progress) | 🔄 30 Sep | **Zcash spike:** `zcash-devtool` (librustzcash, Ironwood-aware) built; Zcash testnet wallets synced past Ironwood activation (4,134,000); ZIP-32 treasury (0) + period account `acme-2026-10` (1) with separate UFVK/UIVK; `@corridor/chain-zcash` wraps batch pay (ZIP-321), viewing-key wallets and a read-only wallet-DB observer; memos are ZIP-302 text (`INV-… / corridor:<ref>`) so recipients see invoice numbers. `pnpm zcash:spike` ready; blocked only on faucet TAZ. |
 | D3 (partial) | 🔄 30 Sep | **Across adapter** (`@corridor/bridge-across`): quote → approvals + deposit → fill tracking; same code for testnet and mainnet. Option A (Base Sepolia → Solana devnet, live Across testnet) scripted in `pnpm across:testnet`; waiting on faucet funds. Mainnet run when the ~$10 demo float lands. |
+| D7 | 🔄 30 Sep | **FROST 2-of-3 vault:** `services/zcash-frost` (`corridor-frost`, Rust, MIT) on ZF's `reddsa`/`frost-rerandomized` with RedPallas. Keygen: the group key is the vault's `ak` → FVK → UFVK and address (no crate fork). Signing: per-action `alpha` rerandomization, `rk` check, verification, and `apply_ironwood_signature`. Rust tests: any 2 of 3 verify under `rk`, 1 of 3 fails. `zcash-devtool` patched to build multi-recipient PCZTs. `pnpm zcash:frost` has funded the vault on testnet and is waiting on confirmations. |
 
 **Known gaps (next up):**
 - **Vault balance check.** Recon matches memo-tagged movements only. Faucet top-ups and other plain transfers into vaults aren't booked, so add an on-chain-balance vs ledger check per vault, and book gas top-ups as owner funding.
