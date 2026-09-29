@@ -83,6 +83,15 @@ describe("Across adapter", () => {
     await expect(executeEvm(sender, q)).rejects.toThrow(/expired/);
   });
 
+  it("treats a zero expiry (CCTP-backed routes) as no expiry", async () => {
+    const q = await quote(
+      { env: "testnet", originChainId: 84532, destinationChainId: 133268194659241, inputToken: "a", outputToken: "b", amount: 1n, depositor: "d", recipient: "r" },
+      fakeFetch({ "/swap/approval": { ...QUOTE, quoteExpiryTimestamp: 0, approvalTxns: [] } }),
+    );
+    const sender: EvmSender = { sendTransaction: async () => `0x${"1".padStart(64, "0")}`, waitForTransactionReceipt: async ({ hash }) => ({ status: "success", transactionHash: hash }) };
+    await expect(executeEvm(sender, q)).resolves.toMatchObject({ approvals: [] });
+  });
+
   it("tolerates indexer lag, then reports the fill", async () => {
     let n = 0;
     const fetchImpl = (async () => {

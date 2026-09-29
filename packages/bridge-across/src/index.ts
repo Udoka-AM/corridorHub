@@ -63,6 +63,7 @@ export interface AcrossQuote {
   minOutputAmount: bigint;
   /** Seconds. */
   expectedFillTime: number;
+  /** Unix seconds; 0 when the route has no quote expiry. */
   quoteExpiryTimestamp: number;
   feeTotal: bigint;
   approvalTxns: EvmTx[];
@@ -123,7 +124,10 @@ export interface EvmSender {
 /** Sign and send the approvals, then the deposit. Returns the origin-chain deposit transaction. */
 export async function executeEvm(sender: EvmSender, q: AcrossQuote): Promise<{ depositTxHash: Hex; approvals: Hex[] }> {
   if (q.swapTx.ecosystem !== "evm") throw new AcrossError(`origin ecosystem ${q.swapTx.ecosystem} is not EVM`);
-  if (Date.now() / 1000 > q.quoteExpiryTimestamp) throw new AcrossError("quote expired; re-quote before sending");
+  // 0 means the route has no quote expiry (e.g. CCTP-backed routes).
+  if (q.quoteExpiryTimestamp > 0 && Date.now() / 1000 > q.quoteExpiryTimestamp) {
+    throw new AcrossError("quote expired; re-quote before sending");
+  }
   const approvals: Hex[] = [];
   for (const tx of q.approvalTxns) {
     const hash = await sender.sendTransaction({ to: tx.to, data: tx.data, value: tx.value ? BigInt(tx.value) : undefined });
