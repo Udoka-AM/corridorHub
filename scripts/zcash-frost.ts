@@ -15,7 +15,7 @@
  *   5. recipients read their invoice memos; an auditor holding only the
  *      vault's viewing key reconciles the batch against the ledger
  */
-import { mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { RefKind, customerTag, encodeRef, fromZcashMemo, money, toZcashMemo, uuidv7 } from "@corridor/core";
 import { FrostSigner, ZcashWallet, formatZec, shieldedObservations } from "@corridor/chain-zcash";
 import { Accounts, Ledger, openLocalDb } from "@corridor/ledger";
@@ -35,6 +35,9 @@ const vaultKeys = frost.vault();
 const CUSTOMER = "acme-imports";
 const PER_PAYMENT = 1_000_000n; // 0.01 TAZ
 const FEE_BUFFER = 200_000n;
+
+const resumeIdx = process.argv.indexOf("--txid");
+const resumeTxid = resumeIdx === -1 ? undefined : process.argv[resumeIdx + 1];
 
 console.log("syncing wallets…");
 corridor.sync();
@@ -57,6 +60,25 @@ console.log(`FROST vault (${vaultKeys.threshold}-of-${vaultKeys.signers}), viewi
   address  ${vaultAddress}
   balance  ${formatZec(spendable(vault.uuid))} TAZ spendable`);
 
+let txid: string;
+let batchId: string;
+let approvedBy: number[];
+let total: bigint;
+
+if (resumeTxid) {
+  // Finish ledger + recipient + auditor steps for a batch already broadcast.
+  txid = resumeTxid;
+  const rec = existsSync(`${WORK}/${txid}.approval.json`)
+    ? JSON.parse(readFileSync(`${WORK}/${txid}.approval.json`, "utf8"))
+    : { batchId: `resumed-${txid.slice(0, 8)}`, approvedBy: [] };
+  batchId = rec.batchId;
+  approvedBy = rec.approvedBy;
+  total = corridor
+    .outputs()
+    .filter((o) => o.txid === txid && o.fromAccount === vault.uuid && !o.isChange)
+    .reduce((sum, o) => sum + o.zatoshi, 0n);
+  console.log(`\nresuming batch ${batchId} (tx ${txid})`);
+} else {
 // ---- 1. funding ----
 if (spendable(vault.uuid) < needed) {
   const hot = corridor.account("acme-2026-10");
@@ -74,7 +96,7 @@ if (spendable(vault.uuid) < needed) {
 // ---- 2. build and prove the batch ----
 mkdirSync(WORK, { recursive: true });
 const secret = testnetKey("CORRIDOR_REF_SECRET");
-const batchId = uuidv7();
+batchId = uuidv7();
 const items = recipients.map((r) => ({
   ...r,
   reference: encodeRef({ kind: RefKind.BatchItem, corridor: "NGN-CNY", shielded: true, id: uuidv7(), customerTag: customerTag(CUSTOMER, secret) }),
@@ -104,7 +126,10 @@ console.log(`  signers 1 + 3 → ${approval.signed}/${approval.ironwoodActions} 
 // ---- 4. combine and broadcast ----
 const final = `${WORK}/${batchId}.final.pczt`;
 corridor.pcztCombine([proved, signed], final);
-const txid = corridor.pcztSend(final);
+txid = corridor.pcztSend(final);
+approvedBy = approval.signers;
+total = PER_PAYMENT * BigInt(items.length);
+writeFileSync(`${WORK}/${txid}.approval.json`, JSON.stringify({ batchId, approvedBy, sighash: approval.sighash }));
 console.log(`\nbroadcast: one shielded tx, ${items.length} recipients\n  ${txid}\n  https://testnet.zcashexplorer.app/transactions/${txid}`);
 
 console.log("waiting for the transaction to be mined…");
@@ -112,6 +137,7 @@ for (let i = 0; i < 60; i++) {
   corridor.sync();
   if (corridor.outputs().some((o) => o.txid === txid && o.minedHeight != null)) break;
   await new Promise((r) => setTimeout(r, 20_000));
+}
 }
 
 // ---- 5. ledger, recipients, auditor ----
@@ -121,7 +147,6 @@ const ledger = await Ledger.open(db);
 const accounts = new Accounts(ledger);
 const vaultAcct = await accounts.vault("acme-2026-10-vault", "ZEC", "zcash_ironwood");
 const liability = await accounts.customer(CUSTOMER, "NGN-CNY", "ZEC", "zcash_ironwood");
-const total = PER_PAYMENT * BigInt(items.length);
 await ledger.post({
   kind: "near.swap.simulated",
   external: { venue: "internal", ref: `fund:${batchId}` },
@@ -136,7 +161,7 @@ for (const obs of sent.filter((o) => o.reference)) {
     kind: "zcash.shieldedBatch.item",
     reference: obs.reference!,
     external: { venue: "zcash_ironwood", ref: obs.externalRef },
-    metadata: { batchId, txid, approvedBy: approval.signers },
+    metadata: { batchId, txid, approvedBy },
     lines: [
       { account: liability, direction: "D", money: money("ZEC", obs.amount) },
       { account: vaultAcct, direction: "C", money: money("ZEC", obs.amount) },

@@ -70,8 +70,14 @@ export class ZcashWallet {
     return this.opts.server ? [...args, "-s", this.opts.server] : args;
   }
 
+  /**
+   * Scan new blocks, then fetch full transactions. Compact blocks carry no
+   * memos, so without the second step a light wallet sees payments but not
+   * their Corridor References.
+   */
   sync(): void {
     this.run(this.withServer(["sync"]));
+    this.run(this.withServer(["enhance"]));
   }
 
   chainTip(): number {
