@@ -11,7 +11,8 @@
     "mainnet:wallets": "tsx scripts/mainnet-wallets.ts",
     "across:testnet": "tsx scripts/across-testnet.ts",
     "zcash:spike": "tsx scripts/zcash-spike.ts",
-    "zcash:frost": "tsx scripts/zcash-frost.ts"
+    "zcash:frost": "tsx scripts/zcash-frost.ts",
+    "importer:demo": "tsx scripts/importer-demo.ts"
   },
   "devDependencies": {
     "@types/node": "22",
@@ -30,6 +31,9 @@
     "@electric-sql/pglite": "^0.5.8",
     "viem": "2.56.9",
     "@corridor/bridge-across": "workspace:*",
-    "@corridor/chain-zcash": "workspace:*"
+    "@corridor/chain-zcash": "workspace:*",
+    "@corridor/partners": "workspace:*",
+    "@corridor/webhooks": "workspace:*",
+    "@corridor/chain-solana": "workspace:*"
   }
 }

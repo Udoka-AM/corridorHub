@@ -102,7 +102,10 @@ corridor/
 | `@corridor/chain-zcash` | Ironwood shielded batches (ZIP-321, one tx / N recipients), ZIP-32 period accounts, viewing-key observer |
 | `services/zcash-frost` | Rust `corridor-frost`: FROST 2-of-3 (RedPallas, rerandomized) keygen and PCZT signing for Ironwood vaults |
 | `@corridor/bridge-across` | Across Swap API: quotes, approvals + deposit, fill tracking (testnet and mainnet) |
-| `@corridor/legs` | Executable legs (reserve, bridge, partner) |
+| `@corridor/legs` | Executable legs: reserve, bridge (both directions), partner payout (exactly-once funding), partner collection, ledger credit |
+| `@corridor/partners` | Ramp partner interface, Paj adapter (OpenAPI v2), Paj-shaped mock, partner registry, webhook signatures |
+| `@corridor/webhooks` | `POST /webhooks/:partner`: verified, stored once, turned into reconciliation observations |
+| `@corridor/chain-solana` | USDC transfers with the Corridor Reference as SPL memo; memo observer |
 | `@corridor/recon` | Matches chain observations against the ledger |
 
 ## Getting started
@@ -113,7 +116,8 @@ Requires Node 22+ and pnpm 9.
 pnpm install
 pnpm test               # unit tests (embedded Postgres, no setup)
 pnpm tempo:smoke        # live: memo-tagged transfer on Tempo Moderato, booked once
-pnpm payout:demo        # live: payout saga + forced failure + compensation + reconciliation
+pnpm payout:demo        # live: EUR→NGN payout (partner order, signed webhooks) + forced failure + compensation + recon
+pnpm importer:demo      # live: importer pays ₦ → hub balance credited → supplier paid in CNY, reconciled both ways
 pnpm mainnet:wallets    # create/inspect mainnet demo wallets (keys stay in .env.local / .keys/)
 pnpm across:testnet     # live Across testnet hop: Base Sepolia USDC → Solana devnet USDC
 pnpm zcash:spike        # shielded lane: one Ironwood tx pays a batch; auditor reconciles via viewing key

@@ -3,11 +3,16 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
     "@corridor/core": "workspace:*",
     "@corridor/chain-tempo": "workspace:*",
     "@corridor/ledger": "workspace:*",
-    "@corridor/saga": "workspace:*"
+    "@corridor/saga": "workspace:*",
+    "@corridor/partners": "workspace:*",
+    "@corridor/webhooks": "workspace:*",
+    "@corridor/routing": "workspace:*"
   }
 }

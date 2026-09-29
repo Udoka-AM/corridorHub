@@ -107,6 +107,9 @@ export const PAYOUT_CURRENCIES: readonly Fiat[] = [
   "EUR", "GBP", "CHF",
 ];
 
+/** Currencies a partner can pay out directly from Base USDC (Paj: docs.paj.cash/concepts/chains). */
+export const BASE_PAYOUT_CURRENCIES: readonly Fiat[] = ["NGN", "GHS", "KES", "TZS", "ZAR"];
+
 const p = (venue: Venue, asset: Asset): Position => ({ venue, asset });
 
 /** The edges Corridor can execute. Venue-specific details live in the leg implementations. */
@@ -125,6 +128,8 @@ export const DEFAULT_EDGES: Edge[] = [
   // Spokes: ramp partners collect and pay out local currency against USDC on Solana.
   ...COLLECTION_CURRENCIES.map((c): Edge => ({ kind: "partner.collect", from: p("partner_fiat", c), to: p("solana", "USDC"), cost: 1 })),
   ...PAYOUT_CURRENCIES.map((c): Edge => ({ kind: "partner.payout", from: p("solana", "USDC"), to: p("partner_fiat", c), cost: 1 })),
+  // Partners that settle on Base (e.g. Paj) pay out straight from Base USDC: one bridge hop instead of two.
+  ...BASE_PAYOUT_CURRENCIES.map((c): Edge => ({ kind: "partner.payout", from: p("base", "USDC"), to: p("partner_fiat", c), cost: 1 })),
 
   // Shielded spoke: into the Ironwood pool, then one batch transaction to all recipients.
   { kind: "near.swap", from: p("tempo", "pathUSD"), to: p("zcash_ironwood", "ZEC"), cost: 2 },

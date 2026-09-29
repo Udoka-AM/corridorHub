@@ -4,13 +4,12 @@ import { NoRouteError, planRoute } from "./index.ts";
 const source = { venue: "tempo", asset: "pathUSD" } as const;
 
 describe("route planner", () => {
-  it("routes a public mainnet payout through Across in two hops via Base", () => {
+  it("routes a mainnet NGN payout with one Across hop, paying out from Base", () => {
     const plan = planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" });
-    expect(plan.steps.map((s) => `${s.kind}:${s.to.venue}`)).toEqual([
-      "ledger.reserve:tempo",
-      "across.bridge:base",
-      "across.bridge:solana",
-      "partner.payout:partner_fiat",
+    expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
+      "ledger.reserve:tempo->tempo",
+      "across.bridge:tempo->base",
+      "partner.payout:base->partner_fiat",
     ]);
     expect(plan.steps.every((s) => s.referenceScope === "payout")).toBe(true);
   });
@@ -49,6 +48,12 @@ describe("route planner", () => {
     expect(() =>
       planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "testnet" }),
     ).toThrow(NoRouteError);
+  });
+
+  it("takes the two-hop Solana route where no partner pays out from Base", () => {
+    const plan = planRoute({ corridor: "USD-UGX", privacy: "public", source, destination: { venue: "partner_fiat", asset: "UGX" }, env: "mainnet" });
+    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "across.bridge", "across.bridge", "partner.payout"]);
+    expect(plan.steps.at(-1)?.from.venue).toBe("solana");
   });
 
   it("routes an import payment from a Nigerian importer's balance to a Chinese supplier", () => {

@@ -222,9 +222,22 @@ bytes 28–31 checksum (first 4 bytes of sha256 over bytes 0–27)
 - Verified live quotes on 29 Sep 2026: **Tempo USDC.e → Base USDC**, 5 USDC in, fill ~1 s, fee ≈ $0.004. **Base USDC → Solana USDC**, fill ~8 s, fee ≈ $0.0006. Across does not yet support destination swaps into Solana in one call, so the saga runs **two legs**, each with its own compensation.
 - **There is no Across Tempo testnet.** The live bridge runs on mainnet with micro-amounts ($5–20). The testnet demo can switch to the `simulated` adapter, which has the same interface.
 
-### 6.5 Solana and ramp legs (`packages/chain-solana`, `packages/partners`)
-- `@solana/kit`, USDC SPL transfer plus a Memo instruction carrying the Corridor Reference.
-- Partner adapter interface: `quote()`, `createPayout()`, `status()`, `verifyWebhook()`. First adapter: **Paj** (Solana USDC → NGN bank, business API with offramp orders and webhooks). The mock adapter follows the same interface.
+### 6.5 Solana, ramp partners and webhooks (`packages/chain-solana`, `packages/partners`, `packages/webhooks`)
+- **Solana leg:** `@solana/kit` transaction that creates the recipient's USDC account if missing, does a `TransferChecked`, and adds an SPL **Memo `corridor:<ref>`**, all in one transaction. An observer reads the reference back from the transaction's memo field.
+- **Partner interface (`RampPartner`):** `rates`, `openPayout` (offramp), `openCollection` (onramp), `getOrder`, `verifyWebhook`, `parseWebhook`. Every provider is normalised to `open → processing → completed | failed`, so legs never depend on one provider's API. A `PartnerRegistry` picks the partner per (currency, direction, chain).
+- **Paj adapter:** built against Paj Public API v2 ([OpenAPI](https://docs.paj.cash/api-reference/openapi.json)).
+  - Offramp orders return a **one-off funding address** (valid for 2 hours). Onramp orders return a **one-off virtual bank account**.
+  - The Corridor Reference rides in `description` / `userExternalId` and is echoed back on webhooks.
+  - Paj settles on **Solana and Base** (USDC), which is why a mainnet NGN payout needs only **one Across hop** (Tempo → Base → Paj). `ZCASH` already appears in Paj's chain enum (not open yet), a future path for shielded payouts straight to naira.
+- **Mock partner:** the same lifecycle and the same signed webhooks, for testnet. Payout funding is a real Solana devnet memo transfer whenever the devnet vault holds USDC.
+- **Webhooks:** `POST /webhooks/:partner`.
+  - Each delivery is verified with HMAC-SHA256 over `{timestamp}.{raw body}` (`v1=` prefix, 5-minute window, constant-time compare). This is Paj's scheme.
+  - Each order status is stored **once**. Redeliveries are acknowledged; forgeries get a 401.
+  - A completed order becomes an Observation for reconciliation (`partner_fiat`, `${partner}:${orderId}`).
+- **Payout leg safety:**
+  - The step records its partner order and funding transaction durably (`partner_order_links`), so **funding is exactly-once** across retries and crashes.
+  - A partner failure **after funding** stops the saga at `manual_review` rather than compensating, because the money is at the partner until its refund is confirmed.
+- **Collections (importer flow):** `partner.collect` (virtual account → USDC delivered to the Corridor ingress wallet) → bridge into the hub → `ledger.credit` (the customer's pathUSD balance). The customer can then pay suppliers from the hub like any other payout.
 
 ### 6.6 Shielded legs (`packages/chain-zcash`, `services/zcash-frost`)
 - **Wallet tooling:** [`zcash-devtool`](https://github.com/zcash/zcash-devtool), which is librustzcash and Ironwood-aware, syncing through `testnet.zec.rocks`. Its wallet database is read read-only for observation. The Z3 node stack is the production path. Orchard has been sealed since NU6.3 (July 2026), so all new notes land in **Ironwood**.
@@ -322,6 +335,7 @@ Corridor board · venue balances (including shielded, visible only to the custom
 | D5–D6 | ✅ 30 Sep | **Shielded batch on Zcash testnet (Ironwood):** `pnpm zcash:spike` — one shielded tx pays 3 recipients ([de5d2562…](https://testnet.zcashexplorer.app/transactions/de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b)); each reads its invoice memo (`INV-2026-10-00x / corridor:<ref>`) in its own wallet; an auditor with only the period account's viewing key sees exactly the 3 payouts (no treasury activity) and reconciles 3/3 against the ledger. Tooling: `zcash-devtool` (librustzcash, Ironwood-aware); memos need `enhance` after sync (compact blocks carry none). |
 | D3 (partial) | 🔄 30 Sep | **Across adapter** (`@corridor/bridge-across`): quote → approvals + deposit → fill tracking; same code for testnet and mainnet. Option A (Base Sepolia → Solana devnet, live Across testnet) scripted in `pnpm across:testnet`; waiting on faucet funds. Mainnet run when the ~$10 demo float lands. |
 | D7 | ✅ 30 Sep | **FROST 2-of-3 vault on testnet:** `pnpm zcash:frost` — vault key exists only as shares (`corridor-frost`, RedPallas, rerandomized by each action's alpha); signer 2 alone refused; signers 1 + 3 co-signed; one Ironwood tx paid 3 recipients ([878b44b8…](https://testnet.zcashexplorer.app/transactions/878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c)); recipients read invoice memos; auditor with the vault viewing key matched 3/3. Rust tests: any 2 of 3 verify under rk, 1 of 3 fails. Scope: trusted-dealer keygen, both rounds in one process; production = DKG + per-device signers via `frostd`. |
+| D4 | ✅ 30 Sep | **Partners, webhooks, Solana leg, importer flow:** Paj adapter (OpenAPI v2: offramp, onramp, Solana and Base USDC), Paj-shaped mock, HMAC webhook ingest over HTTP, exactly-once funding, `manual_review` on post-funding failure, collection → credit legs, Solana USDC + memo leg, and Base-direct payouts (one Across hop for NGN/GHS/KES/TZS/ZAR). Live on Tempo testnet: `pnpm payout:demo` (5/5 matched) and `pnpm importer:demo`: ₦1,560,000 collected → 1,000 USDC into the hub → ¥7,140 paid to a Shenzhen supplier, 4/4 matched. Real Solana devnet funding turns on once the devnet vault holds USDC (after the Across testnet hop). |
 
 **Known gaps (next up):**
 - **Vault balance check.** Recon matches memo-tagged movements only. Faucet top-ups and other plain transfers into vaults aren't booked, so add an on-chain-balance vs ledger check per vault, and book gas top-ups as owner funding.

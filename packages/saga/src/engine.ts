@@ -54,6 +54,17 @@ export interface Leg<D = any> {
 
 export class FaultInjected extends Error {}
 
+/** Fail the step without retrying (e.g. a validation the retry cannot change). */
+export class NonRetryableError extends Error {}
+
+/**
+ * Stop the saga for a human: no retries and no automatic compensation.
+ * For failures after money has left Corridor's control (e.g. a partner
+ * rejected a payout it was already funded for), where undoing earlier legs
+ * would be wrong until the partner's refund is confirmed.
+ */
+export class ManualReviewError extends Error {}
+
 const SCHEMA = /* sql */ `
 create table if not exists sagas (
   id         text primary key,
@@ -182,6 +193,7 @@ export class SagaEngine {
         const ok = await this.forward(sagaId, input, step, view);
         view = await this.get(sagaId);
         if (!ok) {
+          if (view.status === "manual_review") return "manual_review";
           await this.setStatus(sagaId, "compensating");
           break;
         }
@@ -259,7 +271,15 @@ export class SagaEngine {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         await this.event(sagaId, step.index, "forward.error", msg);
-        if (err instanceof FaultInjected || attempts >= max) {
+        if (err instanceof ManualReviewError) {
+          await this.db.query(
+            `update saga_steps set status = 'failed', error = $3, updated_at = now() where saga_id = $1 and idx = $2`,
+            [sagaId, step.index, msg],
+          );
+          await this.setStatus(sagaId, "manual_review");
+          return false;
+        }
+        if (err instanceof FaultInjected || err instanceof NonRetryableError || attempts >= max) {
           await this.db.query(
             `update saga_steps set status = 'failed', error = $3, updated_at = now() where saga_id = $1 and idx = $2`,
             [sagaId, step.index, msg],
