@@ -101,6 +101,7 @@ corridor/
 | `@corridor/chain-tempo` | TIP-20 `transferWithMemo`, pathUSD gas, memo-topic lookups, vault observer |
 | `@corridor/chain-zcash` | Ironwood shielded batches (ZIP-321, one tx / N recipients), ZIP-32 period accounts, viewing-key observer |
 | `services/zcash-frost` | Rust `corridor-frost`: FROST 2-of-3 (RedPallas, rerandomized) keygen and PCZT signing for Ironwood vaults |
+| `apps/console` | Treasury console: network map, live flows, settlement timeline, forecast, venue balances, cross-chain reconciliation, shielded lane, auditor disclosure |
 | `@corridor/bridge-across` | Across Swap API: quotes, approvals + deposit, fill tracking (testnet and mainnet) |
 | `@corridor/legs` | Executable legs: reserve, bridge (both directions), partner payout (exactly-once funding), partner collection, ledger credit |
 | `@corridor/partners` | Ramp partner interface, Paj adapter (OpenAPI v2), Paj-shaped mock, partner registry, webhook signatures |
@@ -122,6 +123,7 @@ pnpm mainnet:wallets    # create/inspect mainnet demo wallets (keys stay in .env
 pnpm across:testnet     # live Across testnet hop: Base Sepolia USDC → Solana devnet USDC
 pnpm zcash:spike        # shielded lane: one Ironwood tx pays a batch; auditor reconciles via viewing key
 pnpm zcash:frost        # same batch from a FROST 2-of-3 vault: one signer refused, two co-sign
+pnpm console            # treasury console at http://localhost:4400 (owns the local ledger; stop CLI demos first)
 ```
 
 The shielded lane uses [`zcash-devtool`](https://github.com/zcash/zcash-devtool) (librustzcash, Ironwood-aware). Build it with `cargo build --release` and point `ZCASH_DEVTOOL` at the binary.

@@ -149,7 +149,8 @@ const vaultAcct = await accounts.vault("acme-2026-10-vault", "ZEC", "zcash_ironw
 const liability = await accounts.customer(CUSTOMER, "NGN-CNY", "ZEC", "zcash_ironwood");
 await ledger.post({
   kind: "near.swap.simulated",
-  external: { venue: "internal", ref: `fund:${batchId}` },
+  // One funding booking per broadcast batch tx, however many times this step is resumed.
+  external: { venue: "internal", ref: `fund:${txid}` },
   lines: [
     { account: vaultAcct, direction: "D", money: money("ZEC", total) },
     { account: liability, direction: "C", money: money("ZEC", total) },

@@ -89,7 +89,7 @@ const liability = await accounts.customer(CUSTOMER, "NGN-CNY", "ZEC", "zcash_iro
 const funding = PER_PAYMENT * BigInt(items.length);
 await ledger.post({
   kind: "near.swap.simulated",
-  external: { venue: "internal", ref: `fund:${batchId}` },
+  external: { venue: "internal", ref: `fund:${txid}` },
   metadata: { note: "USDC→ZEC funding leg is simulated on testnet (no NEAR Intents testnet liquidity)" },
   lines: [
     { account: vault, direction: "D", money: money("ZEC", funding) },

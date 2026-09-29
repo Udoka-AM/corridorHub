@@ -12,7 +12,8 @@
     "across:testnet": "tsx scripts/across-testnet.ts",
     "zcash:spike": "tsx scripts/zcash-spike.ts",
     "zcash:frost": "tsx scripts/zcash-frost.ts",
-    "importer:demo": "tsx scripts/importer-demo.ts"
+    "importer:demo": "tsx scripts/importer-demo.ts",
+    "console": "tsx apps/console/src/server.ts"
   },
   "devDependencies": {
     "@types/node": "22",
