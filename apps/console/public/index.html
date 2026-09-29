@@ -105,6 +105,7 @@
       <button class="primary" data-action="payout" data-body='{"corridor":"EUR-NGN","amount":"5"}'>Payout €→₦ to Ada Obi <span class="hint">EUR-NGN · 5 USDC</span></button>
       <button data-action="payout" data-body='{"corridor":"EUR-NGN","amount":"3","failAtPartner":true}'>Payout with partner failure <span class="hint">compensates on-chain</span></button>
       <button data-action="importer" data-body='{"fiatAmount":"780000"}'>Importer pays a supplier in China <span class="hint">₦780,000 → hub → ¥</span></button>
+      <button data-action="shielded" data-body='{"usdEach":"5"}'>Pay 3 suppliers privately <span class="hint">Zcash · FROST 2-of-3</span></button>
       <button id="disclose">Export auditor disclosure <span class="hint">vault viewing key</span></button>
     </div>
     <p class="meta" id="actionStatus" aria-live="polite" style="color:var(--muted);font-size:12.5px;margin:12px 2px 0"></p>
@@ -136,6 +137,7 @@
   <section class="card span-6">
     <h2>Shielded lane <small>Zcash testnet · Ironwood pool · FROST 2-of-3</small></h2>
     <div id="vault"></div>
+    <div id="approvals" style="margin-top:14px"></div>
     <table id="batches" style="margin-top:12px"></table>
   </section>
 </main>
@@ -148,7 +150,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const short = (s, n = 8) => (s && s.length > n * 2 + 1 ? `${s.slice(0, n)}…${s.slice(-6)}` : s || "");
 const chip = (s) => `<span class="chip s-${esc(s)}">${esc(String(s).replace("_", " "))}</span>`;
 const get = (p) => fetch(p).then((r) => r.json());
-const stepLabel = { "ledger.reserve": "reserve", "ledger.credit": "credit", "bridge.simulated": "bridge", "across.bridge": "Across", "partner.payout": "partner payout", "partner.collect": "partner collect", "near.swap": "NEAR swap", "zcash.shieldedBatch": "shielded batch", "tempo.dexSwap": "Tempo DEX" };
+const stepLabel = { "near.swap": "NEAR swap → vault", "zcash.shieldedBatch": "FROST-approved batch", "ledger.reserve": "reserve", "ledger.credit": "credit", "bridge.simulated": "bridge", "across.bridge": "Across", "partner.payout": "partner payout", "partner.collect": "partner collect", "tempo.dexSwap": "Tempo DEX" };
 
 async function refreshOverview() {
   const o = await get("/api/overview");
@@ -223,6 +225,27 @@ async function refreshShielded() {
     ((z.batches || []).map((b) => `<tr><td><a class="mono" href="${esc(b.explorer)}" target="_blank" rel="noopener">${esc(short(b.txid, 8))} ↗</a><div class="meta" style="color:var(--muted);font-size:12px">${esc(b.total)}</div></td><td>${esc(b.pool)}</td><td class="num">${b.recipients}</td><td style="font-size:12.5px">${b.invoices.map(esc).join("<br>")}</td><td>${b.control === "frost" ? `<span class="chip s-completed">FROST · signers ${b.approval ? b.approval.signers.join(" + ") : "2 of 3"}</span>` : `<span class="chip s-unreferenced">single key</span>`}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No shielded batches yet</td></tr>`);
 }
 
+async function refreshApprovals() {
+  const list = await get("/api/approvals");
+  $("approvals").innerHTML = list.slice(0, 3).map((a) => {
+    const done = a.approvedBy.length >= a.threshold;
+    const btns = Array.from({ length: a.signers }, (_, i) => i + 1).map((n) => {
+      const on = a.approvedBy.includes(n);
+      const who = ["customer approver", "customer finance", "Corridor"][n - 1] ?? `signer ${n}`;
+      return `<button class="approve" data-subject="${esc(a.subject)}" data-signer="${n}" ${on || done ? "disabled" : ""} style="padding:7px 10px;font-size:12.5px;display:inline-flex">${on ? "✓ " : ""}Signer ${n} · ${who}</button>`;
+    }).join(" ");
+    return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${chip(done ? "completed" : "pending")}<strong>Batch approval</strong><span class="meta" style="color:var(--muted);font-size:12.5px">${a.approvedBy.length} of ${a.threshold} required · ${esc(a.summary.recipients)} recipients · $${esc(a.summary.usd)} → ${esc(a.summary.zec)} ZEC</span></div>
+      <div style="font-size:12.5px;color:var(--muted);margin:6px 0 10px">${(a.summary.invoices || []).map(esc).join(" · ")}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${btns}</div></div>`;
+  }).join("");
+  document.querySelectorAll("button.approve").forEach((b) => b.addEventListener("click", async () => {
+    b.disabled = true;
+    await fetch("/api/approvals", { method: "POST", body: JSON.stringify({ subject: b.dataset.subject, signer: Number(b.dataset.signer) }) });
+    refreshApprovals();
+  }));
+}
+
 async function refreshForecast() {
   const f = await get("/api/forecast");
   $("forecast").innerHTML = `<tr><th>Customer</th><th>Corridor</th><th class="num">Daily out</th><th class="num">Runway</th><th class="num">Top up (7d)</th></tr>` +
@@ -288,7 +311,7 @@ $("disclose").addEventListener("click", async () => {
 $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("modal").classList.remove("open"); });
 
 async function loop() {
-  try { await Promise.all([refreshOverview(), refreshSagas()]); } catch (e) { console.error(e); }
+  try { await Promise.all([refreshOverview(), refreshSagas(), refreshApprovals()]); } catch (e) { console.error(e); }
 }
 async function slow() {
   try { await Promise.all([refreshRecon(), refreshShielded(), refreshForecast()]); await refreshOverview(); } catch (e) { console.error(e); }

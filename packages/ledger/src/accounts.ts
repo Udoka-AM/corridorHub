@@ -34,7 +34,8 @@ export class Accounts {
     return this.open({ type: "revenue", ownerType: "revenue", ownerId: name, asset, venue });
   }
 
-  private open(spec: AccountSpec): Promise<string> {
+  /** Any other account, by full spec (e.g. an expense account). */
+  open(spec: AccountSpec): Promise<string> {
     const k = JSON.stringify(spec);
     let id = this.opened.get(k);
     if (!id) {

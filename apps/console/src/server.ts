@@ -22,7 +22,7 @@ import type { PartnerOrder } from "@corridor/partners";
 import { PgCursorStore } from "@corridor/recon";
 import { partnerObservation } from "@corridor/webhooks";
 import { startRuntime } from "../../../scripts/runtime.ts";
-import { collect, payout, prefund } from "../../../scripts/flows.ts";
+import { collect, payout, prefund, shieldedBatch } from "../../../scripts/flows.ts";
 
 const PORT = Number(process.env.PORT ?? 4400);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -35,6 +35,16 @@ const rt = await startRuntime({
   },
 });
 const db = rt.db;
+const suppliersWallet = existsSync(".data/zcash-testnet-suppliers/data.sqlite")
+  ? new ZcashWallet({ bin: DEVTOOL, walletDir: ".data/zcash-testnet-suppliers" })
+  : undefined;
+const SUPPLIERS = suppliersWallet
+  ? [
+      { name: "Shenzhen Brightline Electronics", account: "supplier-shenzhen" },
+      { name: "Kowloon Precision Parts", account: "supplier-hongkong" },
+      { name: "Lagos contractor (logistics)", account: "contractor-lagos" },
+    ].map((s) => ({ name: s.name, address: suppliersWallet.defaultAddress(suppliersWallet.account(s.account).uuid) }))
+  : [];
 
 // ---------------------------------------------------------------------------
 // Read models
@@ -108,6 +118,10 @@ function explorerFor(kind: string, output: Row | null): { label: string; url: st
   for (const k of ["tempoMove", "tempoRefund", "tempoDeposit"]) {
     if (typeof output[k] === "string") links.push({ label: "Tempo tx", url: `${EXPLORER.moderato}/tx/${output[k].split(":")[0]}` });
   }
+  if (typeof output.deliveryTx === "string") {
+    links.push({ label: "ZEC delivery", url: `https://testnet.zcashexplorer.app/transactions/${output.deliveryTx}` });
+  }
+  if (typeof output.explorer === "string") links.push({ label: "Shielded batch", url: output.explorer });
   if (typeof output.fundingRef === "string" && !output.fundingRef.startsWith("sim:")) {
     links.push({ label: "Solana funding", url: `https://explorer.solana.com/tx/${output.fundingRef}?cluster=devnet` });
   }
@@ -133,7 +147,7 @@ async function sagas(limit = 25) {
       corridor: data.corridor,
       customer: data.customerId,
       amount: data.amount ? fmt("pathUSD", BigInt(data.amount)) : data.fiatAmount ? fmt(data.currency, BigInt(data.fiatAmount)) : null,
-      recipient: data.recipient?.name ?? null,
+      recipient: data.recipient?.name ?? (data.recipient?.items ? `${data.recipient.items.length} recipients (shielded)` : null),
       route: s.input.plan.steps.map((p: Row) => `${p.kind}`),
       steps: steps.map((st: Row) => ({ ...st, links: explorerFor(st.kind, st.output) })),
       refunds,
@@ -342,12 +356,34 @@ const server = createServer(async (req, res) => {
         case "/api/shielded": return send(res, 200, shielded());
         case "/api/forecast": return send(res, 200, await forecast());
         case "/api/network": return send(res, 200, network());
+        case "/api/approvals": return send(res, 200, await rt.approvals.list());
       }
     }
     if (req.method === "POST") {
       const b = await body(req);
       switch (url.pathname) {
         case "/api/disclosures": return send(res, 200, disclosure());
+        case "/api/approvals": {
+          await rt.approvals.approve(String(b.subject), Number(b.signer));
+          return send(res, 200, { approvedBy: await rt.approvals.approvedBy(String(b.subject)) });
+        }
+        case "/api/actions/shielded": {
+          if (!rt.shielded || SUPPLIERS.length === 0) return send(res, 409, { error: "shielded lane not configured (run pnpm zcash:frost once)" });
+          await action("shielded", async () => {
+            const cust = "acme-imports";
+            const usd = String(b.usdEach ?? "5");
+            const total = Number(usd) * SUPPLIERS.length;
+            const avail = await rt.ledger.balance(await rt.accounts.customer(cust, "NGN-CNY", "pathUSD", "tempo"));
+            if (avail.amount < BigInt(Math.round(total * 1e6))) await prefund(rt, cust, "NGN-CNY", String(Math.max(20, total * 2)));
+            const month = new Date().toISOString().slice(0, 7);
+            await shieldedBatch(rt, {
+              customerId: cust,
+              corridor: "NGN-CNY",
+              items: SUPPLIERS.map((sp, i) => ({ ...sp, usd, invoiceRef: `INV-${month}-S${String(i + 1).padStart(2, "0")}` })),
+            });
+          });
+          return send(res, 202, { started: "shielded" });
+        }
         case "/api/actions/payout": {
           const corridor = (b.corridor ?? "EUR-NGN") as CorridorCode;
           const { destination } = parseCorridor(corridor);

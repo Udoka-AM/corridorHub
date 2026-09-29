@@ -132,7 +132,11 @@ export const DEFAULT_EDGES: Edge[] = [
   ...BASE_PAYOUT_CURRENCIES.map((c): Edge => ({ kind: "partner.payout", from: p("base", "USDC"), to: p("partner_fiat", c), cost: 1 })),
 
   // Shielded spoke: into the Ironwood pool, then one batch transaction to all recipients.
-  { kind: "near.swap", from: p("tempo", "pathUSD"), to: p("zcash_ironwood", "ZEC"), cost: 2 },
+  // Into the shielded pool through NEAR Intents, which delivers ZEC to the vault's unified address.
+  // NEAR Intents has no Tempo market, so mainnet swaps from Base USDC (one Across hop out of the hub).
+  { kind: "near.swap", from: p("base", "USDC"), to: p("zcash_ironwood", "ZEC"), cost: 2, env: ["mainnet"] },
+  // Testnet: live mainnet quote, real Tempo leg out of the treasury, real testnet ZEC into the vault.
+  { kind: "near.swap", from: p("tempo", "pathUSD"), to: p("zcash_ironwood", "ZEC"), cost: 2, env: ["testnet"] },
   { kind: "zcash.shieldedBatch", from: p("zcash_ironwood", "ZEC"), to: p("zcash_ironwood", "ZEC"), cost: 1 },
 ];
 

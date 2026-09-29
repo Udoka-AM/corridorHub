@@ -10,7 +10,19 @@ import { parseMoney, type Hex } from "@corridor/core";
 import { TempoObserver, balanceOf, fundFromFaucet, tempoClient, type TempoClient } from "@corridor/chain-tempo";
 import { SolanaVault, explorerTx as solanaTx, signerFromKeypairFile } from "@corridor/chain-solana";
 import { Accounts, Ledger, openLocalDb } from "@corridor/ledger";
-import { ledgerCreditLeg, ledgerReserveLeg, partnerCollectLeg, partnerPayoutLeg, simulatedBridgeLeg } from "@corridor/legs";
+import {
+  ApprovalStore,
+  ArtifactStore,
+  ledgerCreditLeg,
+  ledgerReserveLeg,
+  nearSwapTestnetLeg,
+  partnerCollectLeg,
+  partnerPayoutLeg,
+  shieldedBatchLeg,
+  simulatedBridgeLeg,
+} from "@corridor/legs";
+import { FrostSigner, ZcashWallet } from "@corridor/chain-zcash";
+import { privateKeyToAccount } from "viem/accounts";
 import { MockPartner, PartnerRegistry, type PartnerOrder } from "@corridor/partners";
 import { PgCursorStore } from "@corridor/recon";
 import { SagaEngine } from "@corridor/saga";
@@ -75,12 +87,39 @@ export async function startRuntime(opts: { onCollectionOpened?: (order: PartnerO
     pollMs: 500,
     timeoutMs: 120_000,
   };
+  // ---- shielded lane: Zcash testnet (Ironwood), FROST 2-of-3 vault, NEAR Intents rate ----
+  const DEVTOOL = process.env.ZCASH_DEVTOOL ?? "/Users/udoka/Wfiar/tools/zcash-devtool/target/release/zcash-devtool";
+  const zcash = new ZcashWallet({ bin: DEVTOOL, walletDir: ".data/zcash-testnet", identity: ".keys/zcash-testnet-age.txt" });
+  const frost = new FrostSigner(process.env.CORRIDOR_FROST ?? "services/zcash-frost/target/release/corridor-frost", ".keys/frost-treasury");
+  const artifacts = await ArtifactStore.open(db);
+  const approvals = await ApprovalStore.open(db);
+  const hasShielded = existsSync(".keys/frost-treasury/public.json") && existsSync(".data/zcash-testnet/data.sqlite");
+  const shielded = hasShielded
+    ? (() => {
+        const vaultAcct = zcash.importUfvk("acme-2026-10-vault", frost.vault().ufvk, zcash.chainTip() - 5);
+        const quoteWallet = new ZcashWallet({ bin: DEVTOOL, walletDir: ".data/zcash-mainnet-quote" });
+        return {
+          vaultAccount: vaultAcct.uuid,
+          vaultName: "acme-2026-10-vault",
+          deliveryAccount: zcash.account("acme-2026-10").uuid,
+          quoteRecipient: quoteWallet.defaultAddress(quoteWallet.accounts()[0]!.uuid),
+          quoteRefundTo: privateKeyToAccount(testnetKey("BASE_MAINNET_RELAY_KEY")).address,
+        };
+      })()
+    : undefined;
+
   const engine = await SagaEngine.open(db, ledger, accounts, [
     ledgerReserveLeg,
     simulatedBridgeLeg({ treasury, escrow }),
     partnerPayoutLeg(legOpts),
     partnerCollectLeg({ ...legOpts, onCollectionOpened: async (order) => opts.onCollectionOpened?.(order, mock) }),
     ledgerCreditLeg,
+    ...(shielded
+      ? [
+          nearSwapTestnetLeg({ artifacts, treasury, swapEscrow: escrow, zcash, ...shielded }),
+          shieldedBatchLeg({ artifacts, approvals, zcash, frost, workDir: ".data/pczt", ...shielded }),
+        ]
+      : []),
   ]);
 
   const startBlock = await treasury.getBlockNumber();
@@ -94,6 +133,7 @@ export async function startRuntime(opts: { onCollectionOpened?: (order: PartnerO
 
   return {
     customer, treasury, escrow, db, ledger, accounts, events, registry, mock, solana, engine, observer, startBlock, legOpts,
+    zcash, frost, approvals, shielded,
     async close() {
       server.close();
       await db.close();

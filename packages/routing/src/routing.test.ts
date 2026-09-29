@@ -99,6 +99,17 @@ describe("route planner", () => {
     ).toThrow(/Tempo hub/);
   });
 
+  it("routes a mainnet shielded batch out of the hub through Base and NEAR Intents", () => {
+    const plan = planRoute({ corridor: "USD-USD", privacy: "shielded", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "mainnet" });
+    expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
+      "ledger.reserve:tempo->tempo",
+      "across.bridge:tempo->base",
+      "near.swap:base->zcash_ironwood",
+      "zcash.shieldedBatch:zcash_ironwood->zcash_ironwood",
+    ]);
+    expect(plan.steps.filter((s) => s.referenceScope === "item").map((s) => s.kind)).toEqual(["zcash.shieldedBatch"]);
+  });
+
   it("supports a shielded supplier payment from an importer", () => {
     const plan = planRoute({ corridor: "NGN-CNY", privacy: "shielded", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "testnet" });
     expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "near.swap", "zcash.shieldedBatch"]);

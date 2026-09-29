@@ -222,6 +222,40 @@ export class ZcashWallet {
     return txid;
   }
 
+  /** Spendable shielded balance (Ironwood + Orchard) in zatoshi. */
+  spendable(accountUuid: string): bigint {
+    const b = this.balance(accountUuid);
+    return b.ironwoodSpendable + b.orchardSpendable;
+  }
+
+  /** Fee paid by a transaction this wallet sent, in zatoshi. */
+  txFee(txid: string): bigint {
+    const db = new DatabaseSync(`${this.opts.walletDir}/data.sqlite`, { readOnly: true });
+    try {
+      const row = db
+        .prepare(`select fee_paid from v_transactions where lower(hex(txid)) = ? and fee_paid is not null limit 1`)
+        .get(Buffer.from(txid, "hex").reverse().toString("hex")) as { fee_paid: number } | undefined;
+      return BigInt(row?.fee_paid ?? 0);
+    } finally {
+      db.close();
+    }
+  }
+
+  /** Sync until `check` passes or the timeout expires. Testnet blocks arrive about every 75 s. */
+  async syncUntil(check: () => boolean, opts: { timeoutMs?: number; pollMs?: number; label?: string } = {}): Promise<boolean> {
+    const deadline = Date.now() + (opts.timeoutMs ?? 30 * 60_000);
+    while (true) {
+      this.sync();
+      if (check()) return true;
+      if (Date.now() > deadline) return false;
+      await new Promise((r) => setTimeout(r, opts.pollMs ?? 30_000));
+    }
+  }
+
+  isMined(txid: string): boolean {
+    return this.outputs().some((o) => o.txid === txid && o.minedHeight != null);
+  }
+
   /** Initialise a view-only wallet from a viewing key: what an auditor runs. */
   initViewOnly(name: string, ufvk: string, birthday: number): void {
     this.run(this.withServer(["init-fvk", "--name", name, "--fvk", ufvk, "--birthday", String(birthday)]));

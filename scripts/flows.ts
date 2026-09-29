@@ -6,7 +6,7 @@
 import { RefKind, customerTag, encodeRef, money, parseMoney, uuidv7, type CorridorCode, type Fiat } from "@corridor/core";
 import { transferWithReference, type TempoClient } from "@corridor/chain-tempo";
 import type { Accounts, Ledger } from "@corridor/ledger";
-import type { CollectionData } from "@corridor/legs";
+import type { CollectionData, ShieldedItem } from "@corridor/legs";
 import { planRoute } from "@corridor/routing";
 import type { PayoutData, SagaEngine, SagaStatus } from "@corridor/saga";
 import { testnetKey } from "./env.ts";
@@ -106,4 +106,44 @@ export async function collect(
   };
   const sagaId = await rt.engine.start({ kind: "collection", reference: data.reference, plan, data });
   return { sagaId, status: await rt.engine.run(sagaId) };
+}
+
+/**
+ * A private supplier batch through the shielded lane: reserve on the hub →
+ * near.swap into the customer's FROST vault → one Ironwood transaction paying
+ * every supplier, signed only once `threshold` vault signers approve.
+ */
+export async function shieldedBatch(
+  rt: Runtime,
+  input: { customerId: string; corridor: CorridorCode; items: { name: string; address: string; usd: string; invoiceRef: string }[] },
+): Promise<{ sagaId: string; status: SagaStatus; batchReference: string }> {
+  const plan = planRoute({
+    corridor: input.corridor,
+    privacy: "shielded",
+    source: { venue: "tempo", asset: "pathUSD" },
+    destination: { venue: "zcash_ironwood", asset: "ZEC" },
+    env: "testnet",
+  });
+  const batchId = uuidv7();
+  const t = tag(input.customerId);
+  const batchReference = encodeRef({ kind: RefKind.Batch, corridor: input.corridor, shielded: true, id: batchId, customerTag: t });
+  const items: ShieldedItem[] = input.items.map((it) => {
+    const itemId = uuidv7();
+    return { ...it, itemId, reference: encodeRef({ kind: RefKind.BatchItem, corridor: input.corridor, shielded: true, id: itemId, customerTag: t }) };
+  });
+  const totalUsd = input.items.reduce((s, it) => s + Number(it.usd), 0);
+  const data: PayoutData = {
+    payoutId: batchId,
+    customerId: input.customerId,
+    corridor: input.corridor,
+    asset: "pathUSD",
+    venue: "tempo",
+    amount: parseMoney("pathUSD", totalUsd.toFixed(2)).amount.toString(),
+    reference: batchReference,
+    batchReference,
+    recipient: { kind: "shielded", items },
+    tempoStartBlock: rt.startBlock.toString(),
+  };
+  const sagaId = await rt.engine.start({ kind: "shielded-batch", reference: batchReference, plan, data });
+  return { sagaId, status: await rt.engine.run(sagaId), batchReference };
 }

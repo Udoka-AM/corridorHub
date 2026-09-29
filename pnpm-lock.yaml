@@ -41,6 +41,9 @@ importers:
       '@corridor/saga':
         specifier: workspace:^
         version: link:packages/saga
+      '@corridor/swap-near':
+        specifier: workspace:*
+        version: link:packages/swap-near
       '@corridor/webhooks':
         specifier: workspace:*
         version: link:packages/webhooks
@@ -63,6 +66,8 @@ importers:
       vitest:
         specifier: '3'
         version: 3.2.7(@types/node@22.20.4)(tsx@4.23.15)
+
+  apps/console: {}
 
   packages/bridge-across: {}
 
@@ -106,6 +111,9 @@ importers:
       '@corridor/chain-tempo':
         specifier: workspace:*
         version: link:../chain-tempo
+      '@corridor/chain-zcash':
+        specifier: workspace:*
+        version: link:../chain-zcash
       '@corridor/core':
         specifier: workspace:*
         version: link:../core
@@ -121,6 +129,9 @@ importers:
       '@corridor/saga':
         specifier: workspace:*
         version: link:../saga
+      '@corridor/swap-near':
+        specifier: workspace:*
+        version: link:../swap-near
       '@corridor/webhooks':
         specifier: workspace:*
         version: link:../webhooks
@@ -157,6 +168,8 @@ importers:
       '@corridor/routing':
         specifier: workspace:*
         version: link:../routing
+
+  packages/swap-near: {}
 
   packages/webhooks:
     dependencies:
