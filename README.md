@@ -124,4 +124,4 @@ Testnet keys are generated into `.env.local` on first run, and the faucet funds 
 
 ## License
 
-To be decided before the first code release.
+[MIT](LICENSE)
