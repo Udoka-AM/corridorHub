@@ -90,17 +90,31 @@ corridor/
 
 ## Status
 
-🏗️ **Pre-build.** Architecture and build plan are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Built for the [Colosseum Crypto World's Fair](https://colosseum.com/worldsfair) (submissions close 12 Oct 2026) in the Tempo, Solana and Zcash tracks.
+🚧 **In active build** for the [Colosseum Crypto World's Fair](https://colosseum.com/worldsfair) (submissions close 12 Oct 2026), in the Tempo, Solana and Zcash tracks. The architecture, decisions and day-by-day build log are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+| Package | What it does |
+|---|---|
+| `@corridor/core` | Venue/asset model (privacy is the `zcash_ironwood` venue) and the 32-byte Corridor Reference, with Tempo, Solana and Zcash encodings |
+| `@corridor/ledger` | Append-only double-entry ledger on Postgres (PGlite locally) |
+| `@corridor/routing` | Route graph over (venue, asset); public and shielded payouts use the same planner |
+| `@corridor/saga` | Durable settlement saga: retries, reverse-order compensation, idempotent booking, leases |
+| `@corridor/chain-tempo` | TIP-20 `transferWithMemo`, pathUSD gas, memo-topic lookups, vault observer |
+| `@corridor/legs` | Executable legs (reserve, bridge, partner) |
+| `@corridor/recon` | Matches chain observations against the ledger |
 
 ## Getting started
 
-Code is not in the repository yet. Once the first milestone lands:
+Requires Node 22+ and pnpm 9.
 
 ```bash
 pnpm install
-docker compose up -d        # postgres
-pnpm dev                    # api + console
+pnpm test               # unit tests (embedded Postgres, no setup)
+pnpm tempo:smoke        # live: memo-tagged transfer on Tempo Moderato, booked once
+pnpm payout:demo        # live: payout saga + forced failure + compensation + reconciliation
+pnpm mainnet:wallets    # create/inspect mainnet demo wallets (keys stay in .env.local / .keys/)
 ```
+
+Testnet keys are generated into `.env.local` on first run, and the faucet funds them. Nothing secret is committed.
 
 ## Compliance posture
 

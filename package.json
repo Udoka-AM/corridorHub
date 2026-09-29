@@ -7,7 +7,8 @@
     "test": "vitest run",
     "typecheck": "tsc -b",
     "tempo:smoke": "tsx scripts/tempo-smoke.ts",
-    "payout:demo": "tsx scripts/payout-demo.ts"
+    "payout:demo": "tsx scripts/payout-demo.ts",
+    "mainnet:wallets": "tsx scripts/mainnet-wallets.ts"
   },
   "devDependencies": {
     "@types/node": "22",
