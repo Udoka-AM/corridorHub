@@ -2,266 +2,258 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.1, for review before build starts |
+| **Status** | v0.2, decisions locked, build in progress |
 | **Target** | Colosseum Crypto World's Fair, submissions close **12 Oct 2026** |
-| **Tracks** | Tempo (primary) · Solana · Zcash (via optional shielded lane) · general pool |
-| **Owner** | Udoka |
+| **Tracks** | Tempo (primary) · Solana · Zcash · general pool |
+| **Scope change from v0.1** | Stipend's shielded payouts are now part of Corridor's core model, not an add-on module |
 
 ---
 
-## 1. Product scope
+## 0. Decision log
 
-### 1.1 In scope for the hackathon (MVP)
-
-1. **One corridor end-to-end:** EUR → NGN. USD → KES is shown in the console with simulated data.
-2. **Quote API:** firm FX quote with a TTL and a fee breakdown.
-3. **Payout API:** create a payout against a quote, idempotent by `client_reference`.
-4. **Settlement saga:** a durable workflow that moves value from the customer's stablecoin balance through a Tempo transfer (memo = payout ID) to a Solana-side off-ramp partner, then to a fiat payout, with a compensation for every step.
-5. **Double-entry ledger:** every movement is a balanced journal entry, and balances are projections.
-6. **Reconciliation engine:** matches on-chain events (Tempo memo), partner webhooks and simulated bank statements to ledger entries.
-7. **Treasury console:** balances per corridor, pre-funding forecast, recon status and exceptions queue.
-
-### 1.2 Out of scope (post-hackathon)
-
-- Live fiat collection (SEPA/ACH). For the demo, collections are a signed webhook from a sandbox PSP.
-- More than two corridors.
-- Production custody (MPC/HSM). The demo uses a dev key in a KMS-style wrapper.
-- Yield on float. It is modelled in the console and not executed.
-
-### 1.3 What we are not
-
-Corridor never faces the end sender or recipient and never takes custody of consumer funds on its own license. Customers are licensed PSPs and MTOs. This keeps licensing with them and keeps our regulatory surface at KYB, sanctions screening and ramp-partner diligence.
-
----
-
-## 2. System architecture
-
-```
-                         ┌──────────────────────────────────────────────┐
-                         │                Corridor Core                  │
-  Customer PSP ──REST──▶ │  API gateway (auth, idempotency, rate limits) │
-  (Zynta-type)  ◀─webhook│         │                                     │
-                         │         ▼                                     │
-                         │  ┌───────────┐   ┌──────────────┐             │
-                         │  │ FX / Quote│──▶│ Settlement   │──┐          │
-                         │  │ engine    │   │ saga (durable│  │          │
-                         │  └─────┬─────┘   │ workflows)   │  │          │
-                         │        │         └──────┬───────┘  │          │
-                         │        ▼                ▼          ▼          │
-                         │  ┌──────────────────────────────────────┐     │
-                         │  │ Double-entry ledger (Postgres)       │     │
-                         │  │ journal · accounts · projections     │     │
-                         │  └──────────────────────────────────────┘     │
-                         │        ▲                ▲                     │
-                         │  ┌─────┴──────┐   ┌─────┴───────┐             │
-                         │  │ Recon      │◀──│ Event ingest│◀── chain    │
-                         │  │ engine     │   │ (indexers,  │    watchers │
-                         │  └────────────┘   │ webhooks)   │             │
-                         │                   └─────────────┘             │
-                         └───────┬──────────────────┬───────────────────┘
-                                 │                  │
-               ┌─────────────────▼───┐        ┌─────▼─────────────────────┐
-               │ Tempo                │        │ Solana                     │
-               │ TIP-20 USD balances  │ bridge │ USDC liquidity, ramp       │
-               │ memo = payout_id     │◀──────▶│ partner wallets, routing   │
-               │ gas in stablecoins   │        │                            │
-               └──────────────────────┘        └─────────────┬──────────────┘
-                                                             │
-                                                   ┌─────────▼─────────┐
-                                                   │ Off-ramp partners │
-                                                   │ NGN / KES payout  │
-                                                   └───────────────────┘
-
-        Treasury console (Next.js) ── reads projections, recon state, forecasts
-```
-
-### 2.1 Why each chain does what it does
-
-| Chain | Role | Why |
-|---|---|---|
-| **Tempo** | System of record for settlement between Corridor accounts, customers and partners | Payments-first L1 from Stripe and Paradigm (mainnet 18 Mar 2026). About 0.6 s deterministic finality, gas paid in USD stablecoins through the Fee AMM, dedicated payment lanes, and TIP-20 transfers that carry a 32-byte memo, which is how we tie a payment to an invoice or payout ID. |
-| **Solana** | Liquidity and routing for on/off-ramps | Most African stablecoin ramp liquidity (USDC/USDT) and partner integrations sit on Solana. It is cheap and fast enough to route between several ramp partners. |
-| **Zcash** *(optional lane)* | Private B2B supplier settlement | Shielded amounts and counterparties, with viewing keys for selective disclosure to auditors. See §9. |
-
----
-
-## 3. Core components
-
-### 3.1 Double-entry ledger (`packages/ledger`)
-
-This carries over directly from the Arc ledger.
-
-- **Accounts** are typed: `asset`, `liability`, `revenue`, `expense`. Each is keyed by `(owner, corridor, currency, venue)`. Examples: `customer:zynta:USD:tempo`, `partner:yellowcard:NGN:fiat`, `corridor:fees:USD`.
-- **Journal entries** are immutable, and debits equal credits per currency. FX legs are two linked entries joined through an `fx_clearing` account per currency pair.
-- **Projections:** materialized balances per account, rebuilt from the journal in O(entries) for audits.
-- **Invariants,** checked in tests and at runtime: sum of balances per currency = 0; no negative balance on `asset` accounts marked `no_overdraft`; every on-chain transfer has exactly one journal entry.
-
-```sql
-journal_entries(id, created_at, saga_id, kind, memo_hex, metadata jsonb)
-postings(id, entry_id, account_id, currency, amount_minor bigint, direction) -- D/C
-accounts(id, owner_type, owner_id, corridor, currency, venue, type, flags)
-balances(account_id, currency, available, pending, updated_at)            -- projection
-```
-
-### 3.2 Settlement saga (`packages/saga`)
-
-This carries over the Arc settlement saga. Every payout is a durable workflow, and each step has a forward action and a compensation.
-
-| # | Step | Forward | Compensation |
+| # | Question | Decision | Why |
 |---|---|---|---|
-| 1 | `LOCK_QUOTE` | Validate TTL and lock the rate | Release the lock |
-| 2 | `RESERVE_FUNDS` | Move customer `available → pending` in the ledger | Release the reservation |
-| 3 | `SETTLE_TEMPO` | TIP-20 transfer from customer vault to the routing vault, `memo = H(payout_id)` | Reverse transfer |
-| 4 | `BRIDGE_TO_SOLANA` | Move USDC to the partner's Solana wallet (skipped if the partner accepts Tempo directly) | Return from partner |
-| 5 | `PARTNER_PAYOUT` | Call the ramp partner's payout API (NGN bank/mobile money) | Partner refund flow |
-| 6 | `CONFIRM` | Wait for partner webhook plus finality on both chains | None (terminal) |
-| 7 | `BOOK` | Final journal entry: fees, FX clearing, revenue | None |
+| D-1 | Settlement asset on Tempo | **pathUSD is the canonical settlement unit. The edges accept any USD TIP-20.** | See §0.1 |
+| D-2 | Tempo ↔ Solana bridge | **Live Across integration first.** The simulated adapter is only a fallback. | Across supports Tempo mainnet (4217). There is no direct Tempo↔Solana route, so we go in **two hops through Base**, both live and quoted (§6.3). |
+| D-3 | First ramp partner | Paj (Solana → NGN, business API) for the demo; approach FossaPay, Yellow Card, Kotani Pay and others in parallel | See §9 |
+| D-4 | Shielded lane in this submission | **Yes, native to the architecture** | See §2 |
 
-- Exactly-once semantics come from idempotency keys per step, stored in `saga_steps`.
-- Each step has a timeout and retry policy. A step that exhausts retries goes to `manual_review` and appears in the console's exceptions queue.
-- Hackathon engine: a lightweight Postgres-backed workflow runner (outbox + step table). Temporal/Restate is an option after the hackathon.
+### 0.1 D-1 in detail: which stablecoin on Tempo
 
-### 3.3 FX and quote engine (`packages/fx`)
+Choosing "USDC or a native TIP-20" is a false choice. **Every stablecoin on Tempo is a TIP-20**, including USDC.e, which is Stargate-bridged USDC at `0x20C0…b9537d11c60E8b50`. The real question is which TIP-20 Corridor treats as its unit of account, and whether partners ever see it.
 
-- `POST /v1/quotes {source_ccy, target_ccy, source_amount | target_amount}` returns `{rate, fee_bps, spread_bps, ttl, quote_id}`.
-- It aggregates indicative rates from liquidity-partner adapters, applies a configurable spread per corridor, and returns a firm quote backed by partner inventory.
-- The margin decomposition is stored on the quote, which is how the FX-share revenue gets calculated.
+Partners never see it. Every ramp partner is paid in **USDC on Solana**, and the Tempo-side asset stays inside Corridor:
 
-### 3.4 Chain adapters
+```
+Ingress (any USD TIP-20)          Core (Tempo)                     Egress
+USDC.e / USDT0 / pathUSD ──DEX──▶ pathUSD vaults + ledger ──Across──▶ Base USDC ──Across──▶ Solana USDC ──▶ ramp partner
+```
 
-**`chain-tempo`**
-- TIP-20 `transferWithMemo`. The memo is 32 bytes: `version(1) | corridor_id(1) | payout_id(16, UUIDv7) | checksum(4) | reserved(10)`.
-- Gas: pay fees in USDC-equivalent TIP-20 through the Fee AMM, so there is no native gas token to manage.
-- Finality watcher: subscribes to transfer logs, decodes memos and emits `chain.transfer.finalized` events.
+Why pathUSD is the core unit:
+- **Built for exactly this.** Bridge (a Stripe company) issues it as Tempo's neutral quote token. Every USD TIP-20 routes through it on the enshrined stablecoin DEX, so conversion on the way in is one atomic transaction.
+- **Fee AMM native.** Validators accept pathUSD as a fee token, so vaults pay gas in the asset they already hold.
+- **Available on testnet.** The Moderato faucet issues pathUSD, so the demo runs on the same asset as production.
+- **Supported by Across.** Live routes include `pathUSD (4217) → USDC` on Base, Arbitrum, Ethereum and others.
+- **Ecosystem story.** Volume on Tempo's native quote token and DEX is what the Tempo track wants to see.
 
-**`chain-solana`**
-- SPL / Token-2022 transfers to ramp-partner wallets.
-- Router: chooses a partner by quoted rate, available liquidity, SLA and success rate.
-- Watcher: Helius (or equivalent) webhooks, plus confirmation polling.
-
-### 3.5 Reconciliation engine (`packages/recon`)
-
-Three-way match per payout:
-
-1. **Ledger** (expected)
-2. **Chain** (Tempo memo → payout_id; Solana signature → saga step)
-3. **Partner / bank** (webhook payload or statement line → payout_id or partner reference)
-
-It produces a `matched`, `partial`, `unmatched` or `mismatch_amount` status. Exceptions go to a queue with a suggested action. Target for the demo: 100% auto-match on the happy path, with seeded exceptions shown being resolved.
-
-### 3.6 Treasury console (`apps/console`)
-
-- **Corridor board:** available, pending and in-flight per corridor and venue (Tempo, Solana, partner fiat).
-- **Pre-funding forecast:** a rolling 7-day payout forecast (moving average plus day-of-week seasonality) against current partner balances. Output: "Top up NGN partner by X by Thursday."
-- **Recon view:** match rate, exceptions queue, drill-down from payout to journal entry to on-chain transaction.
-- **Float view:** idle stablecoin float and projected yield (modelled only in the MVP).
+Guardrail: pathUSD circulating supply is still small (single-digit millions of dollars as of mid-2026). The ledger is multi-asset per venue, and each corridor has a `settlementAsset` policy. If a ticket is bigger than pathUSD depth, the corridor settles in USDC.e directly, since Across routes exist for both. Switching is a config change, not a migration.
 
 ---
 
-## 4. Public API (v1, draft)
+## 1. Scope for the hackathon
 
-| Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/v1/quotes` | Create a firm FX quote |
-| `POST` | `/v1/payouts` | Create a payout against a quote (idempotent) |
-| `GET` | `/v1/payouts/:id` | Payout status and saga timeline |
-| `GET` | `/v1/balances` | Balances per corridor and venue |
-| `POST` | `/v1/deposits/notify` | Collection notification (PSP → Corridor) |
-| `GET` | `/v1/recon/exceptions` | Open reconciliation exceptions |
-| — | Webhooks | `payout.settled`, `payout.failed`, `balance.low`, `recon.exception` |
+1. **Public corridor, EUR → NGN.** Quote, then settle on Tempo (memo), bridge live Tempo → Base → Solana through Across, then pay out with a ramp partner, then run a three-way reconciliation.
+2. **Shielded lane, B2B supplier batch and contributor payroll.** One batch of N private payouts funded from the same Tempo vaults and paid in **one Ironwood shielded transaction**. It is approved with FROST 2-of-3 and disclosed to an auditor through a viewing key scoped to the customer and the period.
+3. **One ledger, one saga engine and one reconciliation engine** serve both lanes.
+4. **Treasury console** with balances per corridor **and per venue** (Tempo, Solana, partner fiat, Zcash shielded), the pre-funding forecast, the exceptions queue and disclosure exports.
 
-Auth uses API key + HMAC-signed requests. Webhooks are signed the same way.
+Out of scope: live fiat collection (the PSP collection arrives as a signed webhook), production custody (KMS-wrapped dev keys), and executing yield.
 
 ---
 
-## 5. Integrations
+## 2. The design principle: privacy is a venue, not a feature
 
-| Area | Candidates | Hackathon plan | Notes |
+A bolt-on would look like `if (shielded) callZcashService()`. Corridor does this instead:
+
+| Concept | Public lane | Shielded lane | Same code? |
 |---|---|---|---|
-| **Tempo** | Tempo SDK / viem, TIP-20, Fee AMM, testnet faucet | **Live on testnet** | Memo encoding is the showcase. Move to mainnet if time allows. |
-| **Solana** | @solana/kit, SPL / Token-2022, Helius | **Live on devnet** | Routing vault and partner-wallet simulation |
-| **Tempo ↔ Solana** | Across (supports Tempo), Circle CCTP (check Tempo support), LayerZero | **Simulated bridge** with the same interface; real bridge after the hackathon | Must be scoped honestly. Say "simulated" in the demo. |
-| **Off-ramp / liquidity (NGN, KES)** | Yellow Card, Kotani Pay, Busha, Onafriq, Flutterwave, Fonbnk | **Sandbox API where available**, otherwise a mock adapter against the documented API | Target 1–2 LOIs from this list |
-| **Customer PSPs (design partners)** | Zynta and similar EU→Africa payout companies | LOIs plus one sandbox integration | Traction criterion |
-| **Compliance** | Chainalysis / TRM (wallet screening), Sumsub (KYB) | Mocked screening hook | Real after the hackathon |
-| **Yield on float** | Tokenized T-bill venues, TIP-20 rewards | Modelled only | Requires customer opt-in and legal review |
-| **Zcash (optional)** | Zallet/zcashd RPC, lightwalletd, NEAR Intents for ZEC swaps | See §9 | Stretch goal |
+| **Venue** (where value sits) | `tempo`, `solana`, `partner_fiat` | `zcash_ironwood` | Yes: `Venue` is one enum |
+| **Route** (how value moves) | legs through the route graph | legs through the same graph | Yes: one planner |
+| **Saga** | forward and compensation per leg | forward and compensation per leg | Yes: one engine |
+| **Ledger** | accounts keyed `(owner, corridor, asset, venue)` | same, `venue = zcash_ironwood` | Yes: one journal |
+| **Reference** | Corridor Reference in TIP-20 memo / Solana memo | same reference in the Zcash encrypted memo | Yes: one codec |
+| **Reconciliation** | ledger ↔ chain logs ↔ partner webhook | ledger ↔ viewing-key scan ↔ recipient | Yes: one matcher, different *observers* |
+| **Disclosure** | public by nature | viewing key per `(customer, period)` | Built in from the start |
+
+The route graph decides how a payout moves. `privacy: "shielded"` is a constraint on the path (the final leg must end in the `zcash_ironwood` venue). It is not a separate subsystem.
 
 ---
 
-## 6. Security and risk
+## 3. System architecture
+
+```
+                 ┌──────────────────────────────────────────────────────────────────┐
+PSP / B2B ──API─▶│  API (quotes · payouts · batches · disclosures)                   │
+                 │     │                                                             │
+                 │     ▼                                                             │
+                 │  Route planner ── route graph (venues × assets × legs)            │
+                 │     │                                                             │
+                 │     ▼                                                             │
+                 │  Settlement saga engine (durable, per-leg compensation)           │
+                 │     │            │              │              │                  │
+                 │  ┌──▼───┐   ┌────▼────┐   ┌─────▼─────┐   ┌────▼──────┐           │
+                 │  │Tempo │   │ Across  │   │ Solana +  │   │ Zcash     │           │
+                 │  │legs  │   │ bridge  │   │ ramp legs │   │ shielded  │           │
+                 │  │memo, │   │ Tempo→  │   │ SPL memo, │   │ legs:     │           │
+                 │  │DEX,  │   │ Base→   │   │ partner   │   │ NEAR swap,│           │
+                 │  │FeeAMM│   │ Solana  │   │ payout    │   │ Ironwood  │           │
+                 │  └──┬───┘   └────┬────┘   └─────┬─────┘   │ batch tx, │           │
+                 │     │            │              │         │ FROST     │           │
+                 │     │            │              │         └────┬──────┘           │
+                 │     ▼            ▼              ▼              ▼                  │
+                 │  Observers (log watchers · webhooks · viewing-key scanner)        │
+                 │     │                                                             │
+                 │     ▼                                                             │
+                 │  Double-entry ledger (Postgres) ◀──▶ Reconciliation engine        │
+                 └─────┼─────────────────────────────────────────────────────────────┘
+                       ▼
+                 Treasury console: corridors · venues · forecast · recon · disclosures
+```
+
+---
+
+## 4. Core model
+
+```ts
+type Venue = "tempo" | "base" | "solana" | "partner_fiat" | "zcash_ironwood";
+type Asset = "pathUSD" | "USDC.e" | "USDC" | "ZEC" | "NGN" | "KES" | "EUR";
+
+interface LegSpec {                 // one edge in the route graph
+  kind: "tempo.transfer" | "tempo.dexSwap" | "across.bridge" | "solana.transfer"
+      | "partner.payout" | "near.swap" | "zcash.shieldedBatch";
+  from: { venue: Venue; asset: Asset };
+  to:   { venue: Venue; asset: Asset };
+}
+
+interface PayoutIntent {
+  corridor: "EUR-NGN" | "USD-KES" | ...;
+  amount: Money;                    // target amount
+  privacy: "public" | "shielded";
+  recipient: PublicRecipient | ShieldedRecipient;
+  reference: CorridorRef;           // §5
+}
+```
+
+**Route examples:**
+- Public EUR→NGN: `tempo.transfer → across.bridge(tempo→base) → across.bridge(base→solana) → partner.payout`
+- Shielded supplier/payroll: `tempo.transfer → near.swap(USDC→ZEC) → zcash.shieldedBatch`
+
+---
+
+## 5. Corridor Reference: one ID across three chains
+
+One 32-byte reference, carried in each chain's native reference field:
+
+```
+byte 0      version (0x01)
+byte 1      kind   (0x01 payout · 0x02 batch · 0x03 batch item · 0x04 sweep)
+byte 2      corridor id
+byte 3      flags  (bit0 shielded)
+bytes 4–19  payout / batch id (UUIDv7, 16 bytes)
+bytes 20–27 customer id hash (8 bytes, truncated keyed hash)
+bytes 28–31 checksum (first 4 bytes of sha256 over bytes 0–27)
+```
+
+| Chain | Where it lives | Why this chain fits |
+|---|---|---|
+| Tempo | TIP-20 `transferWithMemo(to, amount, bytes32 memo)`; `memo` is an **indexed** topic of `TransferWithMemo` | Recon can filter logs by reference directly, with no indexer |
+| Solana | SPL Memo instruction (hex of the reference) in the same transaction | Native pattern for ramp partners |
+| Zcash | Encrypted 512-byte memo on each Ironwood output (reference + invoice ref) | Only the recipient and viewing-key holders can read it |
+
+---
+
+## 6. Components
+
+### 6.1 Ledger (`packages/ledger`), carried over from Arc
+- Accounts: `(owner_type, owner_id, corridor, asset, venue, type)`. Types are asset, liability, revenue, expense and clearing.
+- Immutable journal. Postings balance **per asset**. FX and swaps go through `clearing:{pair}` accounts.
+- Invariants are enforced at write time and tested: entries balance, asset accounts flagged no-overdraft never go negative, and each on-chain reference is booked exactly once (unique `(venue, external_ref)`).
+- The shielded venue gets its own accounts, e.g. `customer:acme:pathUSD:tempo` → `clearing:USD-ZEC` → `customer:acme:ZEC:zcash_ironwood` → `payable:supplier`.
+
+### 6.2 Saga engine (`packages/saga`), carried over from Arc
+- Postgres-backed step table plus an outbox. Every leg is `forward()` / `compensate()` / `observe()`.
+- Idempotency key per `(saga_id, step)`. Retries and timeouts per leg kind. Exhausted retries go to `manual_review`.
+
+### 6.3 Tempo legs (`packages/chain-tempo`)
+- viem with its built-in `viem/tempo` chains and actions.
+- Moderato testnet (chain 42431, `rpc.moderato.tempo.xyz`), with faucet via RPC `tempo_fundAddress`. Mainnet is chain 4217.
+- `transferWithMemo` for every movement. Vaults pay gas in pathUSD through the Fee AMM.
+- `dexSwap` for ingress conversion (USDC.e → pathUSD) on the enshrined stablecoin DEX.
+
+### 6.4 Across bridge (`packages/bridge-across`)
+- Swap API `GET /swap/approval` returns calldata. Deposit, then watch for the fill.
+- Verified live quotes on 29 Sep 2026: **Tempo USDC.e → Base USDC**, 5 USDC in, fill ~1 s, fee ≈ $0.004. **Base USDC → Solana USDC**, fill ~8 s, fee ≈ $0.0006. Across does not yet support destination swaps into Solana in one call, so the saga runs **two legs**, each with its own compensation.
+- **There is no Across Tempo testnet.** The live bridge runs on mainnet with micro-amounts ($5–20). The testnet demo can switch to the `simulated` adapter, which has the same interface.
+
+### 6.5 Solana and ramp legs (`packages/chain-solana`, `packages/partners`)
+- `@solana/kit`, USDC SPL transfer plus a Memo instruction carrying the Corridor Reference.
+- Partner adapter interface: `quote()`, `createPayout()`, `status()`, `verifyWebhook()`. First adapter: **Paj** (Solana USDC → NGN bank, business API with offramp orders and webhooks). The mock adapter follows the same interface.
+
+### 6.6 Shielded legs (`packages/chain-zcash`, Rust sidecar `services/zcash`)
+- **Z3 stack** (Zebra, Zaino, Zallet) on Zcash testnet, targeting the **Ironwood** pool. Orchard has been sealed since NU6.3 in July 2026.
+- **Account model:** ZIP-32 account per `(customer, period)`. Exporting a viewing key discloses only that customer's period.
+- **Batch payout:** one shielded transaction with N outputs, each carrying the encrypted Corridor Reference and invoice ref.
+- **FROST 2-of-3** (RedPallas) authorizes the batch spend: customer approver, customer finance lead, and Corridor as co-signer.
+- **Funding leg:** pathUSD/USDC to ZEC through NEAR Intents (mainnet only, since there is no testnet liquidity). On testnet it is simulated behind the real API shape. FX exposure is bounded by an immediate swap-and-send window.
+- **Observer:** a viewing-key scanner feeds the same reconciliation engine.
+
+### 6.7 Reconciliation (`packages/recon`)
+Observers emit `Observation {venue, externalRef, reference, amount, asset, at}`. The matcher joins observations with ledger expectations on `reference` and produces `matched`, `partial`, `unmatched` or `amount_mismatch`. It works the same way for both lanes.
+
+### 6.8 Console (`apps/console`)
+Corridor board · venue balances (including shielded, visible only to the customer) · pre-funding forecast · saga timelines · exceptions · **Disclosures** (export a viewing key per period, auditor verification view) · **Batches** (payroll or supplier CSV, then approvals, then status).
+
+---
+
+## 7. Networks and environments
+
+| Leg | Hackathon environment | Notes |
+|---|---|---|
+| Tempo | Moderato testnet (42431), plus mainnet (4217) for the bridge demo | Faucet via `tempo_fundAddress` |
+| Across | **Mainnet only for Tempo** | Micro-amounts. Needs a funded mainnet vault. |
+| Solana | Devnet for development, mainnet for the bridge and ramp demo | |
+| Ramp partner | Paj business API (production, micro-amounts) or mock | FossaPay is production-only (no sandbox) |
+| Zcash | Testnet, Ironwood | Confirm Ironwood support in Zallet/FROST on day 1 of that track |
+| NEAR Intents | Mainnet quotes, simulated on testnet | |
+
+**Needed from Udoka:** about $30–50 of USDC to fund a mainnet demo vault (Tempo USDC.e or pathUSD), plus a Paj business API key. Keys are generated locally and never committed.
+
+---
+
+## 8. Build plan (13 days, revised)
+
+| Day | Date | Milestone | Exit criteria |
+|---|---|---|---|
+| D1 | 29–30 Sep | Monorepo, ledger with invariants, Corridor Reference codec, Tempo testnet transfer with memo | A memo transfer shows on the Tempo explorer and is booked exactly once in the ledger |
+| D2 | 1 Oct | Saga engine, route planner, Tempo observer (log filter by memo) | A public payout runs through Tempo legs with a forced-failure compensation |
+| D3 | 2 Oct | Across adapter (mainnet micro), two-hop bridge legs, fill watcher | $5 goes Tempo → Base → Solana through the saga and is reconciled |
+| D4 | 3 Oct | Solana memo leg, Paj adapter (or mock), webhook ingest | Partner payout closes the public saga |
+| D5 | 4 Oct | **Zcash spike**: Z3/Ironwood testnet, shielded send via RPC, ZIP-32 accounts | A shielded testnet transaction from code |
+| D6 | 5 Oct | Shielded batch leg (N outputs, encrypted reference), viewing-key scanner observer | A batch of 5 is reconciled through the viewing key |
+| D7 | 6 Oct | FROST 2-of-3 on the batch spend (fallback: single-sig plus a separate FROST demo) | A FROST-signed batch lands |
+| D8 | 7 Oct | NEAR Intents funding leg (simulated on testnet, mainnet quote) and the disclosure export | Auditor view shows only one period |
+| D9–D10 | 8–9 Oct | Console: corridors, venues, forecast, recon, batches, disclosures | Full demo script runs |
+| D11 | 10 Oct | Hardening, seed data, deploy | Public demo URL |
+| D12 | 11 Oct | Demo video, pitch video, final deck, LOIs | Assets reviewed |
+| D13 | 12 Oct | Submit | Submitted |
+
+---
+
+## 9. Partners: who to approach
+
+**Ramps and payout rails (liquidity side):**
+
+| Company | Fit | Notes |
+|---|---|---|
+| **Paj** (paj.cash) | ✅ Strong for NGN | Solana-native crypto → NGN bank. Business API (offramp orders, bank account registration, rates, webhooks) across Solana, Base, Ethereum and more. Consumer-leaning, so check business limits. |
+| **FossaPay** | ✅ For NGN fiat rails | Neobank/fintech infrastructure: NGN virtual accounts, NGN payouts, fiat and stablecoin wallets, webhooks. Production-only, no sandbox. Chain and stablecoin details aren't public, so ask. |
+| Yellow Card | ✅ Tier-1 target | Stablecoin ↔ fiat API across many African markets including NGN and KES |
+| Kotani Pay | ✅ For KES | Stablecoin → mobile money off-ramp API |
+| Bitnob | ✅ | Stablecoin API across NGN, KES, GHS and more |
+| HoneyCoin | ✅ | Stablecoin payments and payout API, East Africa focus |
+| Busha | ✅ For NGN | Nigerian exchange with business API |
+| Mansa | ✅ Strategic | Stablecoin liquidity and pre-funding credit for cross-border payment companies |
+
+**Customers (LOI targets):** Zynta, LemFi, Afriex, Nala, Grey, Cleva, Leatherback, Chipper Cash. These are EU/UK/US → Africa payout and remittance operators.
+
+---
+
+## 10. Risks
 
 | Risk | Mitigation |
 |---|---|
-| Key compromise | Per-corridor vaults, KMS-wrapped keys, spend limits per vault. MPC after the hackathon. |
-| Partner insolvency / non-payout | Cap exposure per partner, prefer partners that pay out on receipt, and keep compensation flows in the saga |
-| FX move during settlement | Short quote TTL, partner firm-quote backing, max-slippage guard |
-| Stablecoin depeg | Multi-issuer support, depeg circuit breaker that halts new quotes |
-| Reconciliation drift | Ledger invariants, a nightly full rebuild of the projection, alert on any unmatched item older than 1 h |
-| Regulatory | We only serve licensed customers, run KYB and sanctions screening, and use regulated ramp partners. We do not take consumer custody. |
-
----
-
-## 7. Build strategy (13 days to submission)
-
-Principle: **one corridor that works for real beats five corridors that are faked.** The demo video walks one EUR → NGN payout from quote to reconciled journal entry, showing the Tempo memo on the explorer.
-
-| Days | Milestone | Deliverables | Exit criteria |
-|---|---|---|---|
-| **D1–D2** (30 Sep–1 Oct) | Foundations | Monorepo, Postgres schema, ledger package with invariant tests, Tempo testnet wallet and TIP-20 transfer-with-memo script | A memo-tagged transfer shows on the Tempo explorer and is booked in the ledger |
-| **D3–D5** (2–4 Oct) | Settlement saga | Saga runner, steps 1–3 and 6–7 live, bridge and partner steps behind adapters (mocks), quote engine | A payout goes through all steps with a compensation demo on a forced failure |
-| **D6–D7** (5–6 Oct) | Solana and partner leg | Solana devnet routing vault, partner adapter (sandbox or mock), webhook ingest | Solana leg is visible, and a partner webhook closes the saga |
-| **D8–D9** (7–8 Oct) | Recon and console | Recon engine (three-way match), console: corridor board, forecast, exceptions | 100% match on happy path and seeded exceptions visible |
-| **D10** (9 Oct) | Hardening | Idempotency tests, seed data for two corridors, deployment | Public demo URL is stable |
-| **D11** (10 Oct) | Pitch assets | Demo video (≤3 min), pitch video, deck final, LOIs attached | Assets reviewed |
-| **D12** (11 Oct) | Buffer / stretch | Shielded lane spike (§9) **only if D1–D10 are green** | None |
-| **D13** (12 Oct) | Submit | Submission form, repo cleanup, README screenshots | Submitted before the deadline |
-
-**Business development runs in parallel from day 1:** contact 10 PSPs and MTOs and 6 ramp partners, with a goal of 2–3 LOIs by D10. A one-page LOI template goes in `docs/` on D1.
-
-### 7.1 After the hackathon (indicative)
-
-| Horizon | Focus |
-|---|---|
-| 0–3 months | Real bridge, one production ramp partner per corridor, MPC custody, first paying design partner on EUR → NGN |
-| 3–6 months | KES, GHS, ZAR corridors, float-yield programme (opt-in), SOC 2 readiness |
-| 6–12 months | Multi-partner smart routing, credit lines for pre-funding, stronger shielded B2B lane |
-
----
-
-## 8. Metrics we instrument from day 1
-
-- Settlement time (quote → partner confirmation), p50 and p95
-- Auto-reconciliation rate
-- Capital efficiency: pre-funding required with Corridor vs. the baseline nostro model
-- Take rate (bps) per corridor, split across fee, FX share and SaaS
-
----
-
-## 9. Optional module: shielded B2B settlement lane
-
-This is the combined "1 + 3" strategy. It puts Corridor in the Zcash track without changing the core product.
-
-**Use case:** a PSP's B2B customer pays suppliers across borders and does not want amounts and counterparties visible on a public chain.
-
-**Flow:**
-1. The B2B payout is flagged `privacy: shielded`.
-2. The saga converts USD stablecoin to ZEC through a swap route (NEAR Intents supports ZEC swaps).
-3. ZEC is sent from Corridor's shielded (Ironwood pool) address to the supplier's shielded address, with an encrypted memo that carries the invoice reference.
-4. The supplier receives shielded ZEC, or it is swapped out to a stablecoin at the destination.
-5. Corridor issues the PSP a **viewing key** per payment batch, which gives auditors selective disclosure.
-6. The ledger books the shielded leg against a `venue=zcash_shielded` account. Recon matches on the decrypted memo using the viewing key.
-
-**Honest scoping:**
-- ZEC price exposure during transit must be hedged or kept to a short window. The MVP limits it to small amounts with an instant swap.
-- The Tempo ↔ Zcash connection is real engineering (swap route plus watcher). In the hackathon it is a spike: shielded send and viewing-key reconciliation on testnet, with the conversion simulated.
-- The full version of this lane lives in the **Stipend** repository. Shared components: Zcash adapter and viewing-key recon.
-
----
-
-## 10. Open decisions (need your call before build)
-
-1. **Primary settlement asset on Tempo:** USDC vs. a native TIP-20 USD stablecoin. This affects the Fee AMM path and partner acceptance.
-2. **Bridge:** simulate it for the hackathon (recommended), or spend 2 days on a live Across integration.
-3. **First ramp partner to approach for a sandbox:** your Zynta network probably decides this.
-4. **Include the shielded lane in this submission?** Recommended as a stretch goal only, gated on D10.
+| Across has no Tempo testnet | Mainnet micro-amounts, with the simulated adapter as fallback (decided) |
+| Two-hop bridge latency or failure | Per-leg compensation. Funds are always in a Corridor-owned address on Base between hops. |
+| Ironwood tooling immaturity (FROST, Zallet) | Day-5 spike decides. Fallback is single-sig with FROST shown separately. |
+| ZEC price exposure on the shielded lane | Swap and send in one saga window, with a slippage guard and small batches in the demo |
+| pathUSD depth | Per-corridor `settlementAsset` policy, with USDC.e as an alternative |

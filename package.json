@@ -1,0 +1,24 @@
+{
+  "name": "corridor",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "tempo:smoke": "tsx scripts/tempo-smoke.ts"
+  },
+  "devDependencies": {
+    "@types/node": "22",
+    "tsx": "4",
+    "typescript": "5",
+    "vitest": "3"
+  },
+  "dependencies": {
+    "@corridor/chain-tempo": "workspace:^",
+    "@corridor/core": "workspace:^",
+    "@corridor/ledger": "workspace:^",
+    "@electric-sql/pglite": "^0.5.8",
+    "viem": "2.56.9"
+  }
+}

@@ -8,3 +8,5 @@ target/
 *.log
 .DS_Store
 coverage/
+.data/
+.env.local
