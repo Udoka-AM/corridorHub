@@ -58,7 +58,7 @@ Sender (EUR, SEPA)                                     Recipient (NGN, bank / mo
 
 ## Who it's for
 
-Licensed payment service providers, remittance operators, payout companies and cross-border B2B platforms serving EU/UK/US → Africa corridors. Nigeria (NGN) and Kenya (KES) come first.
+Licensed payment service providers, remittance operators, payout companies and cross-border B2B platforms, in both directions: diaspora and B2B payouts **into** Africa (EU/UK/US → NGN, KES, GHS), and import payments **out of** Africa to suppliers in China, Hong Kong, India, the UAE and the Americas. Tempo is the settlement hub and every region is a spoke (see [ARCHITECTURE §2.1](docs/ARCHITECTURE.md#21-a-global-network-hub-and-spokes)). Nigeria and Kenya come first.
 
 ## Tech stack (planned)
 

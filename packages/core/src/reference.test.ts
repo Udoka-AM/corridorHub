@@ -25,10 +25,18 @@ const ref = (over: Partial<CorridorRef> = {}): CorridorRef => ({
 
 describe("Corridor Reference", () => {
   it("round-trips through the 32-byte encoding", () => {
-    const r = ref({ kind: RefKind.BatchItem, corridor: "USD-SHIELDED", shielded: true });
+    const r = ref({ kind: RefKind.BatchItem, corridor: "USD-USD", shielded: true });
     const hex = encodeRef(r);
     expect(hex).toMatch(/^0x[0-9a-f]{64}$/);
     expect(decodeRef(hex)).toEqual(r);
+  });
+
+  it("addresses any currency pair, including import corridors out of Africa", () => {
+    for (const corridor of ["NGN-CNY", "KES-USD", "GHS-HKD", "ZAR-BRL", "EUR-NGN"] as const) {
+      const r = ref({ corridor, kind: RefKind.Collection });
+      expect(decodeRef(encodeRef(r)).corridor).toBe(corridor);
+    }
+    expect(() => encodeRef(ref({ corridor: "NGN-XYZ" as never }))).toThrow(/invalid corridor/);
   });
 
   it("rejects a corrupted reference", () => {
@@ -56,7 +64,7 @@ describe("Corridor Reference", () => {
   });
 
   it("carries the same reference on Solana and Zcash", () => {
-    const hex = encodeRef(ref({ shielded: true, corridor: "USD-SHIELDED" }));
+    const hex = encodeRef(ref({ shielded: true, corridor: "USD-USD" }));
     expect(fromSolanaMemo(toSolanaMemo(hex))).toBe(hex);
 
     const memo = toZcashMemo(hex, "INV-2026-0042");

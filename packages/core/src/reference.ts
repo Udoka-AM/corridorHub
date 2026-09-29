@@ -1,24 +1,29 @@
 import { createHash, createHmac, randomBytes } from "node:crypto";
-import { CORRIDORS, type CorridorCode, corridorFromId } from "./model.ts";
+import { FIAT, corridor, fiatFromIndex, parseCorridor, type CorridorCode } from "./model.ts";
 
 /**
  * Corridor Reference: one 32-byte identifier that follows a payout across
  * Tempo (TIP-20 memo, an indexed event topic), Solana (SPL Memo) and Zcash
- * (encrypted output memo). Layout (docs/ARCHITECTURE.md §5):
+ * (encrypted output memo). Layout v2 (docs/ARCHITECTURE.md §5):
  *
- *   0      version
+ *   0      version (0x02)
  *   1      kind
- *   2      corridor id
- *   3      flags (bit0 = shielded)
- *   4–19   payout / batch id (UUIDv7)
- *   20–27  customer tag (keyed hash, 8 bytes)
+ *   2      funding currency (FIAT index)
+ *   3      beneficiary currency (FIAT index)
+ *   4      flags (bit0 = shielded)
+ *   5–20   payout / batch id (UUIDv7)
+ *   21–27  customer tag (keyed hash, 7 bytes)
  *   28–31  checksum = sha256(bytes 0–27)[0..4]
+ *
+ * Encoding the currency pair directly (rather than a corridor id) means any
+ * spoke of the network is addressable without a registry change.
  */
 
-export const REF_VERSION = 0x01;
+export const REF_VERSION = 0x02;
 export const REF_BYTES = 32;
+export const CUSTOMER_TAG_BYTES = 7;
 
-export const RefKind = { Payout: 0x01, Batch: 0x02, BatchItem: 0x03, Sweep: 0x04, Deposit: 0x05 } as const;
+export const RefKind = { Payout: 0x01, Batch: 0x02, BatchItem: 0x03, Sweep: 0x04, Deposit: 0x05, Collection: 0x06 } as const;
 export type RefKind = (typeof RefKind)[keyof typeof RefKind];
 
 export type Hex = `0x${string}`;
@@ -29,21 +34,23 @@ export interface CorridorRef {
   shielded: boolean;
   /** UUIDv7 of the payout, batch or batch item. */
   id: string;
-  /** 8-byte keyed hash of the customer id (see `customerTag`). */
+  /** 7-byte keyed hash of the customer id (see `customerTag`). */
   customerTag: Uint8Array;
 }
 
 const FLAG_SHIELDED = 0b0000_0001;
 
 export function encodeRef(ref: CorridorRef): Hex {
-  if (ref.customerTag.length !== 8) throw new Error("customerTag must be 8 bytes");
+  if (ref.customerTag.length !== CUSTOMER_TAG_BYTES) throw new Error(`customerTag must be ${CUSTOMER_TAG_BYTES} bytes`);
+  const { source, destination } = parseCorridor(ref.corridor);
   const buf = new Uint8Array(REF_BYTES);
   buf[0] = REF_VERSION;
   buf[1] = ref.kind;
-  buf[2] = CORRIDORS[ref.corridor];
-  buf[3] = ref.shielded ? FLAG_SHIELDED : 0;
-  buf.set(uuidToBytes(ref.id), 4);
-  buf.set(ref.customerTag, 20);
+  buf[2] = FIAT[source].index;
+  buf[3] = FIAT[destination].index;
+  buf[4] = ref.shielded ? FLAG_SHIELDED : 0;
+  buf.set(uuidToBytes(ref.id), 5);
+  buf.set(ref.customerTag, 21);
   buf.set(checksum(buf.subarray(0, 28)), 28);
   return toHex(buf);
 }
@@ -58,10 +65,10 @@ export function decodeRef(hex: string): CorridorRef {
   if (!Object.values(RefKind).includes(kind)) throw new Error(`unknown reference kind ${kind}`);
   return {
     kind,
-    corridor: corridorFromId(buf[2]!),
-    shielded: (buf[3]! & FLAG_SHIELDED) !== 0,
-    id: bytesToUuid(buf.subarray(4, 20)),
-    customerTag: buf.slice(20, 28),
+    corridor: corridor(fiatFromIndex(buf[2]!), fiatFromIndex(buf[3]!)),
+    shielded: (buf[4]! & FLAG_SHIELDED) !== 0,
+    id: bytesToUuid(buf.subarray(5, 21)),
+    customerTag: buf.slice(21, 28),
   };
 }
 
@@ -76,7 +83,7 @@ export function tryDecodeRef(hex: string): CorridorRef | null {
 
 /** Keyed so that customer ids cannot be recovered or linked from public memos. */
 export function customerTag(customerId: string, secret: string | Uint8Array): Uint8Array {
-  return new Uint8Array(createHmac("sha256", secret).update(customerId).digest().subarray(0, 8));
+  return new Uint8Array(createHmac("sha256", secret).update(customerId).digest().subarray(0, CUSTOMER_TAG_BYTES));
 }
 
 // ---- per-chain encodings of the same reference ----

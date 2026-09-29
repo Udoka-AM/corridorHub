@@ -108,7 +108,7 @@ describe("ledger", () => {
     const { customer } = await fundedCustomer(50_000_000n);
     const usdClearing = await ledger.openAccount({ type: "clearing", ownerType: "fx", ownerId: "USD-ZEC", asset: "pathUSD", venue: "tempo" });
     const zecClearing = await ledger.openAccount({ type: "clearing", ownerType: "fx", ownerId: "USD-ZEC", asset: "ZEC", venue: "zcash_ironwood" });
-    const shielded = await ledger.openAccount({ type: "liability", ownerType: "customer", ownerId: "zynta", corridor: "USD-SHIELDED", asset: "ZEC", venue: "zcash_ironwood", noOverdraft: true });
+    const shielded = await ledger.openAccount({ type: "liability", ownerType: "customer", ownerId: "zynta", corridor: "NGN-CNY", asset: "ZEC", venue: "zcash_ironwood", noOverdraft: true });
 
     await ledger.post({
       kind: "near.swap",

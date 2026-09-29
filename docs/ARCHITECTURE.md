@@ -42,10 +42,11 @@ Guardrail: pathUSD circulating supply is still small (single-digit millions of d
 
 ## 1. Scope for the hackathon
 
-1. **Public corridor, EUR → NGN.** Quote, then settle on Tempo (memo), bridge live Tempo → Base → Solana through Across, then pay out with a ramp partner, then run a three-way reconciliation.
-2. **Shielded lane, B2B supplier batch and contributor payroll.** One batch of N private payouts funded from the same Tempo vaults and paid in **one Ironwood shielded transaction**. It is approved with FROST 2-of-3 and disclosed to an auditor through a viewing key scoped to the customer and the period.
-3. **One ledger, one saga engine and one reconciliation engine** serve both lanes.
-4. **Treasury console** with balances per corridor **and per venue** (Tempo, Solana, partner fiat, Zcash shielded), the pre-funding forecast, the exceptions queue and disclosure exports.
+1. **Inbound payout, EUR → NGN.** Quote, then settle on Tempo (memo), bridge live Tempo → Base → Solana through Across, then pay out with a ramp partner, then run a three-way reconciliation.
+2. **Outbound import payment, NGN → supplier in Asia or the Americas.** A Nigerian importer's NGN is collected into the Tempo hub, then paid out to a supplier in CNY/HKD/USD. This shows the network works in both directions (§2.1).
+3. **Shielded lane, B2B supplier batch and contributor payroll.** One batch of N private payouts funded from the same Tempo vaults and paid in **one Ironwood shielded transaction**. It is approved with FROST 2-of-3 and disclosed to an auditor through a viewing key scoped to the customer and the period.
+4. **One ledger, one saga engine and one reconciliation engine** serve every lane and direction.
+5. **Treasury console** with balances per corridor **and per venue** (Tempo, Solana, partner fiat, Zcash shielded), the pre-funding forecast, the exceptions queue and disclosure exports.
 
 Out of scope: live fiat collection (the PSP collection arrives as a signed webhook), production custody (KMS-wrapped dev keys), and executing yield.
 
@@ -66,6 +67,51 @@ A bolt-on would look like `if (shielded) callZcashService()`. Corridor does this
 | **Disclosure** | public by nature | viewing key per `(customer, period)` | Built in from the start |
 
 The route graph decides how a payout moves. `privacy: "shielded"` is a constraint on the path (the final leg must end in the `zcash_ironwood` venue). It is not a separate subsystem.
+
+### 2.1 A global network: hub and spokes
+
+Corridor is not limited to EU → Africa. **Tempo is the settlement hub, and every region is a spoke.** Every flow is one of two things:
+
+- **Collection:** local currency comes in through a ramp partner, is converted to USDC, bridged to Tempo, and credited to the customer's pathUSD balance.
+- **Payout:** the customer's Tempo balance goes out to a spoke, either public (partner pays local currency) or shielded (Ironwood).
+
+A cross-border flow is a collection followed by a payout:
+
+```
+          collections                         payouts
+ NGN ─┐                                              ┌─▶ NGN / KES / GHS / ZAR …   (inbound remittance, payroll)
+ KES ─┤                                              ├─▶ CNY / HKD / INR / AED … (import payments to Asia)
+ GHS ─┼─▶ USDC (Solana) ─▶ TEMPO HUB (pathUSD) ─▶ ────┼─▶ USD / BRL / MXN / COP … (payments to the Americas)
+ USD ─┤         customer balances · ledger · recon   ├─▶ EUR / GBP …             (payments to Europe)
+ EUR ─┘                                              └─▶ Zcash Ironwood          (shielded supplier batches, payroll)
+```
+
+Why this shape:
+- **N integrations, not N×N corridors.** Adding a region means adding one ramp partner, and every existing spoke can then reach it.
+- **The hub is enforced.** The planner rejects any payout not funded from the Tempo hub and any collection that doesn't land on it. So every flow is settled, held, reconciled and visible to treasury in one place, which is the product. (Tested in `routing.test.ts`.)
+- **Currency-pair references.** The Corridor Reference encodes the funding and beneficiary currencies directly (§5), so a new corridor such as `GHS-HKD` needs no registry change.
+- **The shielded lane fits import payments.** Importers don't want competitors reading supplier prices and volumes on a public chain.
+
+**Priority flows:**
+
+| Flow | Direction | Example | Payout rail |
+|---|---|---|---|
+| Diaspora and B2B payouts into Africa | Inbound | EUR/GBP/USD → NGN, KES, GHS | Local bank / mobile money |
+| **Import payments to China and Hong Kong** | Outbound | NGN/KES/GHS → CNY, HKD, USD | Supplier's HK or offshore USD/HKD account. Onshore CNY conversion is restricted, so most China trade settles in USD/HKD/USDT. |
+| Import payments to India, UAE, Turkey, SE Asia | Outbound | NGN → INR, AED, TRY, IDR | Local payout partners |
+| Payments to the Americas | Outbound | NGN/KES → USD, BRL, MXN | ACH/wire, Pix, SPEI |
+| Intra-Africa trade | Both | NGN ↔ KES, GHS, XOF | Local ramps |
+
+**Payout partner candidates by region** (all to be verified in outreach):
+
+| Region | Candidates |
+|---|---|
+| Africa | Paj, FossaPay, Yellow Card, Kotani Pay, Bitnob, HoneyCoin, Busha |
+| China / HK / Asia | Nium (USDC-funded payouts to 100+ countries), licensed HK payment institutions, Conduit |
+| Americas | Bridge (Stripe; USD rails, and the issuer of pathUSD), Bitso Business (MXN/COP/ARS), Pix partners (BRL), Conduit |
+| Global aggregators | BVNK, Conduit, Nium |
+
+**Regulation of outbound flows.** Outbound FX from markets like Nigeria is regulated. For example, import payments need a Form M and have to go through institutions licensed for FX. Corridor stays infrastructure: the licensed PSP or IMTO customer holds the FX permissions and the KYC. Corridor carries the compliance references (invoice number, Form M number) in the saga data and off-chain payload, and the reconciliation trail is audit evidence.
 
 ---
 
@@ -135,12 +181,13 @@ interface PayoutIntent {
 One 32-byte reference, carried in each chain's native reference field:
 
 ```
-byte 0      version (0x01)
-byte 1      kind   (0x01 payout · 0x02 batch · 0x03 batch item · 0x04 sweep)
-byte 2      corridor id
-byte 3      flags  (bit0 shielded)
-bytes 4–19  payout / batch id (UUIDv7, 16 bytes)
-bytes 20–27 customer id hash (8 bytes, truncated keyed hash)
+byte 0      version (0x02)
+byte 1      kind   (payout · batch · batch item · sweep · deposit · collection)
+byte 2      funding currency (Corridor currency index: 32 currencies across 4 regions today, room for 255)
+byte 3      beneficiary currency
+byte 4      flags  (bit0 shielded)
+bytes 5–20  payout / batch id (UUIDv7, 16 bytes)
+bytes 21–27 customer tag (7 bytes, keyed hash, so the customer can't be identified from a public memo)
 bytes 28–31 checksum (first 4 bytes of sha256 over bytes 0–27)
 ```
 
@@ -266,6 +313,7 @@ Corridor board · venue balances (including shielded, visible only to the custom
 |---|---|---|
 | D1 | ✅ Done 29 Sep | `pnpm tempo:smoke`: Moderato `transferWithMemo`, found by indexed memo topic, booked exactly once |
 | D2 | ✅ Done 30 Sep | `pnpm payout:demo`: saga runs reserve → bridge (real Tempo leg to escrow, simulated fill) → partner. A forced partner failure is compensated in reverse order with a real Tempo refund. The observer then reconciles all vault movements (4/4 matched, clearing nets to 0). |
+| — | ✅ 30 Sep | **Global network:** hub-and-spoke routing (collections and payouts), 30+ currencies across Africa, Asia, the Americas and Europe, Corridor Reference v2 with currency pairs, and hub enforcement tests. Importer flows NGN → CNY/HKD/INR/AED/USD/BRL/MXN plan end to end. |
 
 **Known gaps (next up):**
 - **Vault balance check.** Recon matches memo-tagged movements only. Faucet top-ups and other plain transfers into vaults aren't booked, so add an on-chain-balance vs ledger check per vault, and book gas top-ups as owner funding.
