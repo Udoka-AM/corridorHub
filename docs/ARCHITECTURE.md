@@ -257,3 +257,17 @@ Corridor board · venue balances (including shielded, visible only to the custom
 | Ironwood tooling immaturity (FROST, Zallet) | Day-5 spike decides. Fallback is single-sig with FROST shown separately. |
 | ZEC price exposure on the shielded lane | Swap and send in one saga window, with a slippage guard and small batches in the demo |
 | pathUSD depth | Per-corridor `settlementAsset` policy, with USDC.e as an alternative |
+
+---
+
+## 11. Build log
+
+| Day | Status | Evidence |
+|---|---|---|
+| D1 | ✅ Done 29 Sep | `pnpm tempo:smoke`: Moderato `transferWithMemo`, found by indexed memo topic, booked exactly once |
+| D2 | ✅ Done 30 Sep | `pnpm payout:demo`: saga runs reserve → bridge (real Tempo leg to escrow, simulated fill) → partner. A forced partner failure is compensated in reverse order with a real Tempo refund. The observer then reconciles all vault movements (4/4 matched, clearing nets to 0). |
+
+**Known gaps (next up):**
+- **Vault balance check.** Recon matches memo-tagged movements only. Faucet top-ups and other plain transfers into vaults aren't booked, so add an on-chain-balance vs ledger check per vault, and book gas top-ups as owner funding.
+- **Gas expense.** Vaults pay Tempo fees in pathUSD. Read the fee from each receipt and book it to `expense:gas`.
+- **Lease fencing.** A worker whose lease expired mid-leg could still finish its call. Legs are idempotent via the memo lookup, but a fencing token on bookings would make this airtight.

@@ -18,7 +18,7 @@ import { CORRIDORS, type CorridorCode, corridorFromId } from "./model.ts";
 export const REF_VERSION = 0x01;
 export const REF_BYTES = 32;
 
-export const RefKind = { Payout: 0x01, Batch: 0x02, BatchItem: 0x03, Sweep: 0x04 } as const;
+export const RefKind = { Payout: 0x01, Batch: 0x02, BatchItem: 0x03, Sweep: 0x04, Deposit: 0x05 } as const;
 export type RefKind = (typeof RefKind)[keyof typeof RefKind];
 
 export type Hex = `0x${string}`;

@@ -7,25 +7,12 @@
  * Generates two testnet keys into .env.local on first run (gitignored):
  * a "customer" wallet standing in for a PSP, and Corridor's treasury vault.
  */
-import { appendFileSync, existsSync, mkdirSync } from "node:fs";
-import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { RefKind, customerTag, encodeRef, formatMoney, money, parseMoney, uuidv7, type Hex } from "@corridor/core";
+import { mkdirSync } from "node:fs";
+import { privateKeyToAccount } from "viem/accounts";
+import { RefKind, customerTag, encodeRef, formatMoney, money, parseMoney, uuidv7 } from "@corridor/core";
 import { Ledger, openLocalDb } from "@corridor/ledger";
 import { balanceOf, explorerTx, fundFromFaucet, tempoClient, transferWithReference } from "@corridor/chain-tempo";
-
-const ENV_FILE = ".env.local";
-if (existsSync(ENV_FILE)) process.loadEnvFile(ENV_FILE);
-
-function key(name: string): Hex {
-  let v = process.env[name];
-  if (!v) {
-    v = generatePrivateKey();
-    appendFileSync(ENV_FILE, `${name}=${v}\n`);
-    process.env[name] = v;
-    console.log(`generated ${name} -> ${ENV_FILE}`);
-  }
-  return v as Hex;
-}
+import { testnetKey as key } from "./env.ts";
 
 const CUSTOMER_ID = "zynta-demo";
 const REF_SECRET = process.env.CORRIDOR_REF_SECRET ?? key("CORRIDOR_REF_SECRET");

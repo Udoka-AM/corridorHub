@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "tempo:smoke": "tsx scripts/tempo-smoke.ts"
+    "tempo:smoke": "tsx scripts/tempo-smoke.ts",
+    "payout:demo": "tsx scripts/payout-demo.ts"
   },
   "devDependencies": {
     "@types/node": "22",
@@ -18,6 +19,10 @@
     "@corridor/chain-tempo": "workspace:^",
     "@corridor/core": "workspace:^",
     "@corridor/ledger": "workspace:^",
+    "@corridor/legs": "workspace:^",
+    "@corridor/recon": "workspace:^",
+    "@corridor/routing": "workspace:^",
+    "@corridor/saga": "workspace:^",
     "@electric-sql/pglite": "^0.5.8",
     "viem": "2.56.9"
   }

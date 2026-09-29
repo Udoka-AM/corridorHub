@@ -38,8 +38,11 @@ export interface EntryInput {
   /** Corridor Reference (hex) linking this entry across chains. */
   reference?: string;
   sagaId?: string;
-  /** On-chain / partner identity of the movement. Booking is idempotent on it. */
-  external?: { venue: Venue; ref: string };
+  /**
+   * Identity of the movement: an on-chain / partner venue, or "internal" for
+   * ledger-only bookings keyed by a saga idempotency key. Booking is idempotent on it.
+   */
+  external?: { venue: Venue | "internal"; ref: string };
   metadata?: Record<string, unknown>;
 }
 
@@ -191,7 +194,21 @@ export class Ledger {
     return problems;
   }
 
-  private async findExternal(sql: Sql, ext: { venue: Venue; ref: string }): Promise<string | undefined> {
+  /** Sum of debits in `asset` on an entry: the amount the entry moved in that asset. */
+  async entryTotal(entryId: string, asset: Asset): Promise<bigint> {
+    const { rows } = await this.db.query<{ total: string | null }>(
+      `select sum(amount)::text total from postings where entry_id = $1 and asset = $2 and direction = 'D'`,
+      [entryId, asset],
+    );
+    return BigInt(rows[0]?.total ?? "0");
+  }
+
+  /** Entry id already booked for this external movement, if any. */
+  async findByExternal(venue: Venue | "internal", ref: string): Promise<string | undefined> {
+    return this.findExternal(this.db, { venue, ref });
+  }
+
+  private async findExternal(sql: Sql, ext: { venue: Venue | "internal"; ref: string }): Promise<string | undefined> {
     const { rows } = await sql.query<{ id: string }>(
       `select id from journal_entries where external_venue = $1 and external_ref = $2`,
       [ext.venue, ext.ref],

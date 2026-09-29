@@ -2,6 +2,10 @@ import { getAbiItem, http, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Abis, Actions, Addresses, createClient } from "viem/tempo";
 import { tryDecodeRef, type Asset, type Hex, type Observation } from "@corridor/core";
+import { tokenAddress } from "./tokens.ts";
+
+export { TEMPO_TOKENS, tokenAddress } from "./tokens.ts";
+export { TempoObserver, type CursorStore } from "./observer.ts";
 
 export type TempoNetwork = "moderato" | "mainnet";
 
@@ -10,11 +14,6 @@ export const EXPLORER: Record<TempoNetwork, string> = {
   mainnet: "https://explore.tempo.xyz",
 };
 
-/** USD TIP-20s Corridor handles. pathUSD is the canonical settlement unit (ARCHITECTURE §0.1). */
-export const TEMPO_TOKENS: Partial<Record<Asset, Address>> = {
-  pathUSD: Addresses.pathUsd,
-  "USDC.e": "0x20C000000000000000000000b9537d11c60E8b50",
-};
 
 const TRANSFER_WITH_MEMO = getAbiItem({ abi: Abis.tip20, name: "TransferWithMemo" });
 
@@ -28,12 +27,6 @@ export function tempoClient(opts: { network: TempoNetwork; privateKey: Hex; rpcU
     feeToken: Addresses.pathUsd,
     transport: http(opts.rpcUrl),
   });
-}
-
-export function tokenAddress(asset: Asset): Address {
-  const addr = TEMPO_TOKENS[asset];
-  if (!addr) throw new Error(`${asset} is not a Tempo TIP-20 Corridor settles in`);
-  return addr;
 }
 
 /** Moderato only: fund an address from the testnet faucet and wait for inclusion. */

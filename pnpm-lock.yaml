@@ -17,6 +17,18 @@ importers:
       '@corridor/ledger':
         specifier: workspace:^
         version: link:packages/ledger
+      '@corridor/legs':
+        specifier: workspace:^
+        version: link:packages/legs
+      '@corridor/recon':
+        specifier: workspace:^
+        version: link:packages/recon
+      '@corridor/routing':
+        specifier: workspace:^
+        version: link:packages/routing
+      '@corridor/saga':
+        specifier: workspace:^
+        version: link:packages/saga
       '@electric-sql/pglite':
         specifier: ^0.5.8
         version: 0.5.8
@@ -50,6 +62,48 @@ importers:
       '@corridor/core':
         specifier: workspace:*
         version: link:../core
+
+  packages/legs:
+    dependencies:
+      '@corridor/chain-tempo':
+        specifier: workspace:*
+        version: link:../chain-tempo
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
+      '@corridor/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@corridor/saga':
+        specifier: workspace:*
+        version: link:../saga
+
+  packages/recon:
+    dependencies:
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
+      '@corridor/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+
+  packages/routing:
+    dependencies:
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/saga:
+    dependencies:
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
+      '@corridor/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@corridor/routing':
+        specifier: workspace:*
+        version: link:../routing
 
 packages:
 
