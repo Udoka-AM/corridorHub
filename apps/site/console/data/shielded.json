@@ -1,0 +1,75 @@
+{
+ "vault": {
+  "threshold": 2,
+  "signers": 3,
+  "address": "utest1209yu8rfmsu2mjsuchevwj60gknc8v75dgrq5mjg445jwywk3264dhtvnfpt2cru2j69hjcv5x4epc5clsve5e9xw4g7ty50j5wxm0uh",
+  "groupKey": "7a489b295734b0267869c7f41677710f770d5ea85991c1842ad529adf448e111"
+ },
+ "batches": [
+  {
+   "txid": "878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c",
+   "explorer": "https://testnet.zcashexplorer.app/transactions/878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c",
+   "pool": "ironwood",
+   "minedHeight": 4412434,
+   "recipients": 3,
+   "total": "0.03 TAZ",
+   "invoices": [
+    "INV-2026-10-F03",
+    "INV-2026-10-F01",
+    "INV-2026-10-F02"
+   ],
+   "control": "frost",
+   "approval": {
+    "signers": [
+     1,
+     3
+    ],
+    "threshold": 2
+   }
+  },
+  {
+   "txid": "de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b",
+   "explorer": "https://testnet.zcashexplorer.app/transactions/de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b",
+   "pool": "ironwood",
+   "minedHeight": 4412453,
+   "recipients": 3,
+   "total": "0.03 TAZ",
+   "invoices": [
+    "INV-2026-10-003",
+    "INV-2026-10-002",
+    "INV-2026-10-001"
+   ],
+   "control": "single-key",
+   "approval": null
+  },
+  {
+   "txid": "1f05d6415ad694bdc3ecffc06ef57eb9b859b2fbc1c5724601faf5bf806ee720",
+   "explorer": "https://testnet.zcashexplorer.app/transactions/1f05d6415ad694bdc3ecffc06ef57eb9b859b2fbc1c5724601faf5bf806ee720",
+   "pool": "ironwood",
+   "minedHeight": 4413511,
+   "recipients": 1,
+   "total": "0.0102283 TAZ",
+   "invoices": [
+    "NEAR Intents delivery (testnet)"
+   ],
+   "control": "single-key",
+   "approval": null
+  },
+  {
+   "txid": "ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7",
+   "explorer": "https://testnet.zcashexplorer.app/transactions/ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7",
+   "pool": "ironwood",
+   "minedHeight": 4413521,
+   "recipients": 3,
+   "total": "0.00992829 TAZ",
+   "invoices": [
+    "INV-2026-09-S02",
+    "INV-2026-09-S01",
+    "INV-2026-09-S03"
+   ],
+   "control": "frost",
+   "approval": null
+  }
+ ],
+ "observations": 10
+}

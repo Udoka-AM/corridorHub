@@ -1,0 +1,25 @@
+[
+ {
+  "subject": "0x020228460101a0ec1f89b87ef48c459f27a1f39fbe284fbb540474635b88e417",
+  "kind": "shielded-batch",
+  "threshold": 2,
+  "signers": 3,
+  "summary": {
+   "usd": "15.00",
+   "zec": "0.00992830",
+   "sagaId": "ebacbd83-9f11-4a11-a96b-fde1f7292aea",
+   "customer": "acme-imports",
+   "invoices": [
+    "INV-2026-09-S01",
+    "INV-2026-09-S02",
+    "INV-2026-09-S03"
+   ],
+   "recipients": 3
+  },
+  "approvedBy": [
+   1,
+   3
+  ],
+  "createdAt": "2026-09-29T07:56:07.685Z"
+ }
+]

@@ -1,0 +1,67 @@
+{
+ "collections": [
+  "NGN",
+  "KES",
+  "GHS",
+  "ZAR",
+  "EGP",
+  "UGX",
+  "XOF",
+  "USD",
+  "EUR",
+  "GBP",
+  "CAD"
+ ],
+ "payouts": [
+  "NGN",
+  "KES",
+  "GHS",
+  "ZAR",
+  "EGP",
+  "UGX",
+  "TZS",
+  "RWF",
+  "XOF",
+  "XAF",
+  "MAD",
+  "CNY",
+  "HKD",
+  "INR",
+  "AED",
+  "SGD",
+  "TRY",
+  "IDR",
+  "VND",
+  "PHP",
+  "JPY",
+  "USD",
+  "CAD",
+  "MXN",
+  "BRL",
+  "COP",
+  "ARS",
+  "CLP",
+  "PEN",
+  "EUR",
+  "GBP",
+  "CHF"
+ ],
+ "examples": {
+  "EUR-NGN (mainnet)": [
+   "ledger.reserve:tempo",
+   "across.bridge:base",
+   "partner.payout:partner_fiat"
+  ],
+  "NGN-CNY (mainnet)": [
+   "ledger.reserve:tempo",
+   "across.bridge:base",
+   "across.bridge:solana",
+   "partner.payout:partner_fiat"
+  ],
+  "EUR-NGN (testnet)": [
+   "ledger.reserve:tempo",
+   "bridge.simulated:solana",
+   "partner.payout:partner_fiat"
+  ]
+ }
+}

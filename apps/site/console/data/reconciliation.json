@@ -1,0 +1,326 @@
+{
+ "vaults": [
+  {
+   "vault": "treasury",
+   "asset": "pathUSD",
+   "venue": "tempo",
+   "onchain": "1,000,051.994555 pathUSD",
+   "ledger": "1,000,051.994555 pathUSD",
+   "diff": "0 pathUSD",
+   "status": "balanced",
+   "short": false
+  }
+ ],
+ "gas": {
+  "total": "0.005445 pathUSD",
+  "transactions": 10
+ },
+ "summary": {
+  "matched": 45,
+  "amount_mismatch": 0,
+  "unbooked": 0,
+  "unreferenced": 0
+ },
+ "byVenue": {
+  "tempo": {
+   "matched": 30,
+   "amount_mismatch": 0,
+   "unbooked": 0,
+   "unreferenced": 0
+  },
+  "partner_fiat": {
+   "matched": 5,
+   "amount_mismatch": 0,
+   "unbooked": 0,
+   "unreferenced": 0
+  },
+  "zcash_ironwood": {
+   "matched": 10,
+   "amount_mismatch": 0,
+   "unbooked": 0,
+   "unreferenced": 0
+  }
+ },
+ "rows": [
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x74e7dde177b9b38782907d04a8d8a901477e362d62abf218e6484a6e40129203:28",
+   "amount": "7 pathUSD",
+   "reference": "0x020114280001a0eaf1008a744b9b02aa444cdd5aaea26ab0f99178b0eb87b7e8"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x4e6d4d0381c1018888338429a921536a9858417cef11c7a95e18661629af3dee:15",
+   "amount": "4 pathUSD",
+   "reference": "0x020114280001a0eaf1083370c39c14406d56037410a26ab0f99178b00bbc8b5f"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x8b82877382ae51d4dbdf83fc83e3fe3479f7ae3a632d79083982c4647f60aac4:8",
+   "amount": "4 pathUSD",
+   "reference": "0x020114280001a0eaf1083370c39c14406d56037410a26ab0f99178b00bbc8b5f"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0xe7517a7d59f438c2f80a2c7a17c6fb245b7d21983f8ad61ae3e884a3de6b58d0:7",
+   "amount": "20 pathUSD",
+   "reference": "0x020514280001a0eb3f77407fec8269c01570145cc4a26ab0f99178b00cd6d037"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x9592439408c986a0487892bedfdb87d5c9f39c324965f58a1048f1e18993ce84:8",
+   "amount": "7 pathUSD",
+   "reference": "0x020114280001a0eb3f7e757ad49cb4ae3247e92373a26ab0f99178b0900d469c"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0xb13fd06043c4647bbcdeb9e53313f02f845443e8ddcd17a57a468758a8ae229d:1",
+   "amount": "4 pathUSD",
+   "reference": "0x020114280001a0eb3f880d7f0cbecbf78b07fe348aa26ab0f99178b00268d20c"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x6779030377fb90884212fa7f5d3acc681958856b7ce22406862f7d2e0940c944:13",
+   "amount": "4 pathUSD",
+   "reference": "0x020114280001a0eb3f880d7f0cbecbf78b07fe348aa26ab0f99178b00268d20c"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x100fde2c5d68f4eeb38e1fb4993abae78960023c1a3ab3f6a2b96289901961b0:1",
+   "amount": "1,000 pathUSD",
+   "reference": "0x020628460001a0eb3fd29e77038036346c58a9be5733d74bd58688d822629a0c"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x671161f61c70a0b5b33c6c8de4221c938d86c310958725146ea9f21517957b5e:1",
+   "amount": "1,000 pathUSD",
+   "reference": "0x020128460001a0eb3fe7e57ca994eb596e7f87c87f33d74bd58688d853957c1f"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x218d2a964c5e43ab741bd7a8b85e2f5cd37f2b9148c3c450228752c9efd5d1b1:2",
+   "amount": "5 pathUSD",
+   "reference": "0x020114280001a0ebc80cea7653b1e8d09c25be7404a26ab0f99178b031e9e69f"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x5073d7ade273836cf6f0dd9c19813fdd38b9a979267f75bfaffdf053b7371c27:4",
+   "amount": "30 pathUSD",
+   "reference": "0x020528460001a0ec1f83ca79b980947808a87a72dc284fbb540474636e42a9c4"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0xbafdbde30386b736fb7151df338ebacc395843575704303fe5e438c17bb760a5:10",
+   "amount": "15 pathUSD",
+   "reference": "0x020228460101a0ec1f89b87ef48c459f27a1f39fbe284fbb540474635b88e417"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x43e7f0bac5488ac23adc9120c988f310f27b4f5ca17dca5bdc0497f8c2109e52:8",
+   "amount": "2 pathUSD",
+   "reference": "0x020114280001a0ec2d842370858569f3a5bdb11524a26ab0f99178b0a34ebe3b"
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x4db6f7e7c26c3005e2a8b55179df9e9d96512939809aa781c0903b905b94f5b9:2",
+   "amount": "5 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x9ba15242504e1915f4e23408ad1428739f1ebaad4fbade1789e1e069ee2223cf:5",
+   "amount": "1,000,000 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0xff671d291553139769c0dbddae2e09abc43f7ae852e30cf358965fe94782450b:9",
+   "amount": "0.003066 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0xaf4a195dca13a262f65844e9c00cc04588174dfc529cd60dc0e7b9a48eb89b54:4",
+   "amount": "0.000365 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x74e7dde177b9b38782907d04a8d8a901477e362d62abf218e6484a6e40129203:29",
+   "amount": "0.000365 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x4e6d4d0381c1018888338429a921536a9858417cef11c7a95e18661629af3dee:16",
+   "amount": "0.000365 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x9592439408c986a0487892bedfdb87d5c9f39c324965f58a1048f1e18993ce84:9",
+   "amount": "0.000366 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0xb13fd06043c4647bbcdeb9e53313f02f845443e8ddcd17a57a468758a8ae229d:2",
+   "amount": "0.000365 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x671161f61c70a0b5b33c6c8de4221c938d86c310958725146ea9f21517957b5e:2",
+   "amount": "0.000366 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x218d2a964c5e43ab741bd7a8b85e2f5cd37f2b9148c3c450228752c9efd5d1b1:3",
+   "amount": "0.000066 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0xbafdbde30386b736fb7151df338ebacc395843575704303fe5e438c17bb760a5:11",
+   "amount": "0.000023 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "tempo",
+   "ref": "0x43e7f0bac5488ac23adc9120c988f310f27b4f5ca17dca5bdc0497f8c2109e52:9",
+   "amount": "0.000098 pathUSD",
+   "reference": null
+  },
+  {
+   "status": "matched",
+   "venue": "partner_fiat",
+   "ref": "mock:mock_a5ee6813-1ee7-4abe-ae05-9c5b94a0b89c",
+   "amount": "7 USDC",
+   "reference": "0x020114280001a0eb3f7e757ad49cb4ae3247e92373a26ab0f99178b0900d469c"
+  },
+  {
+   "status": "matched",
+   "venue": "partner_fiat",
+   "ref": "mock:mock_5243e709-4597-40a7-9955-b63384b95926",
+   "amount": "1,000 USDC",
+   "reference": "0x020628460001a0eb3fd29e77038036346c58a9be5733d74bd58688d822629a0c"
+  },
+  {
+   "status": "matched",
+   "venue": "partner_fiat",
+   "ref": "mock:mock_5aecbb9a-65ce-4d68-9c25-4ebcdbb7a03f",
+   "amount": "1,000 USDC",
+   "reference": "0x020128460001a0eb3fe7e57ca994eb596e7f87c87f33d74bd58688d853957c1f"
+  },
+  {
+   "status": "matched",
+   "venue": "partner_fiat",
+   "ref": "mock:mock_63119a32-b52a-482f-8f92-f91d4c68b8dd",
+   "amount": "5 USDC",
+   "reference": "0x020114280001a0ebc80cea7653b1e8d09c25be7404a26ab0f99178b031e9e69f"
+  },
+  {
+   "status": "matched",
+   "venue": "partner_fiat",
+   "ref": "mock:mock_06aa8640-63be-4c5d-a9df-2bdd517a4afd",
+   "amount": "2 USDC",
+   "reference": "0x020114280001a0ec2d842370858569f3a5bdb11524a26ab0f99178b0a34ebe3b"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c:ironwood:1",
+   "amount": "0.01 ZEC",
+   "reference": "0x020328460101a0eb26f50b753cb7025ae4f8683844284fbb5404746382478f10"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c:ironwood:2",
+   "amount": "0.01 ZEC",
+   "reference": "0x020328460101a0eb26f50a725fab5c3d4b21cd4ea6284fbb5404746319da68ff"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c:ironwood:3",
+   "amount": "0.01 ZEC",
+   "reference": "0x020328460101a0eb26f50b77148713f330f3d3ff49284fbb5404746301316e99"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b:ironwood:1",
+   "amount": "0.01 ZEC",
+   "reference": "0x020328460101a0eb2a16a370ef99afaf1d7ce65afe284fbb5404746387a54717"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b:ironwood:2",
+   "amount": "0.01 ZEC",
+   "reference": "0x020328460101a0eb2a16a375caabf4354ac6b14405284fbb540474633bf0d676"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b:ironwood:3",
+   "amount": "0.01 ZEC",
+   "reference": "0x020328460101a0eb2a16a27f67865844e2a17d410a284fbb54047463503d6566"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "1f05d6415ad694bdc3ecffc06ef57eb9b859b2fbc1c5724601faf5bf806ee720:ironwood:0",
+   "amount": "0.0102283 ZEC",
+   "reference": "0x020228460101a0ec1f89b87ef48c459f27a1f39fbe284fbb540474635b88e417"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7:ironwood:0",
+   "amount": "0.00330943 ZEC",
+   "reference": "0x020328460101a0ec1f89b87dba825dd0691adcd1a4284fbb540474635d3358f5"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7:ironwood:2",
+   "amount": "0.00330943 ZEC",
+   "reference": "0x020328460101a0ec1f89b877b5ad653bfeb468b0ea284fbb54047463f369e6a8"
+  },
+  {
+   "status": "matched",
+   "venue": "zcash_ironwood",
+   "ref": "ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7:ironwood:3",
+   "amount": "0.00330943 ZEC",
+   "reference": "0x020328460101a0ec1f89b8707a883ff88d6d4fb6cd284fbb540474633da41f3b"
+  }
+ ]
+}

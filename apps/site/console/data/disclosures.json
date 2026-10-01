@@ -1,0 +1,7 @@
+{
+ "scope": "acme-2026-10 vault (one customer, one period)",
+ "viewingKey": "uviewtest1pjrul5ee4xfhczd0vy06gmd3v6tu2k6ch27l4apev90ghsetucxv7sd75s4e8pjwyltt3uyht2zldjq0n0j8ytau2jd4zexpksnqmv4ta8laczyr0gze3rnxgjz4u9th9j7tx7peujrv35awjy8gezwps53mrrxvprfdts5yh477e2mpszxh2gcuudva0",
+ "reveals": "Every payout from this vault: recipients, amounts, invoice memos",
+ "doesNotReveal": "Any other customer or period, the treasury, or spend authority",
+ "howToVerify": "zcash-devtool wallet init-fvk --fvk <viewingKey> --birthday <height>; wallet sync; list-tx"
+}

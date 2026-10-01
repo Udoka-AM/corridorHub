@@ -1,0 +1,705 @@
+[
+ {
+  "id": "adcd3d1f-b2f0-4dd1-9f43-9ccc385350be",
+  "kind": "payout",
+  "status": "completed",
+  "createdAt": "2026-09-29T08:00:01.059Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "2 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "2000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "2000000",
+     "direction": "out",
+     "tempoMove": "0x43e7f0bac5488ac23adc9120c988f310f27b4f5ca17dca5bdc0497f8c2109e52:8"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x43e7f0bac5488ac23adc9120c988f310f27b4f5ca17dca5bdc0497f8c2109e52"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "rate": 1530,
+     "status": "completed",
+     "orderId": "mock_06aa8640-63be-4c5d-a9df-2bdd517a4afd",
+     "partner": "mock",
+     "currency": "NGN",
+     "fiatAmount": "306000",
+     "fundingRef": "nDGHfRgMgK1Xc8gjE3bqUvgfp5qP13HnP6nTtLQGBSqaLLtdDfg2nXYPEzbHfcwpYjv1xQFedMcRh3KkJyRZicH"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Solana funding",
+      "url": "https://explorer.solana.com/tx/nDGHfRgMgK1Xc8gjE3bqUvgfp5qP13HnP6nTtLQGBSqaLLtdDfg2nXYPEzbHfcwpYjv1xQFedMcRh3KkJyRZicH?cluster=devnet"
+     }
+    ]
+   }
+  ],
+  "refunds": []
+ },
+ {
+  "id": "ebacbd83-9f11-4a11-a96b-fde1f7292aea",
+  "kind": "shielded-batch",
+  "status": "completed",
+  "createdAt": "2026-09-29T07:44:44.985Z",
+  "corridor": "NGN-CNY",
+  "customer": "acme-imports",
+  "amount": "15 pathUSD",
+  "recipient": "3 recipients (shielded)",
+  "route": [
+   "ledger.reserve",
+   "near.swap",
+   "zcash.shieldedBatch"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "15000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "near.swap",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "quote": {
+      "source": "1click.chaindefuser.com (mainnet, dry)",
+      "amountOut": "1022830",
+      "usdPerZec": 1466.52,
+      "amountInUsd": 15.000228205498,
+      "minAmountOut": "1012601",
+      "timeEstimate": 150
+     },
+     "tempoMove": "0xbafdbde30386b736fb7151df338ebacc395843575704303fe5e438c17bb760a5:10",
+     "deliveryTx": "1f05d6415ad694bdc3ecffc06ef57eb9b859b2fbc1c5724601faf5bf806ee720",
+     "zecDelivered": "1022830"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0xbafdbde30386b736fb7151df338ebacc395843575704303fe5e438c17bb760a5"
+     },
+     {
+      "label": "ZEC delivery",
+      "url": "https://testnet.zcashexplorer.app/transactions/1f05d6415ad694bdc3ecffc06ef57eb9b859b2fbc1c5724601faf5bf806ee720"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "zcash.shieldedBatch",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fee": "20000",
+     "txid": "ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7",
+     "explorer": "https://testnet.zcashexplorer.app/transactions/ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7",
+     "approvedBy": [
+      1,
+      3
+     ],
+     "recipients": 3
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Shielded batch",
+      "url": "https://testnet.zcashexplorer.app/transactions/ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7"
+     }
+    ]
+   }
+  ],
+  "refunds": []
+ },
+ {
+  "id": "ae1e9bbb-c8be-4869-b59c-6c0eedd53756",
+  "kind": "payout",
+  "status": "completed",
+  "createdAt": "2026-09-29T06:09:11.402Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "5 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "5000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "5000000",
+     "direction": "out",
+     "tempoMove": "0x218d2a964c5e43ab741bd7a8b85e2f5cd37f2b9148c3c450228752c9efd5d1b1:2"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x218d2a964c5e43ab741bd7a8b85e2f5cd37f2b9148c3c450228752c9efd5d1b1"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "rate": 1530,
+     "status": "completed",
+     "orderId": "mock_63119a32-b52a-482f-8f92-f91d4c68b8dd",
+     "partner": "mock",
+     "currency": "NGN",
+     "fiatAmount": "765000",
+     "fundingRef": "sim:solana:mock_63119a32-b52a-482f-8f92-f91d4c68b8dd"
+    },
+    "error": null,
+    "links": []
+   }
+  ],
+  "refunds": []
+ },
+ {
+  "id": "2e0f5260-55ea-4275-9702-7d9b92d9fb93",
+  "kind": "payout",
+  "status": "completed",
+  "createdAt": "2026-09-29T03:40:29.030Z",
+  "corridor": "NGN-CNY",
+  "customer": "adeola-imports",
+  "amount": "1,000 pathUSD",
+  "recipient": "Shenzhen Brightline Electronics Co.",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "1000000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "1000000000",
+     "direction": "out",
+     "tempoMove": "0x671161f61c70a0b5b33c6c8de4221c938d86c310958725146ea9f21517957b5e:1"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x671161f61c70a0b5b33c6c8de4221c938d86c310958725146ea9f21517957b5e"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "rate": 7.14,
+     "status": "completed",
+     "orderId": "mock_5aecbb9a-65ce-4d68-9c25-4ebcdbb7a03f",
+     "partner": "mock",
+     "currency": "CNY",
+     "fiatAmount": "714000",
+     "fundingRef": "sim:solana:mock_5aecbb9a-65ce-4d68-9c25-4ebcdbb7a03f"
+    },
+    "error": null,
+    "links": []
+   }
+  ],
+  "refunds": []
+ },
+ {
+  "id": "97c283a3-46b7-4bec-97c3-04069f8915e3",
+  "kind": "collection",
+  "status": "completed",
+  "createdAt": "2026-09-29T03:40:23.583Z",
+  "corridor": "NGN-CNY",
+  "customer": "adeola-imports",
+  "amount": "1,560,000 NGN",
+  "recipient": null,
+  "route": [
+   "partner.collect",
+   "bridge.simulated",
+   "ledger.credit"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "partner.collect",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "rate": 1560,
+     "orderId": "mock_5243e709-4597-40a7-9955-b63384b95926",
+     "partner": "mock",
+     "currency": "NGN",
+     "fiatAmount": "156000000",
+     "usdcAmount": "1000000000",
+     "deliveryRef": "mock_delivery_6ac7ca83"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "1000000000",
+     "direction": "in",
+     "tempoMove": "0x100fde2c5d68f4eeb38e1fb4993abae78960023c1a3ab3f6a2b96289901961b0:1"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x100fde2c5d68f4eeb38e1fb4993abae78960023c1a3ab3f6a2b96289901961b0"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "ledger.credit",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "credited": "1000000000"
+    },
+    "error": null,
+    "links": []
+   }
+  ],
+  "refunds": []
+ },
+ {
+  "id": "69a09da9-2485-424f-bfd2-74fc56d0e0c1",
+  "kind": "payout",
+  "status": "compensated",
+  "createdAt": "2026-09-29T03:40:04.493Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "4 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "held": "4000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "4000000",
+     "direction": "out",
+     "tempoMove": "0xb13fd06043c4647bbcdeb9e53313f02f845443e8ddcd17a57a468758a8ae229d:1"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0xb13fd06043c4647bbcdeb9e53313f02f845443e8ddcd17a57a468758a8ae229d"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "failed",
+    "attempts": 1,
+    "output": null,
+    "error": "injected failure at partner.payout",
+    "links": []
+   }
+  ],
+  "refunds": [
+   "https://explore.testnet.tempo.xyz/tx/0x6779030377fb90884212fa7f5d3acc681958856b7ce22406862f7d2e0940c944"
+  ]
+ },
+ {
+  "id": "fd526249-1363-44d5-b60d-896febce08c8",
+  "kind": "payout",
+  "status": "completed",
+  "createdAt": "2026-09-29T03:40:02.037Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "7 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "7000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "7000000",
+     "direction": "out",
+     "tempoMove": "0x9592439408c986a0487892bedfdb87d5c9f39c324965f58a1048f1e18993ce84:8"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x9592439408c986a0487892bedfdb87d5c9f39c324965f58a1048f1e18993ce84"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "rate": 1530,
+     "status": "completed",
+     "orderId": "mock_a5ee6813-1ee7-4abe-ae05-9c5b94a0b89c",
+     "partner": "mock",
+     "currency": "NGN",
+     "fiatAmount": "1071000",
+     "fundingRef": "sim:solana:mock_a5ee6813-1ee7-4abe-ae05-9c5b94a0b89c"
+    },
+    "error": null,
+    "links": []
+   }
+  ],
+  "refunds": []
+ },
+ {
+  "id": "daee3ff2-d977-47da-a040-45919a2124fe",
+  "kind": "payout",
+  "status": "compensated",
+  "createdAt": "2026-09-29T02:14:19.955Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "4 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "held": "4000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "tempoDeposit": "0x4e6d4d0381c1018888338429a921536a9858417cef11c7a95e18661629af3dee:15"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x4e6d4d0381c1018888338429a921536a9858417cef11c7a95e18661629af3dee"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "failed",
+    "attempts": 1,
+    "output": null,
+    "error": "injected failure at partner.payout",
+    "links": []
+   }
+  ],
+  "refunds": [
+   "https://explore.testnet.tempo.xyz/tx/0x8b82877382ae51d4dbdf83fc83e3fe3479f7ae3a632d79083982c4647f60aac4"
+  ]
+ },
+ {
+  "id": "02e39f46-a12a-4edd-ad22-626b8a335e18",
+  "kind": "payout",
+  "status": "completed",
+  "createdAt": "2026-09-29T02:14:17.995Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "7 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "7000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "tempoDeposit": "0x74e7dde177b9b38782907d04a8d8a901477e362d62abf218e6484a6e40129203:28"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x74e7dde177b9b38782907d04a8d8a901477e362d62abf218e6484a6e40129203"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "status": "paid",
+     "partner": "mock",
+     "partnerRef": "mock-01a0eaf1-008a-744b-9b02-aa444cdd5aae"
+    },
+    "error": null,
+    "links": []
+   }
+  ],
+  "refunds": []
+ },
+ {
+  "id": "513c1d2d-14dd-4126-9829-fafd1b0a4927",
+  "kind": "payout",
+  "status": "compensated",
+  "createdAt": "2026-09-29T01:49:20.097Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "4 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "held": "4000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "tempoDeposit": "0xaf4a195dca13a262f65844e9c00cc04588174dfc529cd60dc0e7b9a48eb89b54:3"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0xaf4a195dca13a262f65844e9c00cc04588174dfc529cd60dc0e7b9a48eb89b54"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "failed",
+    "attempts": 1,
+    "output": null,
+    "error": "injected failure at partner.payout",
+    "links": []
+   }
+  ],
+  "refunds": [
+   "https://explore.testnet.tempo.xyz/tx/0xc0a331186f9a6e0a4a394549c00ebbec30c276fb85d010586bd71b132225c7f3"
+  ]
+ },
+ {
+  "id": "3e3ac0d9-51dd-4087-8a62-e13cd286d0f4",
+  "kind": "payout",
+  "status": "completed",
+  "createdAt": "2026-09-29T01:49:18.392Z",
+  "corridor": "EUR-NGN",
+  "customer": "zynta-demo",
+  "amount": "7 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "7000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "tempoDeposit": "0xff671d291553139769c0dbddae2e09abc43f7ae852e30cf358965fe94782450b:8"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0xff671d291553139769c0dbddae2e09abc43f7ae852e30cf358965fe94782450b"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "status": "paid",
+     "partner": "mock",
+     "partnerRef": "mock-01a0eada-1eb8-7c93-9a35-ac4a0eef84de"
+    },
+    "error": null,
+    "links": []
+   }
+  ],
+  "refunds": []
+ }
+]

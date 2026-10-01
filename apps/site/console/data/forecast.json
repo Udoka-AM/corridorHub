@@ -1,0 +1,10 @@
+[
+ {
+  "customer": "zynta-demo",
+  "corridor": "EUR-NGN",
+  "dailyOutflow": "10.017355 pathUSD",
+  "available": "37 pathUSD",
+  "runwayDays": 3.6,
+  "topUpFor7Days": "33.121485 pathUSD"
+ }
+]

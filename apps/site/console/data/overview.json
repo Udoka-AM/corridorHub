@@ -1,0 +1,116 @@
+{
+ "network": {
+  "tempo": "Tempo Moderato testnet",
+  "solana": "Solana devnet",
+  "zcash": "Zcash testnet · Ironwood",
+  "partner": "Paj-shaped partner (mock)"
+ },
+ "kpis": {
+  "hubBalance": "52 pathUSD",
+  "inFlight": "0 pathUSD",
+  "settled": "1,028 USDC",
+  "sagas": {
+   "completed": 8,
+   "compensated": 3
+  }
+ },
+ "customers": [
+  {
+   "customer": "acme-imports",
+   "corridor": "NGN-CNY",
+   "asset": "ZEC",
+   "venue": "zcash_ironwood",
+   "available": "0.00030001 ZEC",
+   "held": "0 ZEC"
+  },
+  {
+   "customer": "acme-imports",
+   "corridor": "NGN-CNY",
+   "asset": "pathUSD",
+   "venue": "tempo",
+   "available": "15 pathUSD",
+   "held": "0 pathUSD"
+  },
+  {
+   "customer": "adeola-imports",
+   "corridor": "NGN-CNY",
+   "asset": "pathUSD",
+   "venue": "tempo",
+   "available": "0 pathUSD",
+   "held": "0 pathUSD"
+  },
+  {
+   "customer": "zynta-demo",
+   "corridor": "EUR-NGN",
+   "asset": "pathUSD",
+   "venue": "tempo",
+   "available": "37 pathUSD",
+   "held": "0 pathUSD"
+  }
+ ],
+ "vaults": [
+  {
+   "name": "acme-2026-10-vault",
+   "venue": "zcash_ironwood",
+   "asset": "ZEC",
+   "balance": "0.00010001 ZEC",
+   "raw": "10001"
+  },
+  {
+   "name": "acme-2026-10",
+   "venue": "zcash_ironwood",
+   "asset": "ZEC",
+   "balance": "0 ZEC",
+   "raw": "0"
+  },
+  {
+   "name": "solana-egress",
+   "venue": "solana",
+   "asset": "USDC",
+   "balance": "0 USDC",
+   "raw": "0"
+  },
+  {
+   "name": "solana-ingress",
+   "venue": "solana",
+   "asset": "USDC",
+   "balance": "0 USDC",
+   "raw": "0"
+  },
+  {
+   "name": "treasury",
+   "venue": "tempo",
+   "asset": "pathUSD",
+   "balance": "1,000,051.994555 pathUSD",
+   "raw": "1000051994555"
+  }
+ ],
+ "clearing": [
+  {
+   "name": "usd-peg",
+   "venue": "solana",
+   "asset": "USDC",
+   "balance": "0 USDC"
+  },
+  {
+   "name": "usd-peg",
+   "venue": "tempo",
+   "asset": "pathUSD",
+   "balance": "0 pathUSD"
+  },
+  {
+   "name": "usd-zec",
+   "venue": "zcash_ironwood",
+   "asset": "ZEC",
+   "balance": "0 ZEC"
+  },
+  {
+   "name": "usd-zec",
+   "venue": "tempo",
+   "asset": "pathUSD",
+   "balance": "0 pathUSD"
+  }
+ ],
+ "invariants": [],
+ "running": []
+}

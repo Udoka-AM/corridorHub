@@ -4,6 +4,8 @@
 
 Corridor lets a licensed payment company collect USD or EUR abroad and pay out NGN or KES without pre-funding foreign bank accounts or waiting days on correspondent banks. It holds working balances in stablecoins, quotes and executes FX, settles on [Tempo](https://tempo.xyz), and routes on/off-ramp liquidity through Solana. On top of that runs a treasury console that shows balances per corridor, forecasts pre-funding needs and reconciles every payment automatically.
 
+**Live demo:** [udoka-am.github.io/corridor/console](https://udoka-am.github.io/corridor/console/): a replay of the treasury console recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet. Every ↗ link opens the real transaction.
+
 > Corridor is infrastructure for licensed players. It is not a money transmitter. Our customers hold the licenses and the end-customer relationships; Corridor moves and reconciles their treasury.
 
 ---
@@ -124,6 +126,7 @@ pnpm across:testnet     # live Across testnet hop: Base Sepolia USDC → Solana 
 pnpm zcash:spike        # shielded lane: one Ironwood tx pays a batch; auditor reconciles via viewing key
 pnpm zcash:frost        # same batch from a FROST 2-of-3 vault: one signer refused, two co-sign
 pnpm console            # treasury console at http://localhost:4400 (owns the local ledger; stop CLI demos first)
+pnpm console:snapshot   # record the running console as the static replay in apps/site/console/
 ```
 
 The shielded lane uses [`zcash-devtool`](https://github.com/zcash/zcash-devtool) (librustzcash, Ironwood-aware). Build it with `cargo build --release` and point `ZCASH_DEVTOOL` at the binary.

@@ -1,3 +1,7 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
 <title>Corridor</title>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="description" content="Corridor is the settlement hub for licensed payment companies moving money into and out of Africa: stablecoin treasury on Tempo, payouts across Africa, Asia and the Americas, and private supplier payments on Zcash." />
@@ -503,12 +507,15 @@
   }
   @media (max-width: 760px) { .links { display: none; } nav .theme-toggle { margin-left: auto; } nav .btn { margin-left: 0; } }
   @media (max-width: 560px) { .theme-toggle { padding-inline: 10px; } .theme-toggle-label { display: none; } }
+  @media (max-width: 480px) { nav .btn { padding-inline: 12px; letter-spacing: .06em; white-space: nowrap; } nav .btn .arr { display: none; } nav .wrap { gap: 10px; } }
   @media (max-width: 640px) { .frost { grid-template-columns: 1fr; } }
   @media (max-width: 560px) { .steps { grid-template-columns: 1fr; } .steps li:nth-child(even) { padding-left: 0; border-left: none; } }
   @media (max-width: 520px) { .region { grid-template-columns: 1fr; gap: 4px; } }
   @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 </style>
 
+</head>
+<body>
 <nav aria-label="Primary">
   <div class="wrap">
     <a class="mark" href="#top" aria-label="Corridor home">
@@ -520,6 +527,7 @@
       <a href="#network">Network</a>
       <a href="#shielded">Shielded</a>
       <a href="#economics">Economics</a>
+      <a href="console/">Live demo</a>
       <a href="https://github.com/Udoka-AM/corridor" target="_blank" rel="noopener">GitHub</a>
     </div>
     <button class="theme-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
@@ -539,6 +547,7 @@
         <p class="lede">Stablecoin treasury, FX and settlement for licensed payment companies. Hold one balance on Tempo, settle in under a second, pay out across Africa, Asia and the Americas, and pay suppliers privately on Zcash when amounts shouldn't be public.</p>
         <div class="ctas">
           <a class="btn solid" href="#access">Request early access <span class="arr">→</span></a>
+          <a class="btn" href="console/">Open the testnet console <span class="arr">→</span></a>
           <a class="btn" href="#how">See how a payment moves</a>
           <a class="btn" href="https://tempo-solana-swap.pages.dev" target="_blank" rel="noopener">Try the Tempo ↔ Solana swap <span class="arr">→</span></a>
         </div>
@@ -551,7 +560,7 @@
 
     <div class="proof">
       <div><div class="v">0.6 s</div><div class="l">deterministic settlement finality on Tempo</div></div>
-      <div><div class="v">25 / 25</div><div class="l">movements reconciled across Tempo, partners and Zcash</div></div>
+      <div><div class="v">45 / 45</div><div class="l">movements reconciled across Tempo, partners and Zcash</div></div>
       <div><div class="v">2-of-3</div><div class="l">threshold-signed shielded vaults. No single key can move funds.</div></div>
       <div><div class="v">32</div><div class="l">currencies reachable across four regions through one hub</div></div>
     </div>
@@ -918,3 +927,5 @@
   matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", () => reduce && draw(performance.now()));
 })();
 </script>
+</body>
+</html>

@@ -68,6 +68,7 @@
   button .hint { font-weight: 400; font-size: 12.5px; opacity: .8; }
   .venues { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
   @media (max-width: 900px) { .venues { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 600px) { .venues { grid-template-columns: 1fr; } .card { overflow-x: auto; } header { flex-wrap: wrap; gap: 10px; } #replayBanner { margin: 0 12px !important; } }
   .venue { background: var(--navy); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
   .venue h3 { margin: 0 0 8px; font: 600 13px "Space Grotesk"; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; display: flex; justify-content: space-between; }
   .venue .row { display: flex; justify-content: space-between; font-size: 13.5px; padding: 3px 0; gap: 8px; }
@@ -90,6 +91,8 @@
   <div class="brand">Corridor<span>Treasury console</span></div>
   <div class="pills" id="pills"></div>
 </header>
+
+<div id="replayBanner" hidden style="margin:0 24px;padding:12px 16px;border:1px solid rgba(232,145,58,.45);border-radius:12px;background:rgba(232,145,58,.08);font-size:13.5px;line-height:1.5"></div>
 
 <main>
   <section class="span-12 kpis" id="kpis"></section>
@@ -146,18 +149,21 @@
 <div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
 
 <script>
+// Set by scripts/snapshot-console.ts for the public replay: data comes from
+// recorded JSON, and nothing can move funds.
+const REPLAY = window.CORRIDOR_REPLAY ?? null;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const short = (s, n = 8) => (s && s.length > n * 2 + 1 ? `${s.slice(0, n)}…${s.slice(-6)}` : s || "");
 const chip = (s) => `<span class="chip s-${esc(s)}">${esc(String(s).replace("_", " "))}</span>`;
-const get = (p) => fetch(p).then((r) => r.json());
+const get = (p) => fetch(REPLAY ? `data/${p.split("/").pop()}.json` : p).then((r) => r.json());
 const stepLabel = { "near.swap": "NEAR swap → vault", "zcash.shieldedBatch": "FROST-approved batch", "ledger.reserve": "reserve", "ledger.credit": "credit", "bridge.simulated": "bridge", "across.bridge": "Across", "partner.payout": "partner payout", "partner.collect": "partner collect", "tempo.dexSwap": "Tempo DEX" };
 
 async function refreshOverview() {
   const o = await get("/api/overview");
   const inv = o.invariants.length === 0;
   $("pills").innerHTML =
-    `<span class="pill ok"><span class="dot"></span>live</span>` +
+    (REPLAY ? `<span class="pill ok"><span class="dot"></span>replay · ${esc(REPLAY.snapshotDate)}</span>` : `<span class="pill ok"><span class="dot"></span>live</span>`) +
     Object.values(o.network).map((n) => `<span class="pill">${esc(n)}</span>`).join("") +
     `<span class="pill ${inv ? "ok" : "bad"}">${inv ? "ledger invariants hold" : "invariant violation"}</span>`;
   const s = o.kpis.sagas;
@@ -181,7 +187,7 @@ async function refreshOverview() {
       ...cs.map((c) => `<div class="row"><span>clearing · ${esc(c.name)}</span><span class="mono">${esc(c.balance)}</span></div>`)];
     return `<div class="venue"><h3>${label} ${extra}</h3>${rows.join("") || `<div class="empty">—</div>`}</div>`;
   }).join("");
-  $("actionStatus").textContent = o.running.length ? `Running: ${o.running.join(", ")} (live on-chain, ~30–60 s)` : "";
+  if (!REPLAY) $("actionStatus").textContent = o.running.length ? `Running: ${o.running.join(", ")} (live on-chain, ~30–60 s)` : "";
   document.querySelectorAll("[data-action]").forEach((b) => {
     const busy = o.running.includes(b.dataset.action);
     b.disabled = busy;
@@ -192,6 +198,7 @@ async function refreshOverview() {
 
 async function refreshSagas() {
   const list = await get("/api/sagas");
+  window.__sagas = list;
   $("sagas").innerHTML = list.map((s) => {
     const steps = s.steps.map((st) => `<span class="step ${esc(st.status)}" title="${esc(st.error ?? "")}">${esc(stepLabel[st.kind] ?? st.kind)}</span>`).join(`<span class="arrow">→</span>`);
     const links = [...s.steps.flatMap((st) => st.links), ...s.refunds.map((u) => ({ label: "Tempo refund", url: u }))]
@@ -237,7 +244,7 @@ async function refreshApprovals() {
     const btns = Array.from({ length: a.signers }, (_, i) => i + 1).map((n) => {
       const on = a.approvedBy.includes(n);
       const who = ["customer approver", "customer finance", "Corridor"][n - 1] ?? `signer ${n}`;
-      return `<button class="approve" data-subject="${esc(a.subject)}" data-signer="${n}" ${on || done ? "disabled" : ""} style="padding:7px 10px;font-size:12.5px;display:inline-flex">${on ? "✓ " : ""}Signer ${n} · ${who}</button>`;
+      return `<button class="approve" data-subject="${esc(a.subject)}" data-signer="${n}" ${on || done || REPLAY ? "disabled" : ""} style="padding:7px 10px;font-size:12.5px;display:inline-flex">${on ? "✓ " : ""}Signer ${n} · ${who}</button>`;
     }).join(" ");
     return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px">
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${chip(done ? "completed" : "pending")}<strong>Batch approval</strong><span class="meta" style="color:var(--muted);font-size:12.5px">${a.approvedBy.length} of ${a.threshold} required · ${esc(a.summary.recipients)} recipients · $${esc(a.summary.usd)} → ${esc(a.summary.zec)} ZEC</span></div>
@@ -294,8 +301,29 @@ async function drawMap() {
   $("map").innerHTML = svg + ex;
 }
 
+// In the replay, each flow button opens the recorded run of that flow instead of starting one.
+const REPLAY_FLOWS = {
+  payout: { title: "Payout €→₦", match: (s) => s.kind === "payout" && s.status === "completed" && !s.steps.some((st) => st.kind === "near.swap") },
+  failure: { title: "Payout with partner failure", match: (s) => s.status === "compensated" },
+  importer: { title: "Importer pays a supplier in China", match: (s) => s.kind === "collection" || s.steps.some((st) => st.kind === "partner.collect") },
+  shielded: { title: "Pay 3 suppliers privately", match: (s) => s.steps.some((st) => st.kind === "zcash.shieldedBatch") && s.status === "completed" },
+};
+function showRecordedFlow(key) {
+  const flow = REPLAY_FLOWS[key];
+  const saga = (window.__sagas || []).find(flow.match);
+  const links = saga ? [...saga.steps.flatMap((st) => st.links), ...saga.refunds.map((u) => ({ label: "Tempo refund", url: u }))] : [];
+  $("modalBox").innerHTML = `<h2 style="font-family:Space Grotesk;margin:0 0 6px">${esc(flow.title)}</h2>
+    <p style="color:var(--muted);margin:0 0 12px">This is a replay of runs made live on testnet, so this button doesn't move funds. ${saga ? `The recorded run, ${new Date(saga.createdAt).toLocaleString()}:` : ""}</p>
+    ${saga ? `<div class="route" style="margin-bottom:12px">${saga.steps.map((st) => `<span class="step ${esc(st.status)}">${esc(stepLabel[st.kind] ?? st.kind)}</span>`).join(`<span class="arrow">→</span>`)}</div>
+    <div class="links" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">${links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("") || `<span style="color:var(--muted)">Ledger-only steps: no chain transaction.</span>`}</div>` : ""}
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 14px">Run it yourself: clone the repo and <span class="mono">pnpm console</span> (Tempo Moderato, Solana devnet, Zcash testnet).</p>
+    <button class="primary" onclick="document.getElementById('modal').classList.remove('open')">Close</button>`;
+  $("modal").classList.add("open");
+}
+
 document.querySelectorAll("[data-action]").forEach((b) =>
   b.addEventListener("click", async () => {
+    if (REPLAY) return showRecordedFlow(b.dataset.body.includes("failAtPartner") ? "failure" : b.dataset.action);
     b.disabled = true;
     const r = await fetch(`/api/actions/${b.dataset.action}`, { method: "POST", body: b.dataset.body });
     if (!r.ok) $("actionStatus").textContent = (await r.json()).error;
@@ -304,7 +332,7 @@ document.querySelectorAll("[data-action]").forEach((b) =>
 );
 
 $("disclose").addEventListener("click", async () => {
-  const d = await (await fetch("/api/disclosures", { method: "POST" })).json();
+  const d = REPLAY ? await get("/api/disclosures") : await (await fetch("/api/disclosures", { method: "POST" })).json();
   $("modalBox").innerHTML = `<h2 style="font-family:Space Grotesk;margin:0 0 6px">Auditor disclosure package</h2>
     <p style="color:var(--muted);margin:0 0 12px">Hand this viewing key to an auditor or tax authority. It is read-only: it reveals, it cannot spend.</p>
     <div class="kv"><div>Scope</div><div>${esc(d.scope)}</div><div>Reveals</div><div>${esc(d.reveals)}</div><div>Does not reveal</div><div>${esc(d.doesNotReveal)}</div></div>
@@ -321,9 +349,16 @@ async function loop() {
 async function slow() {
   try { await Promise.all([refreshRecon(), refreshShielded(), refreshForecast()]); await refreshOverview(); } catch (e) { console.error(e); }
 }
+if (REPLAY) {
+  $("replayBanner").hidden = false;
+  $("replayBanner").innerHTML = `<strong>Replay of live testnet runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. Every balance, saga and reconciliation figure below came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../" style="color:#F2A65A">About Corridor</a> · <a href="https://github.com/Udoka-AM/corridor" style="color:#F2A65A">Source</a>`;
+  $("actionStatus").textContent = "Replay: each button opens the recorded run of that flow.";
+}
 drawMap(); loop(); slow();
-setInterval(loop, 4000);
-setInterval(slow, 15000);
+if (!REPLAY) {
+  setInterval(loop, 4000);
+  setInterval(slow, 15000);
+}
 </script>
 </body>
 </html>
