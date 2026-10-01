@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { RefKind, customerTag, encodeRef, uuidv7 } from "@corridor/core";
 import { MockPartner, PajPartner, PartnerRegistry, signWebhook, verifyWebhookSignature } from "./index.ts";
 
-const ref = encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("zynta", "s") });
+const ref = encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("eu-payco", "s") });
 
 /** A Paj transaction shaped like the TransactionInterfaceDto in Paj's OpenAPI spec. */
 function pajTx(over: Record<string, unknown> = {}) {

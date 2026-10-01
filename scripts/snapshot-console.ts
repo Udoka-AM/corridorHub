@@ -39,6 +39,13 @@ for (const name of POSTS) {
   console.log(`recorded ${name}`);
 }
 
+// The journal is append-only, so customer ids from early runs stay in the
+// books. Ids that name a real company are shown under a neutral demo name.
+const DISPLAY_ALIASES: Record<string, string> = { "zynta-demo": "eu-payco-demo" };
+for (const name of Object.keys(files)) {
+  for (const [from, to] of Object.entries(DISPLAY_ALIASES)) files[name] = files[name]!.replaceAll(`"${from}"`, `"${to}"`);
+}
+
 // Nothing secret may leave the machine.
 const secrets: string[] = [];
 if (existsSync(".env.local")) {

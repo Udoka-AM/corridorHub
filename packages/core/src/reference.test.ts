@@ -19,7 +19,7 @@ const ref = (over: Partial<CorridorRef> = {}): CorridorRef => ({
   corridor: "EUR-NGN",
   shielded: false,
   id: uuidv7(),
-  customerTag: customerTag("zynta", "test-secret"),
+  customerTag: customerTag("eu-payco", "test-secret"),
   ...over,
 });
 

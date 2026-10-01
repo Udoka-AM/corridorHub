@@ -419,7 +419,7 @@ const server = createServer(async (req, res) => {
           const corridor = (b.corridor ?? "EUR-NGN") as CorridorCode;
           const { destination } = parseCorridor(corridor);
           await action("payout", async () => {
-            const cust = b.customer ?? "zynta-demo";
+            const cust = b.customer ?? "eu-payco-demo";
             const avail = await rt.ledger.balance(await rt.accounts.customer(cust, corridor, "pathUSD", "tempo"));
             const amount = String(b.amount ?? "5");
             if (avail.amount < BigInt(Math.round(Number(amount) * 1e6))) await prefund(rt, cust, corridor, String(Math.max(20, Number(amount) * 2)));

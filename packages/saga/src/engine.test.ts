@@ -18,7 +18,7 @@ const plan = planRoute({
 
 const data: PayoutData = {
   payoutId: "p1",
-  customerId: "zynta",
+  customerId: "eu-payco",
   corridor: "EUR-NGN",
   asset: "pathUSD",
   venue: "tempo",
@@ -76,7 +76,7 @@ beforeEach(async () => {
   ledger = await Ledger.open(db);
   accounts = new Accounts(ledger);
   const vault = await accounts.vault("treasury", "pathUSD", "tempo");
-  const customer = await accounts.customer("zynta", "EUR-NGN", "pathUSD", "tempo");
+  const customer = await accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo");
   await ledger.post({
     kind: "deposit",
     lines: [
@@ -99,7 +99,7 @@ describe("saga engine", () => {
     expect(await engine.run(id)).toBe("completed");
     expect(log).toEqual(["fwd bridge.simulated", "fwd partner.payout"]);
 
-    const hold = await accounts.customerHold("zynta", "EUR-NGN", "pathUSD", "tempo");
+    const hold = await accounts.customerHold("eu-payco", "EUR-NGN", "pathUSD", "tempo");
     expect((await ledger.balance(hold)).amount).toBe(3_000_000n);
 
     // Re-running a finished saga is a no-op.
@@ -135,8 +135,8 @@ describe("saga engine", () => {
     expect(view.steps.map((s) => s.status)).toEqual(["compensated", "compensated", "failed"]);
 
     // Customer is whole again and the books still balance.
-    const available = await accounts.customer("zynta", "EUR-NGN", "pathUSD", "tempo");
-    const hold = await accounts.customerHold("zynta", "EUR-NGN", "pathUSD", "tempo");
+    const available = await accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo");
+    const hold = await accounts.customerHold("eu-payco", "EUR-NGN", "pathUSD", "tempo");
     expect((await ledger.balance(available)).amount).toBe(10_000_000n);
     expect((await ledger.balance(hold)).amount).toBe(0n);
     expect(await ledger.checkInvariants()).toEqual([]);

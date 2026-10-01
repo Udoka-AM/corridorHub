@@ -14,7 +14,7 @@ import { Ledger, openLocalDb } from "@corridor/ledger";
 import { balanceOf, explorerTx, fundFromFaucet, tempoClient, transferWithReference } from "@corridor/chain-tempo";
 import { testnetKey as key } from "./env.ts";
 
-const CUSTOMER_ID = "zynta-demo";
+const CUSTOMER_ID = "eu-payco-demo";
 const REF_SECRET = process.env.CORRIDOR_REF_SECRET ?? key("CORRIDOR_REF_SECRET");
 
 const customer = tempoClient({ network: "moderato", privateKey: key("TEMPO_TESTNET_CUSTOMER_KEY") });

@@ -6,7 +6,7 @@ import { MockPartner, PartnerRegistry, signWebhook } from "@corridor/partners";
 import { PartnerEventStore, handlePartnerWebhook, partnerObservation, webhookServer } from "./index.ts";
 
 const SECRET = "whsec_test";
-const ref = encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("zynta", "s") });
+const ref = encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("eu-payco", "s") });
 
 let db: Awaited<ReturnType<typeof openLocalDb>>;
 let store: PartnerEventStore;

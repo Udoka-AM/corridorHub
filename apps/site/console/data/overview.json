@@ -40,7 +40,7 @@
    "held": "0 pathUSD"
   },
   {
-   "customer": "zynta-demo",
+   "customer": "eu-payco-demo",
    "corridor": "EUR-NGN",
    "asset": "pathUSD",
    "venue": "tempo",

@@ -3,7 +3,7 @@ import { address, generateKeyPairSigner } from "@solana/kit";
 import { RefKind, customerTag, encodeRef, uuidv7 } from "@corridor/core";
 import { MEMO_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS, USDC_MINT, buildTransferWithMemo, extractReference } from "./index.ts";
 
-const ref = encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("zynta", "s") });
+const ref = encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("eu-payco", "s") });
 
 describe("Solana transfer with Corridor memo", () => {
   it("creates the recipient token account if needed, transfers USDC, and attaches the reference", async () => {

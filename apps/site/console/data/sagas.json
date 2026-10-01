@@ -5,7 +5,7 @@
   "status": "completed",
   "createdAt": "2026-09-29T08:00:01.059Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "2 pathUSD",
   "recipient": "Ada Obi",
   "route": [
@@ -157,7 +157,7 @@
   "status": "completed",
   "createdAt": "2026-09-29T06:09:11.402Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "5 pathUSD",
   "recipient": "Ada Obi",
   "route": [
@@ -352,7 +352,7 @@
   "status": "compensated",
   "createdAt": "2026-09-29T03:40:04.493Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "4 pathUSD",
   "recipient": "Ada Obi",
   "route": [
@@ -411,7 +411,7 @@
   "status": "completed",
   "createdAt": "2026-09-29T03:40:02.037Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "7 pathUSD",
   "recipient": "Ada Obi",
   "route": [
@@ -476,7 +476,7 @@
   "status": "compensated",
   "createdAt": "2026-09-29T02:14:19.955Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "4 pathUSD",
   "recipient": "Ada Obi",
   "route": [
@@ -533,7 +533,7 @@
   "status": "completed",
   "createdAt": "2026-09-29T02:14:17.995Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "7 pathUSD",
   "recipient": "Ada Obi",
   "route": [
@@ -592,7 +592,7 @@
   "status": "compensated",
   "createdAt": "2026-09-29T01:49:20.097Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "4 pathUSD",
   "recipient": "Ada Obi",
   "route": [
@@ -649,7 +649,7 @@
   "status": "completed",
   "createdAt": "2026-09-29T01:49:18.392Z",
   "corridor": "EUR-NGN",
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "amount": "7 pathUSD",
   "recipient": "Ada Obi",
   "route": [

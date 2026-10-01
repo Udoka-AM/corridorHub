@@ -1,10 +1,10 @@
 [
  {
-  "customer": "zynta-demo",
+  "customer": "eu-payco-demo",
   "corridor": "EUR-NGN",
-  "dailyOutflow": "10.017355 pathUSD",
+  "dailyOutflow": "9.697275 pathUSD",
   "available": "37 pathUSD",
-  "runwayDays": 3.6,
-  "topUpFor7Days": "33.121485 pathUSD"
+  "runwayDays": 3.8,
+  "topUpFor7Days": "30.880925 pathUSD"
  }
 ]

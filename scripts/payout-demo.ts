@@ -19,7 +19,7 @@ import { partnerObservation } from "@corridor/webhooks";
 import { testnetKey } from "./env.ts";
 import { startRuntime } from "./runtime.ts";
 
-const CUSTOMER_ID = "zynta-demo";
+const CUSTOMER_ID = "eu-payco-demo";
 const CORRIDOR: CorridorCode = "EUR-NGN";
 const tag = customerTag(CUSTOMER_ID, testnetKey("CORRIDOR_REF_SECRET"));
 const rt = await startRuntime();

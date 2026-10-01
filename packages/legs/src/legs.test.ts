@@ -20,7 +20,7 @@ beforeEach(async () => {
   accounts = new Accounts(ledger);
   events = await PartnerEventStore.open(db);
   const treasury = await accounts.vault("treasury", "pathUSD", "tempo");
-  const customer = await accounts.customer("zynta", "EUR-NGN", "pathUSD", "tempo");
+  const customer = await accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo");
   await ledger.post({
     kind: "deposit",
     lines: [
@@ -56,13 +56,13 @@ const fakeBridge: Leg<any> = {
   },
 };
 
-const ref = () => encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("zynta", "s") });
+const ref = () => encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id: uuidv7(), customerTag: customerTag("eu-payco", "s") });
 
 function payoutData(over: Partial<PayoutData> = {}): PayoutData {
   const id = uuidv7();
   return {
     payoutId: id,
-    customerId: "zynta",
+    customerId: "eu-payco",
     corridor: "EUR-NGN",
     asset: "pathUSD",
     venue: "tempo",
