@@ -70,3 +70,5 @@ export class PgCursorStore {
     );
   }
 }
+
+export { bookVaultMovements, checkVaults, type VaultBookingOptions, type VaultBookingResult, type VaultCheck, type VaultRef } from "./vaults.ts";

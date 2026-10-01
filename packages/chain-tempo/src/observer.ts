@@ -1,5 +1,5 @@
 import { getAbiItem, type Address } from "viem";
-import { Abis } from "viem/tempo";
+import { Abis, Addresses } from "viem/tempo";
 import { tryDecodeRef, type Asset, type Hex, type Observation } from "@corridor/core";
 import type { TempoClient } from "./index.ts";
 import { tokenAddress } from "./tokens.ts";
@@ -10,6 +10,13 @@ export interface CursorStore {
 }
 
 const TRANSFER_WITH_MEMO = getAbiItem({ abi: Abis.tip20, name: "TransferWithMemo" });
+const TRANSFER = getAbiItem({ abi: Abis.tip20, name: "Transfer" });
+
+/**
+ * Tempo has no native gas token: every transaction pays its fee as a TIP-20
+ * transfer from the fee payer to the Fee Manager, logged in the same receipt.
+ */
+export const FEE_MANAGER: Address = Addresses.feeManager;
 
 /**
  * Watches Corridor's Tempo vaults for memo-tagged TIP-20 movements in or out,
@@ -28,6 +35,12 @@ export class TempoObserver {
       startBlock: bigint;
       /** Max blocks per getLogs call. */
       maxRange?: bigint;
+      /**
+       * Also report movements that carry no memo: gas fees the watched
+       * addresses pay to the Fee Manager, and plain inbound transfers (faucet
+       * mints, owner top-ups, deposits sent without a reference).
+       */
+      unreferenced?: boolean;
     },
   ) {}
 
@@ -55,7 +68,7 @@ export class TempoObserver {
       this.client.getLogs({ address, event: TRANSFER_WITH_MEMO, args: { to: watch }, fromBlock, toBlock }),
       this.client.getLogs({ address, event: TRANSFER_WITH_MEMO, args: { from: watch }, fromBlock, toBlock }),
     ]);
-    return [...inbound, ...outbound].map((log) => ({
+    const memoed = [...inbound, ...outbound].map((log) => ({
       venue: "tempo" as const,
       externalRef: `${log.transactionHash}:${log.logIndex}`,
       reference: tryDecodeRef(log.args.memo!) ? (log.args.memo as Hex) : null,
@@ -66,5 +79,28 @@ export class TempoObserver {
       blockNumber: log.blockNumber ?? undefined,
       observedAt: new Date(),
     }));
+    if (!this.opts.unreferenced) return memoed;
+
+    const [plainIn, fees] = await Promise.all([
+      this.client.getLogs({ address, event: TRANSFER, args: { to: watch }, fromBlock, toBlock }),
+      this.client.getLogs({ address, event: TRANSFER, args: { from: watch, to: FEE_MANAGER }, fromBlock, toBlock }),
+    ]);
+    // A memo transfer also emits a plain Transfer; keep only the memo'd one.
+    const key = (tx: string, from?: string, to?: string, amount?: bigint) => `${tx}:${from?.toLowerCase()}:${to?.toLowerCase()}:${amount}`;
+    const hasMemo = new Set(inbound.map((l) => key(l.transactionHash!, l.args.from, l.args.to, l.args.amount)));
+    const unreferenced = [...plainIn.filter((l) => !hasMemo.has(key(l.transactionHash!, l.args.from, l.args.to, l.args.amount))), ...fees].map(
+      (log) => ({
+        venue: "tempo" as const,
+        externalRef: `${log.transactionHash}:${log.logIndex}`,
+        reference: null,
+        asset: this.opts.asset,
+        amount: log.args.amount!,
+        from: log.args.from,
+        to: log.args.to,
+        blockNumber: log.blockNumber ?? undefined,
+        observedAt: new Date(),
+      }),
+    );
+    return [...memoed, ...unreferenced];
   }
 }

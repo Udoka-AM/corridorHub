@@ -34,6 +34,16 @@ export class Accounts {
     return this.open({ type: "revenue", ownerType: "revenue", ownerId: name, asset, venue });
   }
 
+  /** Costs Corridor bears, e.g. network gas. */
+  expense(name: string, asset: Asset, venue: Venue) {
+    return this.open({ type: "expense", ownerType: "expense", ownerId: name, asset, venue });
+  }
+
+  /** Capital the owner puts into Corridor's vaults (gas float, faucet funding). */
+  equity(name: string, asset: Asset, venue: Venue) {
+    return this.open({ type: "equity", ownerType: "equity", ownerId: name, asset, venue });
+  }
+
   /** Any other account, by full spec (e.g. an expense account). */
   open(spec: AccountSpec): Promise<string> {
     const k = JSON.stringify(spec);

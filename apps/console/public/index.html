@@ -44,10 +44,10 @@
   tr:last-child td { border-bottom: none; }
   .num { text-align: right; font-variant-numeric: tabular-nums; }
   .chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 500; border: 1px solid transparent; }
-  .s-completed, .s-done, .s-matched { background: rgba(79,196,138,.12); color: var(--ok); border-color: rgba(79,196,138,.35); }
+  .s-completed, .s-done, .s-matched, .s-balanced { background: rgba(79,196,138,.12); color: var(--ok); border-color: rgba(79,196,138,.35); }
   .s-compensated { background: rgba(124,183,255,.12); color: var(--info); border-color: rgba(124,183,255,.35); }
   .s-running, .s-pending, .s-compensating { background: rgba(242,193,78,.12); color: var(--warn); border-color: rgba(242,193,78,.35); }
-  .s-failed, .s-manual_review, .s-unbooked, .s-amount_mismatch, .s-compensation_failed { background: rgba(240,113,103,.12); color: var(--bad); border-color: rgba(240,113,103,.4); }
+  .s-failed, .s-manual_review, .s-unbooked, .s-drift, .s-amount_mismatch, .s-compensation_failed { background: rgba(240,113,103,.12); color: var(--bad); border-color: rgba(240,113,103,.4); }
   .s-unreferenced { background: rgba(159,176,198,.12); color: var(--muted); border-color: var(--line); }
   .route { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
   .step { font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
@@ -131,6 +131,7 @@
   <section class="card span-6">
     <h2>Reconciliation <small>chain + partner observations vs. the ledger</small></h2>
     <div id="reconSummary" style="margin-bottom:10px"></div>
+    <div id="vaultCheck" style="margin-bottom:12px;font-size:12.5px"></div>
     <table id="recon"></table>
   </section>
 
@@ -209,6 +210,10 @@ async function refreshRecon() {
   const total = Object.values(r.summary).reduce((a, b) => a + b, 0);
   window.__matchRate = total ? `${Math.round((r.summary.matched / total) * 100)}%` : "—";
   $("reconSummary").innerHTML = Object.entries(r.summary).map(([k, v]) => `${chip(k)} <span style="margin-right:12px">${v}</span>`).join("");
+  $("vaultCheck").innerHTML = (r.vaults || []).map((v) =>
+    `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${chip(v.status)}<strong>${esc(v.vault)} vault</strong>` +
+    `<span style="color:var(--muted)">on-chain ${esc(v.onchain)} · ledger ${esc(v.ledger)}${v.status === "drift" ? ` · <span style="color:var(--bad)">${v.short ? "missing" : "unbooked"} ${esc(v.diff)}</span>` : ""}</span></div>`).join("") +
+    (r.gas ? `<div style="color:var(--muted);margin-top:4px">Gas booked as expense: ${esc(r.gas.total)} across ${r.gas.transactions} Tempo transactions</div>` : "");
   $("recon").innerHTML = `<tr><th>Status</th><th>Venue</th><th>Movement</th><th class="num">Amount</th></tr>` +
     (r.rows.slice().reverse().map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.venue)}</td><td class="mono">${esc(short(x.ref, 10))}</td><td class="num">${esc(x.amount)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">Nothing observed yet</td></tr>`);
 }

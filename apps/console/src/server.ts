@@ -14,9 +14,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { formatMoney, fromZcashMemo, parseCorridor, type Asset, type CorridorCode, type Fiat, type Observation } from "@corridor/core";
-import { EXPLORER, TempoObserver } from "@corridor/chain-tempo";
+import { EXPLORER, FEE_MANAGER, TempoObserver, balanceOf, firstFundedBlock } from "@corridor/chain-tempo";
 import { ZcashWallet, formatZec, shieldedObservations } from "@corridor/chain-zcash";
-import { reconcile, summarize } from "@corridor/recon";
+import { bookVaultMovements, checkVaults, reconcile, summarize, type VaultRef } from "@corridor/recon";
 import { COLLECTION_CURRENCIES, PAYOUT_CURRENCIES, planRoute } from "@corridor/routing";
 import type { PartnerOrder } from "@corridor/partners";
 import { PgCursorStore } from "@corridor/recon";
@@ -169,6 +169,22 @@ const consoleObserver = new TempoObserver(rt.treasury, {
   startBlock: firstBlock ? BigInt(firstBlock) : rt.startBlock,
 });
 
+// Vault accounting: replay each Tempo vault's whole history (faucet funding,
+// gas) so its on-chain balance can be checked against the ledger.
+const TEMPO_VAULTS: VaultRef[] = [{ name: "treasury", address: rt.treasury.account.address, asset: "pathUSD", venue: "tempo" }];
+// Testnet faucet funding arrives as mints from the zero address; on mainnet list the owner's top-up wallets.
+const FUNDING_SOURCES = ["0x0000000000000000000000000000000000000000", ...(process.env.CORRIDOR_FUNDING_SOURCES ?? "").split(",").filter(Boolean)];
+const vaultSince = (await firstFundedBlock(rt.treasury, "pathUSD", rt.treasury.account.address)) ?? rt.startBlock;
+const vaultObserver = new TempoObserver(rt.treasury, {
+  name: `console-vaults-${Date.now()}`,
+  asset: "pathUSD",
+  addresses: TEMPO_VAULTS.map((v) => v.address as `0x${string}`),
+  cursors: await PgCursorStore.open(db),
+  startBlock: vaultSince,
+  maxRange: 100_000n,
+  unreferenced: true,
+});
+
 /** Partner orders as last reported by their (verified) webhooks; survives restarts. */
 async function partnerObservations(): Promise<Observation[]> {
   const rows = await q<{ body: Row }>(`select body from partner_events where status = 'completed'`);
@@ -188,10 +204,25 @@ function zcashObservations(): Observation[] {
 }
 
 async function reconciliation() {
-  for (const o of await consoleObserver.poll()) seen.set(o.externalRef, o);
+  for (const o of [...(await consoleObserver.poll()), ...(await vaultObserver.poll())]) seen.set(o.externalRef, o);
+  const booked = await bookVaultMovements(rt.ledger, rt.accounts, [...seen.values()], {
+    vaults: TEMPO_VAULTS,
+    fundingSources: FUNDING_SOURCES,
+    feeCollector: FEE_MANAGER,
+  });
+  for (const f of booked.failed) console.warn(`vault booking pending for ${f.externalRef}: ${f.error}`);
   const all = [...seen.values(), ...(await partnerObservations()), ...zcashObservations()];
   const results = await reconcile(rt.ledger, all);
+  const vaults = await checkVaults(
+    rt.accounts,
+    rt.ledger,
+    await Promise.all(TEMPO_VAULTS.map(async (v) => ({ ...v, onchain: await balanceOf(rt.treasury, v.asset, v.address as `0x${string}`) }))),
+  );
+  const gas = (await rt.ledger.balance(await rt.accounts.expense("gas", "pathUSD", "tempo"))).amount;
+  const gasTxs = (await q<{ n: number }>(`select count(*)::int n from journal_entries where kind = 'gas'`))[0]?.n ?? 0;
   return {
+    vaults: vaults.map((v) => ({ ...v, onchain: fmt(v.asset, v.onchain), ledger: fmt(v.asset, v.ledger), diff: fmt(v.asset, v.diff < 0n ? -v.diff : v.diff), short: v.diff < 0n })),
+    gas: { total: fmt("pathUSD", gas), transactions: gasTxs },
     summary: summarize(results),
     byVenue: Object.fromEntries(
       ["tempo", "partner_fiat", "zcash_ironwood"].map((v) => [v, summarize(results.filter((r) => r.observation.venue === v))]),

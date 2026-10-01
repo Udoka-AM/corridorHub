@@ -5,7 +5,7 @@ import { tryDecodeRef, type Asset, type Hex, type Observation } from "@corridor/
 import { tokenAddress } from "./tokens.ts";
 
 export { TEMPO_TOKENS, tokenAddress } from "./tokens.ts";
-export { TempoObserver, type CursorStore } from "./observer.ts";
+export { FEE_MANAGER, TempoObserver, type CursorStore } from "./observer.ts";
 
 export type TempoNetwork = "moderato" | "mainnet";
 
@@ -25,7 +25,8 @@ export function tempoClient(opts: { network: TempoNetwork; privateKey: Hex; rpcU
     account: privateKeyToAccount(opts.privateKey),
     testnet: opts.network === "moderato",
     feeToken: Addresses.pathUsd,
-    transport: http(opts.rpcUrl),
+    // Public RPCs stall under load; one slow call shouldn't fail a saga step or a recon run.
+    transport: http(opts.rpcUrl, { timeout: 30_000, retryCount: 5 }),
   });
 }
 
@@ -37,6 +38,25 @@ export async function fundFromFaucet(client: TempoClient, address: Address) {
 export async function balanceOf(client: TempoClient, asset: Asset, account: Address): Promise<bigint> {
   const { amount } = await Actions.token.getBalance(client, { token: tokenAddress(asset), account });
   return amount;
+}
+
+/**
+ * First block at which `account` held any `asset`, found by bisecting
+ * historical balances. Lets an observer replay a vault's whole history
+ * (funding, fees) without scanning the chain from genesis.
+ */
+export async function firstFundedBlock(client: TempoClient, asset: Asset, account: Address): Promise<bigint | undefined> {
+  const at = async (blockNumber: bigint) =>
+    (await client.readContract({ address: tokenAddress(asset), abi: Abis.tip20, functionName: "balanceOf", args: [account], blockNumber })) as bigint;
+  let hi = await client.getBlockNumber();
+  if ((await at(hi)) === 0n) return undefined;
+  let lo = 0n;
+  while (lo < hi) {
+    const mid = (lo + hi) / 2n;
+    if ((await at(mid)) > 0n) hi = mid;
+    else lo = mid + 1n;
+  }
+  return lo;
 }
 
 /**
