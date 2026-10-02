@@ -11,9 +11,9 @@ A European payout company pays Ada Obi in Lagos. Its customer balance already si
 | Environment | Route |
 |---|---|
 | Testnet (recorded) | `ledger.reserve → bridge.simulated (Tempo → Solana) → partner.payout (Solana → NGN)` |
-| Mainnet | `ledger.reserve → across.bridge (Tempo → Base) → partner.payout (Base → NGN)` |
+| Mainnet | `ledger.reserve → across.bridge (Tempo → Base) → across.bridge (Base → Solana) → partner.payout (Solana → NGN)` |
 
-On mainnet the payout is one bridge hop, because Paj settles on Base.
+On mainnet the payout takes two Across hops, because Paj settles on Solana and Across has no direct Tempo → Solana route.
 
 <Frame caption="Fig. 05 · A EUR → NGN payout, step by step across the ledger, Tempo, Solana, the partner and the bank.">
   <img className="block dark:hidden" src="/images/diagrams/payout-flow-light.svg" alt="Sequence of a EUR to NGN payout" />

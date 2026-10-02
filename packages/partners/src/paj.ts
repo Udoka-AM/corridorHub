@@ -53,7 +53,8 @@ export class PajPartner implements RampPartner {
   readonly id = "paj";
   readonly payoutCurrencies = ["NGN", "GHS", "KES", "TZS", "ZAR"] as const satisfies readonly Fiat[];
   readonly collectionCurrencies = ["NGN"] as const satisfies readonly Fiat[];
-  readonly chains = ["SOLANA", "BASE"] as const satisfies readonly PartnerChain[];
+  // Paj pays out and collects on Solana only for now (Oct 2026). Base appears in its API but is not live for Corridor.
+  readonly chains = ["SOLANA"] as const satisfies readonly PartnerChain[];
 
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -80,8 +81,15 @@ export class PajPartner implements RampPartner {
     return { currency, onRamp: r.onRampRate.rate, offRamp: r.offRampRate.rate, at: new Date(r.offRampRate.createdAt) };
   }
 
+  private assertChain(chain: PartnerChain): void {
+    if (!(this.chains as readonly PartnerChain[]).includes(chain)) {
+      throw new PartnerError(`Paj does not settle on ${chain} for Corridor yet; use SOLANA`, this.id);
+    }
+  }
+
   async openPayout(req: PayoutRequest): Promise<PartnerOrder> {
     this.assertCurrency(req.currency, this.payoutCurrencies);
+    this.assertChain(req.chain);
     const tx = await this.call("POST", "/pub/v2/offramp", {
       accountNumber: req.beneficiary.accountNumber,
       bankCode: req.beneficiary.bankCode,
@@ -97,6 +105,7 @@ export class PajPartner implements RampPartner {
 
   async openCollection(req: CollectionRequest): Promise<PartnerOrder> {
     this.assertCurrency(req.currency, this.collectionCurrencies);
+    this.assertChain(req.chain);
     const tx = await this.call("POST", "/pub/v2/onramp", {
       fiatAmount: minorToNumber(req.currency, req.fiatAmount),
       currency: req.currency,

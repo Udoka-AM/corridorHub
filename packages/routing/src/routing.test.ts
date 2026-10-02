@@ -4,12 +4,13 @@ import { NoRouteError, planRoute } from "./index.ts";
 const source = { venue: "tempo", asset: "pathUSD" } as const;
 
 describe("route planner", () => {
-  it("routes a mainnet NGN payout with one Across hop, paying out from Base", () => {
+  it("routes a mainnet NGN payout through Base to Solana, where the naira partner settles", () => {
     const plan = planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" });
     expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
       "ledger.reserve:tempo->tempo",
       "across.bridge:tempo->base",
-      "partner.payout:base->partner_fiat",
+      "across.bridge:base->solana",
+      "partner.payout:solana->partner_fiat",
     ]);
     expect(plan.steps.every((s) => s.referenceScope === "payout")).toBe(true);
   });

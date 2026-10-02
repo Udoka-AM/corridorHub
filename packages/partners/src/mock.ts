@@ -47,7 +47,7 @@ export class MockPartner implements RampPartner {
   readonly id: string;
   readonly payoutCurrencies: readonly Fiat[];
   readonly collectionCurrencies: readonly Fiat[] = ["NGN", "KES", "GHS"];
-  readonly chains: readonly PartnerChain[] = ["SOLANA", "BASE"];
+  readonly chains: readonly PartnerChain[] = ["SOLANA"];
   private readonly orders = new Map<string, PartnerOrder>();
 
   constructor(private readonly opts: MockPartnerOptions) {

@@ -265,7 +265,7 @@ def hub():
 # FIG 03 · Chain topology
 # =====================================================================
 def topology():
-    d = D("chain-topology", 1200, 560, "Fig. 03 · Chain topology (mainnet)", "Tempo hub to Base via Across, then partners on Base, Solana and the NEAR Intents route into Zcash")
+    d = D("chain-topology", 1200, 560, "Fig. 03 · Chain topology (mainnet)", "Tempo hub to Base and Solana via Across, then Paj and ramp partners on Solana, and the NEAR Intents route from Base into Zcash")
     cols = [40, 280, 520, 760, 980]
     d.zone(24, 64, 232, 440, "Hub", "zap")
     d.zone(264, 64, 232, 440, "Bridge", "arrow-left-right")
@@ -274,25 +274,25 @@ def topology():
     d.zone(972, 64, 204, 440, "Destinations", "flag")
     W = 200
     tempo = d.node(cols[0], 250, W, "Tempo", "pathUSD · memo", "mark:tempo", inverted=True)
-    across = d.node(cols[1], 250, W, "Across", "hop 1 · ~1 s", "arrow-left-right")
-    base = d.node(cols[2], 250, W, "Base", "USDC · relay wallet", "mark:base")
-    sol = d.node(cols[2], 400, W, "Solana", "USDC · SPL memo", "mark:solana")
-    near = d.node(cols[3], 110, 190, "NEAR Intents", "USDC → ZEC", "mark:near")
-    paj = d.node(cols[3], 250, 190, "Paj", "NGN GHS KES TZS ZAR", "banknote")
+    across = d.node(cols[1], 250, W, "Across", "hop 1 · hop 2", "arrow-left-right")
+    base = d.node(cols[2], 180, W, "Base", "USDC · relay wallet", "mark:base")
+    sol = d.node(cols[2], 340, W, "Solana", "USDC · SPL memo", "mark:solana")
+    near = d.node(cols[3], 100, 190, "NEAR Intents", "Base USDC → ZEC", "mark:near")
+    paj = d.node(cols[3], 270, 190, "Paj", "NGN · from Solana", "banknote")
     ramps = d.node(cols[3], 400, 190, "Ramp partners", "32 currencies", "plug")
-    zv = d.node(cols[4], 110, 184, "Zcash vault", "FROST 2-of-3", "mark:zcash", dashed=True)
-    bank = d.node(cols[4], 250, 184, "Bank / wallet", "local rail", "landmark")
+    zv = d.node(cols[4], 100, 184, "Zcash vault", "FROST 2-of-3", "mark:zcash", dashed=True)
+    bank = d.node(cols[4], 270, 184, "Nigerian bank", "NGN payout", "landmark")
     rails = d.node(cols[4], 400, 184, "Local rails", "bank · Pix · SPEI", "landmark")
     d.arrow([(tempo["r"], tempo["cy"]), (across["l"], across["cy"])])
-    d.arrow([(across["r"], across["cy"]), (base["l"], base["cy"])])
+    d.arrow([(across["r"], across["cy"] - 12), (500, across["cy"] - 12), (500, base["cy"]), (base["l"], base["cy"])])
     d.arrow([(base["cx"], base["b"]), (sol["cx"], sol["t"])], "hop 2 · ~8 s", lx=base["cx"], ly=(base["b"] + sol["t"]) / 2)
-    d.arrow([(base["r"], base["cy"]), (paj["l"], paj["cy"])])
+    d.arrow([(sol["r"], sol["cy"] - 10), (742, sol["cy"] - 10), (742, paj["cy"]), (paj["l"], paj["cy"])])
     d.arrow([(paj["r"], paj["cy"]), (bank["l"], bank["cy"])])
-    d.arrow([(sol["r"], sol["cy"]), (ramps["l"], ramps["cy"])])
+    d.arrow([(sol["r"], sol["cy"] + 14), (742, sol["cy"] + 14), (742, ramps["cy"]), (ramps["l"], ramps["cy"])])
     d.arrow([(ramps["r"], ramps["cy"]), (rails["l"], rails["cy"])])
     d.arrow([(base["cx"] + 40, base["t"]), (base["cx"] + 40, near["cy"]), (near["l"], near["cy"])], dashed=True)
     d.arrow([(near["r"], near["cy"]), (zv["l"], zv["cy"])], dashed=True)
-    d.text(600, 536, "Across has no direct Tempo ⇄ Solana route, so Solana is two hops through Base. Paj settles on Base: naira is one hop.", 11, 400, "muted", anchor="middle")
+    d.text(600, 536, "Across has no direct Tempo ⇄ Solana route, so Solana is two hops through Base. Paj settles on Solana: naira takes both hops.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
@@ -361,7 +361,7 @@ def payout():
             d.arrow([(x0, y), (x1 - (8 if x1 > x0 else -8), y)])
             d.badge(x0 + (16 if x1 > x0 else -16), y, i)
             d.pill((x0 + x1) / 2 + (10 if x1 > x0 else 0), y - 16, label)
-    d.text(600, 624, "Mainnet: one Across hop Tempo → Base, then Paj pays naira from Base. Testnet shown: Solana devnet funding.", 11, 400, "muted", anchor="middle")
+    d.text(600, 624, "Mainnet: two Across hops, Tempo → Base → Solana, then Paj pays naira from Solana. Testnet shown: Solana devnet funding.", 11, 400, "muted", anchor="middle")
     d.save()
 
 

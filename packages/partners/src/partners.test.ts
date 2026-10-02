@@ -87,11 +87,13 @@ describe("Paj adapter", () => {
     expect(order).toMatchObject({ kind: "payout", status: "open", fundingAddress: "4KSLE7EU1P7PQ8Rc4hdb2ZKq2JmWHD8UXJp7guEdyT9j", usdcAmount: 7_000_000n, fiatAmount: 1_071_000n, reference: ref });
   });
 
-  it("uses Base USDC when the order is on Base", async () => {
+  it("refuses Base, which Paj does not settle on for Corridor yet, before calling Paj", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const paj = new PajPartner({ apiKey: "k", fetchImpl: recordingFetch(pajTx({ chain: "BASE" }), calls) });
-    await paj.openPayout({ currency: "NGN", chain: "BASE", usdcAmount: 1_000_000n, beneficiary: { bankCode: "058", accountNumber: "1" }, reference: ref });
-    expect(JSON.parse(String(calls[0]!.init.body)).mint).toBe("0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913");
+    await expect(
+      paj.openPayout({ currency: "NGN", chain: "BASE", usdcAmount: 1_000_000n, beneficiary: { bankCode: "058", accountNumber: "1" }, reference: ref }),
+    ).rejects.toThrow(/does not settle on BASE/);
+    expect(calls).toHaveLength(0);
   });
 
   it("opens an onramp order and returns the virtual account for the payer", async () => {

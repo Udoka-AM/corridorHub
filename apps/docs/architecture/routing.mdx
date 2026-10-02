@@ -34,7 +34,7 @@ flowchart LR
 | `bridge.simulated` | tempo/pathUSD ⇄ solana/USDC | testnet (Across has no Tempo testnet) |
 | `partner.collect` | `partner_fiat/{11 currencies}` → `solana/USDC` | both |
 | `partner.payout` | `solana/USDC` → `partner_fiat/{32 currencies}` | both |
-| `partner.payout` | `base/USDC` → `partner_fiat/{NGN, GHS, KES, TZS, ZAR}` | both (partners that settle on Base, such as Paj) |
+| `partner.payout` | `base/USDC` → `partner_fiat/{BASE_PAYOUT_CURRENCIES}` | both; empty today, for partners that settle on Base |
 | `near.swap` | base/USDC → zcash_ironwood/ZEC | mainnet (NEAR Intents has no Tempo market) |
 | `near.swap` | tempo/pathUSD → zcash_ironwood/ZEC | testnet |
 | `zcash.shieldedBatch` | zcash_ironwood/ZEC → zcash_ironwood/ZEC | both, appended to shielded payouts |
@@ -72,11 +72,11 @@ planRoute({
 
 | Flow | Testnet | Mainnet |
 |---|---|---|
-| EUR → NGN payout | reserve → bridge.simulated → partner.payout | reserve → across (Tempo→Base) → partner.payout (Base) |
+| EUR → NGN payout | reserve → bridge.simulated → partner.payout | reserve → across (Tempo→Base) → across (Base→Solana) → partner.payout |
 | NGN → CNY payout | reserve → bridge.simulated → partner.payout | reserve → across (Tempo→Base) → across (Base→Solana) → partner.payout |
 | NGN collection | partner.collect → bridge.simulated → ledger.credit | partner.collect → across (Solana→Base) → across (Base→Tempo) → ledger.credit |
 | Shielded supplier batch | reserve → near.swap → zcash.shieldedBatch | reserve → across (Tempo→Base) → near.swap → zcash.shieldedBatch |
 
 <Note>
-The naira payout is **one bridge hop** on mainnet because Paj settles on Base. Currencies whose partners settle on Solana take two hops through Base, because Across has no direct Tempo ↔ Solana route.
+Payouts through partners that settle on Solana, including Paj for naira, take **two hops** through Base, because Across has no direct Tempo ↔ Solana route. A partner that settles on Base would cut that to one hop with a config change.
 </Note>

@@ -19,7 +19,7 @@ Corridor does not pick one chain for everything. It composes chains by role, and
     **Bridge.** Tempo ⇄ Base ⇄ Solana through the Swap API, seconds per hop, fractions of a cent.
   </Card>
   <Card title="Base" img="/images/chains/base.svg" href="/integrations/base">
-    **Partner payouts.** Partners that settle on Base pay naira, cedis and shillings one hop from the hub.
+    **Bridge midpoint.** Every hub ⇄ Solana movement passes through Base, and NEAR Intents swaps into Zcash from Base USDC.
   </Card>
   <Card title="Solana" img="/images/chains/solana.svg" href="/integrations/solana">
     **Ramp liquidity.** USDC with an SPL Memo in one transaction; the pattern ramps already read.
@@ -37,7 +37,7 @@ Corridor does not pick one chain for everything. It composes chains by role, and
     **Threshold control.** 2-of-3 RedPallas signing over Ironwood spends.
   </Card>
   <Card title="Paj" icon="banknote" href="/integrations/paj">
-    **Ramp partner.** NGN offramp and onramp against USDC on Solana and Base.
+    **Ramp partner.** NGN offramp and onramp against USDC on Solana.
   </Card>
   <Card title="Partner interface" icon="plug" href="/integrations/partner-interface">
     **Become a spoke.** Six methods and a signed webhook.

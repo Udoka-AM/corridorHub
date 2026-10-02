@@ -17,7 +17,7 @@ export const VENUES = ["tempo", "base", "solana", "partner_fiat", "zcash_ironwoo
 | Venue | Holds | Observed by |
 |---|---|---|
 | `tempo` | pathUSD and other TIP-20 stablecoins | Indexed `TransferWithMemo` logs, Fee Manager transfers |
-| `base` | USDC between bridge hops and for Base-settling partners | Across deposit status |
+| `base` | USDC between bridge hops, and Base USDC for the shielded on-ramp | Across deposit status |
 | `solana` | USDC at the egress and ingress vaults | Memo program logs |
 | `partner_fiat` | Local currency at a ramp partner | Signed webhooks |
 | `zcash_ironwood` | ZEC in shielded vaults | Viewing-key scan of decrypted outputs |

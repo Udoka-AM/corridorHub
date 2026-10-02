@@ -18,7 +18,7 @@ Every lane runs end to end on testnets through one ledger, one saga engine and o
     Run `across.bridge` Tempo → Base on mainnet with micro-amounts. Quotes are already verified live; the adapter is the same code on testnet and mainnet.
   </Step>
   <Step title="Live partner leg">
-    A Paj business API key turns the Paj adapter on. Paj settles on Base, so a naira payout is one Across hop: Tempo → Base → Paj → Nigerian bank.
+    A Paj business API key turns the Paj adapter on; the key is in place and verified read-only against live NGN rates (`pnpm paj:check`). Paj settles on Solana, so a naira payout is two Across hops: Tempo → Base → Solana → Paj → Nigerian bank.
   </Step>
   <Step title="Mainnet shielded funding">
     `near.swap` from Base USDC to ZEC through NEAR Intents, delivered straight to the vault's unified address (NEAR Intents has no Tempo market).
