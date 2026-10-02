@@ -96,7 +96,6 @@ export default function Collapse() {
           </div>
         </div>
       </div>
-      <p className="wrap source">Source: World Bank Remittance Prices Worldwide, Q1 2025.</p>
     </section>
   );
 }

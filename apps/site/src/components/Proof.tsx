@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { ANY_MOTION, gsap, useGSAP } from "../motion";
-import { CHAINS } from "./Chains";
+import { BACKERS, CHAINS } from "./Chains";
 
 /** A figure whose digits roll into place like an odometer. */
 function Roll({ value }: { value: string }) {
@@ -59,12 +59,13 @@ export default function Proof() {
     { scope: root },
   );
 
-  const strip = [...CHAINS, ...CHAINS];
+  const strip = [...CHAINS.slice(0, 1), ...BACKERS, ...CHAINS.slice(1)];
+  const loop = [...strip, ...strip];
   return (
     <section className="band" ref={root} aria-label="Proof">
-      <div className="marquee" aria-label="Settles across Tempo, Solana, Base, USDC, Zcash and NEAR Intents">
+      <div className="marquee" aria-label="Built on Tempo, incubated by Stripe and Paradigm; settles across Solana, Base, USDC, Zcash and NEAR Intents">
         <div className="track" aria-hidden="true">
-          {strip.map(({ name, role, Icon }, i) => (
+          {loop.map(({ name, role, Icon }, i) => (
             <span className="item" key={i}>
               <Icon variant="mono" />
               {name} <span className="muted">/ {role}</span>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ANY_MOTION, EASE, Words, gsap, prefersReducedMotion, useGSAP } from "../motion";
+import { ANY_MOTION, EASE, ScrollTrigger, Words, gsap, prefersReducedMotion, useGSAP } from "../motion";
 import { ChainMark } from "./Chains";
 
 // FROST batch ba4e845b on Zcash testnet: $15 paid to three suppliers in one Ironwood transaction.
@@ -51,6 +51,24 @@ export default function Shielded() {
     () => {
       const mm = gsap.matchMedia();
       mm.add(ANY_MOTION, () => {
+        // The light section opens out of the dark as a card, then folds back into one as it leaves.
+        const el = root.current!;
+        const clamp = (n: number) => Math.min(1, Math.max(0, n));
+        ScrollTrigger.create({
+          trigger: el,
+          start: "top bottom",
+          end: "bottom top",
+          onUpdate: () => {
+            const r = el.getBoundingClientRect();
+            const vh = window.innerHeight;
+            const enter = clamp((vh - r.top) / (vh * 0.8));
+            const exit = clamp((vh * 0.75 - r.bottom) / (vh * 0.75));
+            const k = Math.max(1 - enter, exit);
+            el.style.clipPath = `inset(${7 * (1 - enter)}% ${5 * k}% ${7 * exit}% ${5 * k}% round ${28 * k}px)`;
+          },
+          onLeave: () => (el.style.clipPath = ""),
+          onLeaveBack: () => (el.style.clipPath = ""),
+        });
         gsap.from(".shielded .reveal .wi", { yPercent: 110, duration: 1.1, ease: EASE, stagger: 0.05, scrollTrigger: { trigger: root.current, start: "top 70%", once: true } });
         gsap.from(".vault", {
           y: 80,
