@@ -21,6 +21,7 @@ export function Nav() {
         <a href="#shielded">Shielded</a>
         <a href="#economics">Economics</a>
         <a href="./console/">Console</a>
+        <a href="https://corridorapp.mintlify.app" target="_blank" rel="noreferrer">Docs</a>
       </div>
       <a className="btn primary sm" href="#access" data-hot>
         Request access
@@ -121,6 +122,7 @@ export function Footer() {
       <div className="wrap">
         <span>Corridor · infrastructure for licensed payment companies. Not a money transmitter.</span>
         <a href="./console/">Live console</a>
+        <a href="https://corridorapp.mintlify.app" target="_blank" rel="noreferrer">Docs</a>
         <a href="https://tempo-solana-swap.pages.dev" target="_blank" rel="noreferrer">Tempo ⇌ Solana swap</a>
         <a href="https://github.com/Udoka-AM/corridor" target="_blank" rel="noreferrer">GitHub · MIT</a>
         <span className="end">Colosseum Crypto World's Fair 2026</span>

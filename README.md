@@ -4,7 +4,7 @@
 
 Corridor lets a licensed payment company collect USD or EUR abroad and pay out NGN or KES without pre-funding foreign bank accounts or waiting days on correspondent banks. It holds working balances in stablecoins, quotes and executes FX, settles on [Tempo](https://tempo.xyz), and routes on/off-ramp liquidity through Solana. On top of that runs a treasury console that shows balances per corridor, forecasts pre-funding needs and reconciles every payment automatically.
 
-**Documentation:** [`apps/docs`](apps/docs) (Mintlify): architecture, every chain and partner integration, end-to-end flows with testnet evidence, and decision records.
+**Documentation:** [corridorapp.mintlify.app](https://corridorapp.mintlify.app) (source in [`apps/docs`](apps/docs), Mintlify): architecture, every chain and partner integration, end-to-end flows with testnet evidence, and decision records.
 
 **Live demo:** [udoka-am.github.io/corridor/console](https://udoka-am.github.io/corridor/console/): a replay of the treasury console recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet. Every ↗ link opens the real transaction.
 
