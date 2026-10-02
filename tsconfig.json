@@ -4,5 +4,8 @@
     "packages/*/src/**/*.ts",
     "scripts/**/*.ts",
     "apps/*/src/**/*.ts"
+  ],
+  "exclude": [
+    "apps/site/**"
   ]
 }

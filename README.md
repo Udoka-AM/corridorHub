@@ -126,7 +126,8 @@ pnpm across:testnet     # live Across testnet hop: Base Sepolia USDC → Solana 
 pnpm zcash:spike        # shielded lane: one Ironwood tx pays a batch; auditor reconciles via viewing key
 pnpm zcash:frost        # same batch from a FROST 2-of-3 vault: one signer refused, two co-sign
 pnpm console            # treasury console at http://localhost:4400 (owns the local ledger; stop CLI demos first)
-pnpm console:snapshot   # record the running console as the static replay in apps/site/console/
+pnpm console:snapshot   # record the running console as the static replay in apps/site/public/console/
+pnpm --filter @corridor/site dev   # landing page (Vite + React, three.js hub scene, GSAP)
 ```
 
 The shielded lane uses [`zcash-devtool`](https://github.com/zcash/zcash-devtool) (librustzcash, Ironwood-aware). Build it with `cargo build --release` and point `ZCASH_DEVTOOL` at the binary.

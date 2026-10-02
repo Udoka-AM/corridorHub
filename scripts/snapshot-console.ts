@@ -1,6 +1,6 @@
 /**
  * Record the running console (pnpm console) as a static, read-only replay
- * published with the site at /console/.
+ * published with the site at /console/ (apps/site/public/console).
  *
  *   pnpm console            # in one terminal
  *   pnpm console:snapshot   # in another
@@ -13,7 +13,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSyn
 import { join } from "node:path";
 
 const BASE = process.env.CONSOLE_URL ?? "http://localhost:4400";
-const OUT = "apps/site/console";
+const OUT = "apps/site/public/console";
 const GETS = ["overview", "sagas", "reconciliation", "shielded", "forecast", "network", "approvals"];
 const POSTS = ["disclosures"]; // read-only on the server: builds the auditor package
 
