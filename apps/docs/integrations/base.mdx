@@ -1,0 +1,38 @@
+---
+title: "Base: partner payouts"
+description: "Base is the first spoke out of the hub: the midpoint of every Tempo-to-Solana bridge and a direct payout venue for partners that settle on Base."
+icon: "circle"
+---
+
+<img src="/images/chains/base.svg" alt="Base" width="56" height="56" />
+
+Base plays two roles in Corridor.
+
+## 1. The bridge midpoint
+
+Across has no direct Tempo ↔ Solana route, so every hub ↔ Solana movement is two hops through Base USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`). Between hops, the funds sit in a Corridor-owned **relay wallet** on Base, so they are never in an unowned address and the ledger always knows where they are.
+
+## 2. A direct payout venue
+
+Some ramp partners settle on Base. Paj, for example, pays NGN, GHS, KES, TZS and ZAR from Base USDC. For those currencies the planner chooses a **one-hop** route:
+
+```text
+ledger.reserve → across.bridge (Tempo → Base) → partner.payout (Base → NGN)
+```
+
+The route graph encodes this as a `partner.payout` edge from `base/USDC` for each currency in `BASE_PAYOUT_CURRENCIES`, alongside the general `solana/USDC` edges. The planner's cheapest-path search picks it automatically.
+
+## 3. The mainnet shielded on-ramp
+
+NEAR Intents has no Tempo market, so on mainnet a shielded batch leaves the hub on one Across hop to Base and swaps Base USDC → ZEC through NEAR Intents, delivered to the vault's unified address.
+
+```text
+ledger.reserve → across.bridge (Tempo → Base) → near.swap (Base USDC → ZEC) → zcash.shieldedBatch
+```
+
+## Environments
+
+| Network | Chain id | USDC |
+|---|---|---|
+| Base | 8453 | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Base Sepolia | 84532 | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |

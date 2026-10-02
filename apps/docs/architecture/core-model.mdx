@@ -1,0 +1,74 @@
+---
+title: "Core model"
+description: "Venues, assets, money in integer minor units, corridors as currency pairs, and the Observation shape every observer emits."
+icon: "box"
+---
+
+The core package (`@corridor/core`) defines the vocabulary every other package uses. It has no I/O.
+
+## Venues
+
+A venue is a place where value physically sits.
+
+```ts
+export const VENUES = ["tempo", "base", "solana", "partner_fiat", "zcash_ironwood"] as const;
+```
+
+| Venue | Holds | Observed by |
+|---|---|---|
+| `tempo` | pathUSD and other TIP-20 stablecoins | Indexed `TransferWithMemo` logs, Fee Manager transfers |
+| `base` | USDC between bridge hops and for Base-settling partners | Across deposit status |
+| `solana` | USDC at the egress and ingress vaults | Memo program logs |
+| `partner_fiat` | Local currency at a ramp partner | Signed webhooks |
+| `zcash_ironwood` | ZEC in shielded vaults | Viewing-key scan of decrypted outputs |
+
+`zcash_ironwood` is the one **shielded venue**: value there is observable only with a viewing key. Privacy is modelled as this venue, not as a flag on payments. See [ADR 0005](/decisions/0005-privacy-as-a-venue).
+
+## Currencies
+
+32 fiat currencies across four regions, each with a **stable one-byte index** used in the [Corridor Reference](/architecture/corridor-reference). The table is append-only: indices are never renumbered.
+
+| Region | Currencies (index) |
+|---|---|
+| Americas | USD 1 · CAD 2 · MXN 3 · BRL 4 · COP 5 · ARS 6 · CLP 7 · PEN 8 |
+| Europe | EUR 20 · GBP 21 · CHF 22 |
+| Africa | NGN 40 · KES 41 · GHS 42 · ZAR 43 · EGP 44 · UGX 45 · TZS 46 · RWF 47 · XOF 48 · XAF 49 · MAD 50 |
+| Asia & Middle East | CNY 70 · HKD 71 · INR 72 · AED 73 · SGD 74 · JPY 75 · TRY 76 · IDR 77 · VND 78 · PHP 79 |
+
+Digital assets: `pathUSD`, `USDC.e`, `USDC`, `USDT` (6 decimals) and `ZEC` (8 decimals).
+
+## Money
+
+Every amount is an integer count of minor units of its asset. There are no floats anywhere in monetary code.
+
+```ts
+interface Money {
+  asset: Asset;
+  amount: bigint;   // non-negative; direction lives on the posting
+}
+
+parseMoney("NGN", "1560000.00")  // { asset: "NGN", amount: 156000000n }
+formatMoney(money("pathUSD", 1_000_000_000n))  // "1000 pathUSD"
+```
+
+## Corridors
+
+A corridor is the pair (currency the customer funds in, currency the beneficiary receives), written `SOURCE-DESTINATION`: `EUR-NGN` is a diaspora payout into Nigeria, `NGN-CNY` is a Nigerian importer paying a Chinese supplier. Because a corridor is just a pair, adding one needs no registry or code change.
+
+## Observation
+
+Every observer, whatever the venue, emits the same shape, so one reconciliation engine serves every lane:
+
+```ts
+interface Observation {
+  venue: Venue;
+  externalRef: string;      // unique on the venue, e.g. `${txHash}:${logIndex}`
+  reference: Hex | null;    // the Corridor Reference, if the movement carried one
+  asset: Asset;
+  amount: bigint;
+  from?: string;
+  to?: string;
+  blockNumber?: bigint;
+  observedAt: Date;
+}
+```

@@ -1,0 +1,71 @@
+---
+title: "Architecture overview"
+description: "One route planner, one saga engine, one double-entry ledger and one reconciliation engine serve every lane and direction: public and shielded, collections and payouts."
+icon: "layers"
+---
+
+Corridor is a modular TypeScript monorepo with one Rust service. Its central design rule is that **every lane runs through the same engines**. A shielded supplier batch and a public naira payout differ only in the path the planner chooses, not in which subsystem handles them.
+
+<Frame caption="Fig. 01 · Clients, control plane, execution legs, observers and books. One engine per concern serves every lane.">
+  <img className="block dark:hidden" src="/images/diagrams/system-architecture-light.svg" alt="Corridor system architecture" />
+  <img className="hidden dark:block" src="/images/diagrams/system-architecture-dark.svg" alt="Corridor system architecture" />
+</Frame>
+
+## The layers
+
+<AccordionGroup>
+  <Accordion title="Route planner (packages/routing)" icon="route">
+    Turns a request (corridor, purpose, privacy, source, destination, environment) into an ordered list of legs by searching a graph of venue/asset positions. It **rejects any payout not funded from the Tempo hub and any collection that does not land on it**, and it is the only place privacy is decided: a shielded payout must end in the `zcash_ironwood` venue. [Routing →](/architecture/routing)
+  </Accordion>
+  <Accordion title="Saga engine (packages/saga)" icon="workflow">
+    Runs a plan as durable steps in Postgres. Each leg has `forward` and optional `compensate`. Steps retry with backoff, a lease keeps one worker per saga, and a failure compensates completed steps in reverse order. Failures after money has left Corridor's control stop at `manual_review` instead. [Saga →](/architecture/saga)
+  </Accordion>
+  <Accordion title="Legs (packages/legs and chain packages)" icon="puzzle">
+    Each leg kind (`tempo.transfer`, `across.bridge`, `partner.payout`, `near.swap`, `zcash.shieldedBatch`, …) moves value on one venue and returns the ledger entries that describe what it did. Legs are idempotent: before sending, they look for the movement by its reference. [Chains & partners →](/integrations/overview)
+  </Accordion>
+  <Accordion title="Ledger (packages/ledger)" icon="book-open">
+    Double-entry, append-only journal on Postgres. Postings balance per asset, accounts can be flagged no-overdraft, and each external movement is booked exactly once through a unique `(venue, external_ref)`. [Ledger →](/architecture/ledger)
+  </Accordion>
+  <Accordion title="Observers and reconciliation (packages/recon)" icon="scan-search">
+    Observers turn chain logs, partner webhooks and viewing-key scans into one `Observation` shape. The matcher joins them with ledger entries on the external reference, and a vault check compares each vault's on-chain balance with the books. [Reconciliation →](/architecture/reconciliation)
+  </Accordion>
+  <Accordion title="Treasury console (apps/console)" icon="layout-dashboard">
+    The operator's view: hub balances, venues, sagas with explorer links, pre-funding forecast, reconciliation, shielded batches with FROST approvals, and auditor disclosure exports. [Console →](/architecture/treasury-console)
+  </Accordion>
+</AccordionGroup>
+
+## Design principles
+
+<CardGroup cols={2}>
+  <Card title="Privacy is a venue, not a feature" icon="shield" href="/decisions/0005-privacy-as-a-venue">
+    Shielded payouts are a path through the same graph into `zcash_ironwood`, booked in the same ledger, reconciled by the same matcher.
+  </Card>
+  <Card title="The hub is enforced, not suggested" icon="git-merge" href="/decisions/0002-hub-enforced-by-planner">
+    Every dollar is settled, held and reconciled on Tempo. The planner refuses anything else.
+  </Card>
+  <Card title="One reference, every chain" icon="fingerprint" href="/architecture/corridor-reference">
+    A 32-byte reference rides in each chain's native memo field, so no indexer is needed to reconcile.
+  </Card>
+  <Card title="Book from the chain" icon="link" href="/decisions/0008-book-from-the-chain">
+    Gas, funding and deliveries are booked against the log or output that proves them, never against what the code intended.
+  </Card>
+</CardGroup>
+
+## Code map
+
+| Package | Responsibility |
+|---|---|
+| `@corridor/core` | Venues, 32 fiat currencies with stable one-byte indices, digital assets, `Money` in integer minor units, Corridor Reference codec, `Observation` |
+| `@corridor/ledger` | Schema, `Ledger.post`, invariants, named `Accounts` |
+| `@corridor/routing` | Route graph (`DEFAULT_EDGES`), `planRoute`, hub enforcement |
+| `@corridor/saga` | `SagaEngine`, `Leg`, `NonRetryableError`, `ManualReviewError`, reserve leg |
+| `@corridor/legs` | Simulated bridge, partner payout and collect, ledger credit, NEAR swap, shielded batch |
+| `@corridor/chain-tempo` | viem/tempo client, `transferWithReference`, `TempoObserver`, Fee Manager |
+| `@corridor/chain-solana` | `SolanaVault`, USDC + memo transactions, reference extraction |
+| `@corridor/bridge-across` | Across Swap API: quote, execute, deposit status, wait for fill |
+| `@corridor/swap-near` | NEAR Intents 1Click: quote, status |
+| `@corridor/chain-zcash` | `ZcashWallet` over zcash-devtool, ZIP-321 requests, `FrostSigner` |
+| `@corridor/partners` | `RampPartner`, `PartnerRegistry`, Paj adapter, mock partner, webhook signing |
+| `@corridor/webhooks` | Partner webhook server, event store, exactly-once order links |
+| `@corridor/recon` | `reconcile`, `bookVaultMovements`, `checkVaults` |
+| `services/zcash-frost` | `corridor-frost` (Rust): FROST(RedPallas) keygen, rerandomized signing, PCZT application |

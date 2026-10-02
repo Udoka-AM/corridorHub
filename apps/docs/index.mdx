@@ -1,0 +1,67 @@
+---
+title: "Corridor"
+sidebarTitle: "Introduction"
+description: "The settlement hub for licensed payment companies moving money into and out of Africa. One stablecoin balance on Tempo, every corridor, settled in 0.6 seconds."
+icon: "sparkles"
+---
+
+<Frame caption="The treasury console, recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet.">
+  <img src="/images/product/console-overview.jpg" alt="Corridor treasury console: hub balances, settlement network and recorded testnet flows" />
+</Frame>
+
+Corridor is settlement and treasury infrastructure for **licensed payment companies** (PSPs, remittance operators, payout companies and the banks behind importers) moving money into and out of Africa. Instead of pre-funding a bank account in every country, a customer holds **one stablecoin balance on Tempo**, and Corridor routes each payment to the local rail that pays it out, reconciles every movement across every chain, and pays suppliers privately on Zcash when the amounts should not be public.
+
+<Note>
+Corridor is infrastructure, not a money transmitter. Customers keep their licences, their KYC and their end-customer relationships. Corridor holds, moves and reconciles their treasury.
+</Note>
+
+## What is built and running
+
+Everything on this site describes code in the [Corridor repository](https://github.com/Udoka-AM/corridor), and every number below is reproducible from the [live console replay](https://udoka-am.github.io/corridor/console/), where each figure links to the transaction behind it.
+
+<CardGroup cols={4}>
+  <Card title="0.6 s" icon="timer">
+    Settlement finality on the Tempo hub.
+  </Card>
+  <Card title="45 / 45" icon="check-check">
+    Movements reconciled across Tempo, partner webhooks and Zcash.
+  </Card>
+  <Card title="Δ 0.000000" icon="scale">
+    Treasury vault on-chain vs ledger, gas included.
+  </Card>
+  <Card title="2 of 3" icon="key-round">
+    FROST signers required to move a shielded vault.
+  </Card>
+</CardGroup>
+
+## How the pieces fit
+
+<Frame caption="Fig. 02 · Every flow is a collection into the Tempo hub or a payout out of it.">
+  <img className="block dark:hidden" src="/images/diagrams/hub-and-spoke-light.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
+  <img className="hidden dark:block" src="/images/diagrams/hub-and-spoke-dark.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
+</Frame>
+
+Every flow is either a **collection** into the Tempo hub or a **payout** out of it. A Nigerian importer paying a supplier in Shenzhen is a naira collection followed by a yuan payout; a diaspora transfer into Lagos is a euro collection followed by a naira payout. Adding a region means adding one partner, and it can immediately reach every other region: **N integrations instead of N×N corridors**.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="What Corridor is" icon="info" href="/start/what-corridor-is">
+    The product, who it serves, and exactly what is live versus simulated.
+  </Card>
+  <Card title="Reading paths" icon="map" href="/start/reading-paths">
+    Curated routes for investors, CTOs, chain teams and partners.
+  </Card>
+  <Card title="Architecture" icon="layers" href="/architecture/overview">
+    Ledger, route planner, saga engine and reconciliation, one engine for every lane.
+  </Card>
+  <Card title="Chains & partners" icon="network" href="/integrations/overview">
+    Tempo, Across, Base, Solana, Paj, Zcash, FROST and NEAR Intents, each doing the job it is best at.
+  </Card>
+  <Card title="The opportunity" icon="trending-up" href="/market/africa-stablecoin-flows">
+    $653B moved on-chain in Sub-Saharan Africa in five years, and how Corridor earns on it.
+  </Card>
+  <Card title="Evidence" icon="file-check" href="/status/evidence">
+    Every testnet transaction, linked to its explorer.
+  </Card>
+</CardGroup>

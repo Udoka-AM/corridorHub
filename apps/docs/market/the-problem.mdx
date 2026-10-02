@@ -1,0 +1,43 @@
+---
+title: "Why corridors cost so much"
+description: "Trapped capital, slow correspondent chains, thin FX and manual reconciliation: the four costs a payment company pays on every African corridor, and which ones Corridor removes."
+icon: "triangle-alert"
+---
+
+Sending money into or out of Sub-Saharan Africa is among the most expensive payment journeys in the world. The fee a customer sees is only the visible part. Behind it, a payment company carries four structural costs on every corridor it serves.
+
+## 1. Capital trapped in pre-funded accounts
+
+To pay out instantly in Lagos, Nairobi or Accra, an operator keeps a funded bank account (a nostro) in each country, sized for peak days. That capital earns little, is exposed to local-currency devaluation, and grows with every corridor added. An operator in ten markets runs ten idle float pools, and an importer's bank repeats the exercise in reverse for every supplier country.
+
+<Card title="Corridor's answer" icon="circle-check">
+One pathUSD balance on the Tempo hub funds every corridor. Payout partners are funded per payment, just in time, and a 7-day forecast in the [treasury console](/architecture/treasury-console) says when to top up.
+</Card>
+
+## 2. Slow settlement through correspondent chains
+
+A cross-border wire passes through correspondent banks, each adding cut-off windows, compliance checks and a day of float. T+1 to T+3 is normal; missing a cut-off on a Thursday can mean Tuesday. While money is in flight, neither sender nor beneficiary can use it.
+
+<Card title="Corridor's answer" icon="circle-check">
+Settlement on Tempo is final in about 0.6 seconds. The slowest remaining step is the local rail (bank transfer or mobile money), which the partner runs in minutes.
+</Card>
+
+## 3. Thin FX and opaque spreads
+
+Many African currencies trade thinly against the dollar, and onshore conversion can be restricted (China's CNY is the obvious case for importers). Spreads widen at every hop, and the customer rarely sees the rate before committing.
+
+<Card title="Corridor's answer" icon="circle-check">
+A firm rate from the partner that pays out, quoted with a time limit before funds move, and settlement in dollar stablecoins between hops so there is no intermediate conversion.
+</Card>
+
+## 4. Reconciliation by hand
+
+A single payout touches the operator's ledger, a bank or chain, and a payout partner. Matching those three records is still largely done with statements and spreadsheets, and breaks surface days later.
+
+<Card title="Corridor's answer" icon="circle-check">
+A 32-byte [Corridor Reference](/architecture/corridor-reference) rides in every chain's native memo and every partner's free-text field, so chain logs, partner webhooks and the ledger match automatically. On testnet, 45 of 45 movements reconcile, and the treasury vault's on-chain balance equals the ledger exactly.
+</Card>
+
+## And in the other direction: imports
+
+Africa's trade with the world reached **$1.5 trillion in 2024** ([Afreximbank, African Trade Report 2025](https://www.afreximbank.com/afreximbank-launches-2025-report-on-african-trade-in-a-shifting-global-financial-landscape/)). Every import is a payment out of the continent, and importers face all four costs, plus one more: on a public chain, a competitor can read exactly what they pay each supplier. Corridor's [shielded lane](/integrations/zcash) pays suppliers on Zcash, private from the public and open to the auditor.

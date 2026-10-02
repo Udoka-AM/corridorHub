@@ -1,0 +1,24 @@
+---
+title: "ADR 0004: A compensating saga, not two-phase commit"
+sidebarTitle: "0004 · Saga over 2PC"
+description: "Banks, bridges, partners and blockchains do not take part in distributed transactions, so each payment runs as durable legs with compensations, executed in reverse on failure."
+---
+
+## Context
+
+A cross-border payment moves value on a chain, through a bridge, at a partner and in a ledger. None of these will hold a lock or prepare a commit on Corridor's behalf.
+
+## Decision
+
+**Each plan runs as a saga**: durable steps in Postgres, each leg with `forward` and an optional `compensate`, retries with backoff, one worker per saga through a lease, and compensation in reverse order on failure. Failures after money has left Corridor's control stop at `manual_review` instead of compensating.
+
+## Consequences
+
+- Every intermediate state is a real state, visible in the console with its transactions.
+- Legs must be idempotent: they look for their movement by reference before sending.
+- A lease that expires mid-leg can let a slow worker finish a call; fencing tokens on bookings are on the roadmap.
+
+## Alternatives rejected
+
+- **Two-phase commit:** impossible with external parties that do not participate.
+- **Fire-and-forget with nightly repair:** leaves money in unknown states for hours, which is the failure mode this product exists to remove.

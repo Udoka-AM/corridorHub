@@ -1,0 +1,94 @@
+---
+title: "Quickstart"
+description: "Clone the repository, run the test suite, and drive live flows on Tempo Moderato, Solana devnet and Zcash testnet from the treasury console."
+icon: "terminal"
+---
+
+Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FROST signing. The ledger runs on embedded Postgres (PGlite) locally, so there is no database to install.
+
+## Prerequisites
+
+- Node.js 22 or later and pnpm 9
+- Rust stable, only for the FROST signer and the Zcash tooling
+- For the shielded lane: [`zcash-devtool`](https://github.com/zcash/zcash-devtool) built locally
+
+## Run it
+
+<Steps>
+  <Step title="Clone and install">
+    ```bash
+    git clone https://github.com/Udoka-AM/corridor.git
+    cd corridor
+    pnpm install
+    ```
+  </Step>
+  <Step title="Verify">
+    ```bash
+    pnpm typecheck
+    pnpm test
+    ```
+    The suite covers the ledger invariants, the reference codec, routing and hub enforcement, the saga engine (including forced failures and compensation order), partner adapters, webhooks, the Solana memo leg, ZIP-321 batches, NEAR quotes and vault accounting.
+  </Step>
+  <Step title="A first memo transfer on Tempo">
+    ```bash
+    pnpm tempo:smoke
+    ```
+    Generates testnet keys into `.env.local` on first run, funds them from the Moderato faucet, sends a `transferWithMemo`, finds it again by its indexed memo topic and books it exactly once.
+  </Step>
+  <Step title="Run the flows">
+    ```bash
+    pnpm payout:demo     # EUR → NGN payout, including a forced partner failure that compensates on-chain
+    pnpm importer:demo   # NGN collected into the hub, then CNY paid to a supplier
+    pnpm zcash:frost     # FROST 2-of-3 shielded batch on Zcash testnet
+    ```
+  </Step>
+  <Step title="Open the treasury console">
+    ```bash
+    pnpm console        # http://localhost:4400
+    ```
+    The console owns the local ledger. Stop CLI demos before starting it, because the embedded Postgres has a single owner.
+  </Step>
+</Steps>
+
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `pnpm tempo:smoke` | Memo transfer on Moderato, observed and booked once |
+| `pnpm payout:demo` | Public payout saga with compensation |
+| `pnpm importer:demo` | Collection then supplier payout across the hub |
+| `pnpm zcash:spike` | Single-key shielded batch with encrypted memos |
+| `pnpm zcash:frost` | Threshold-controlled shielded batch |
+| `pnpm across:testnet` | Live Across deposit on testnet (Base Sepolia → Solana devnet) |
+| `pnpm mainnet:wallets` | Generate mainnet demo wallets (keys stay local) |
+| `pnpm console` | Treasury console and JSON API |
+| `pnpm console:snapshot` | Record the running console as the static public replay |
+
+<Warning>
+Private keys are written to `.env.local` and `.keys/`, both gitignored. Never commit them. The console snapshot refuses to publish if any value from either location appears in its output.
+</Warning>
+
+## Repository layout
+
+```text
+packages/
+  core/            Venues, currencies, money, the Corridor Reference codec
+  ledger/          Double-entry ledger with invariants (PGlite / Postgres)
+  routing/         Route graph and planner, hub enforcement
+  saga/            Durable saga engine with leases and compensation
+  legs/            Leg implementations (bridge, partner, credit, shielded)
+  chain-tempo/     Tempo client, memo transfers, observer
+  chain-solana/    USDC + SPL Memo transfers, observer
+  chain-zcash/     zcash-devtool wallet, ZIP-321, FROST orchestration
+  bridge-across/   Across Swap API: quote, execute, fill tracking
+  swap-near/       NEAR Intents 1Click quotes and status
+  partners/        RampPartner interface, Paj adapter, mock partner
+  webhooks/        Signed partner webhook ingest
+  recon/           Reconciliation and vault accounting
+services/
+  zcash-frost/     corridor-frost: FROST(RedPallas) keygen and signing (Rust)
+apps/
+  console/         Treasury console
+  site/            Public website and console replay
+  docs/            This documentation
+```

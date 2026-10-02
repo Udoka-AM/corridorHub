@@ -1,0 +1,51 @@
+---
+title: "Solana: ramp liquidity"
+description: "How Corridor funds and receives from ramp partners on Solana: USDC TransferChecked plus an SPL Memo carrying the Corridor Reference in one transaction, and an observer that reads it back."
+icon: "sun"
+---
+
+<img src="/images/chains/solana.svg" alt="Solana" width="56" height="56" />
+
+Solana is where most ramp partners hold USDC liquidity. Corridor keeps two vaults there: **egress** (funds partner payouts) and **ingress** (receives collections). Every transfer carries the Corridor Reference.
+
+## The transaction
+
+One `@solana/kit` transaction does three things atomically:
+
+<Steps>
+  <Step title="Create the recipient's USDC account if missing">
+    Idempotent associated-token-account creation, so a first-time partner deposit address works.
+  </Step>
+  <Step title="TransferChecked">
+    USDC from the vault to the partner's one-off funding address, amount and decimals checked by the token program.
+  </Step>
+  <Step title="SPL Memo">
+    `corridor:<hex>`: the 32-byte reference as hex, logged by the Memo program.
+  </Step>
+</Steps>
+
+```ts
+const vault = new SolanaVault(signer, "devnet");
+const signature = await vault.transferWithReference({
+  toOwner: fundingAddress,      // partner's one-off deposit address
+  amount: 2_000_000n,           // 2 USDC (6 decimals)
+  reference: ref,
+});
+```
+
+## Reading it back
+
+RPC signature lists expose each transaction's memo as `[N] corridor:<hex>`. `extractReference` pulls the reference out, so the observer can join Solana movements to ledger entries without decoding instructions.
+
+## Environments
+
+| Cluster | RPC | USDC mint |
+|---|---|---|
+| Mainnet | `api.mainnet-beta.solana.com` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| Devnet | `api.devnet.solana.com` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+
+## Evidence
+
+Partner funding for a EUR → NGN payout on devnet, with the reference in the Memo program logs: [nDGHfRgM…](https://explorer.solana.com/tx/nDGHfRgMgK1Xc8gjE3bqUvgfp5qP13HnP6nTtLQGBSqaLLtdDfg2nXYPEzbHfcwpYjv1xQFedMcRh3KkJyRZicH?cluster=devnet).
+
+When the devnet vault holds USDC, the runtime funds the mock partner with a real transfer; otherwise it records a clearly marked simulated funding reference, so a demo never pretends a transfer happened.

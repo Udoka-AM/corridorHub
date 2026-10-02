@@ -1,0 +1,81 @@
+---
+title: "Partner interface"
+description: "How a ramp or payout provider becomes a spoke: six methods, a normalised order lifecycle and a signed webhook. One integration reaches every customer and every other region."
+icon: "plug"
+---
+
+A partner is a spoke. Implement this interface once and every customer on Corridor can collect from or pay out to your currencies, and every other region can reach them through the hub.
+
+## The interface
+
+```ts
+interface RampPartner {
+  readonly id: string;
+  readonly payoutCurrencies: readonly Fiat[];
+  readonly collectionCurrencies: readonly Fiat[];
+  readonly chains: readonly ("SOLANA" | "BASE")[];
+
+  rates(currency: Fiat): Promise<Rates>;
+  openPayout(req: PayoutRequest): Promise<PartnerOrder>;          // offramp
+  openCollection(req: CollectionRequest): Promise<PartnerOrder>;  // onramp
+  getOrder(id: string): Promise<PartnerOrder>;
+
+  verifyWebhook(rawBody: string, headers: Record<string, string | undefined>, now?: Date): boolean;
+  parseWebhook(rawBody: string): PartnerOrder;
+}
+```
+
+## The order
+
+Every provider is normalised to one lifecycle: `open → processing → completed | failed`.
+
+<ResponseField name="PartnerOrder" type="object">
+  <Expandable title="fields">
+    <ResponseField name="id" type="string">The partner's order id.</ResponseField>
+    <ResponseField name="kind" type="'payout' | 'collection'" />
+    <ResponseField name="status" type="'open' | 'processing' | 'completed' | 'failed'" />
+    <ResponseField name="partnerStatus" type="string">The partner's own status string, kept for audit.</ResponseField>
+    <ResponseField name="chain" type="'SOLANA' | 'BASE'" />
+    <ResponseField name="currency" type="Fiat" />
+    <ResponseField name="usdcAmount" type="bigint">USDC in base units (6 decimals).</ResponseField>
+    <ResponseField name="fiatAmount" type="bigint">Local currency in minor units.</ResponseField>
+    <ResponseField name="rate" type="number">Local currency per USD at pricing time.</ResponseField>
+    <ResponseField name="fundingAddress" type="string">Payout: where to send USDC. One-off, valid only for this order.</ResponseField>
+    <ResponseField name="virtualAccount" type="object">Collection: the bank account the payer sends local currency to.</ResponseField>
+    <ResponseField name="txSignature" type="string">On-chain signature of the partner's leg, when known.</ResponseField>
+    <ResponseField name="reference" type="Hex">The Corridor Reference echoed back from a free-text field.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Requirements
+
+<Steps>
+  <Step title="Settle in USDC on Solana or Base">
+    Corridor funds payouts and receives collections in USDC on the chain you name.
+  </Step>
+  <Step title="One-off addresses">
+    A fresh funding address per payout (or a deposit memo) and a fresh virtual account per collection, so every movement maps to exactly one order.
+  </Step>
+  <Step title="Echo the reference">
+    Carry the 32-byte Corridor Reference in a free-text field and return it on webhooks.
+  </Step>
+  <Step title="Signed webhooks">
+    HMAC over a timestamp and the raw body, verified in constant time within a 5-minute window. Paj's scheme works as-is.
+  </Step>
+</Steps>
+
+## How Corridor uses it
+
+- A `PartnerRegistry` picks the partner per (currency, direction, chain).
+- **Exactly-once funding:** the payout leg records the order and the funding transaction durably, so retries reuse them.
+- **Failure after funding** stops at `manual_review`; Corridor never unwinds its own books while the money is at the partner.
+- Each completed order becomes an `Observation` (`partner_fiat`, `${partner}:${orderId}`) for [reconciliation](/architecture/reconciliation).
+
+## Candidate partners
+
+| Region | Candidates |
+|---|---|
+| Africa | Paj, FossaPay, Yellow Card, Kotani Pay, Bitnob, HoneyCoin, Busha |
+| China, Hong Kong, Asia | Licensed Hong Kong payment institutions, Nium, Conduit |
+| Americas | Bridge, Bitso Business, Pix partners, Conduit |
+| Global aggregators | BVNK, Conduit, Nium |

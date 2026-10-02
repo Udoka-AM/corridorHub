@@ -1,0 +1,63 @@
+---
+title: "What Corridor is"
+description: "The product, who it serves, what it replaces, and an exact account of what runs live today versus what is simulated."
+icon: "info"
+---
+
+## The product in one paragraph
+
+Corridor gives a licensed payment company a **single stablecoin treasury on Tempo** that funds every corridor it serves. Money comes in through local ramp partners (collections), sits as pathUSD on the Tempo hub, and goes out to the rail that pays the beneficiary: a Nigerian bank account, a Hong Kong supplier account, Pix in Brazil, or a shielded Zcash address (payouts). Each movement carries a 32-byte **Corridor Reference** in the native memo field of every chain it touches, so the ledger, the chains and the partners reconcile automatically.
+
+## Who it serves
+
+<CardGroup cols={2}>
+  <Card title="Remittance and payout operators" icon="send">
+    Diaspora and B2B payouts into Africa (EUR, GBP, USD → NGN, KES, GHS) without pre-funded nostro accounts in each country.
+  </Card>
+  <Card title="Importers and their PSPs" icon="ship">
+    African businesses paying suppliers in China, Hong Kong, India, the UAE and the Americas, with the option to keep supplier prices off public chains.
+  </Card>
+  <Card title="Ramps and payout partners" icon="plug">
+    Local liquidity providers become a spoke: one integration reaches every customer and every other region on the network.
+  </Card>
+  <Card title="Treasury and finance teams" icon="landmark">
+    One balance per corridor, a 7-day pre-funding forecast, three-way reconciliation and auditor disclosures from a single console.
+  </Card>
+</CardGroup>
+
+## What it replaces
+
+| Today | With Corridor |
+|---|---|
+| Fiat pre-funded in a bank account in every country | One pathUSD balance on Tempo, topped up when the forecast says so |
+| T+1 to T+3 through correspondent banks | 0.6 s finality on the hub; minutes end to end through partners |
+| A new banking setup per corridor (N×N) | One partner per region; every spoke reaches every spoke (N) |
+| Spreadsheets and statement matching | Automatic matching on a reference carried in every chain's memo |
+| Supplier prices visible on public chains | Shielded batches on Zcash, with a viewing key scoped to one customer and period |
+
+## What Corridor is not
+
+- **Not a money transmitter.** The licensed customer holds the FX permissions, the KYC and the end-customer relationship. For outbound flows from regulated markets (for example Form M for Nigerian imports), Corridor carries the compliance references in the saga data and produces the reconciliation trail as audit evidence.
+- **Not a wallet or an exchange.** Customers do not trade on Corridor; it settles and reconciles their payments.
+- **Not a new chain.** Corridor composes existing chains, each for the job it does best: Tempo for settlement, Solana and Base for partner liquidity, Zcash for privacy.
+
+## Live, simulated, and next
+
+This is an honest account of the build on 2 October 2026. Reviewers can verify every "live" row on-chain from [Evidence](/status/evidence).
+
+| Capability | State | Detail |
+|---|---|---|
+| Tempo settlement with memo references | **Live (testnet)** | `transferWithMemo` on Moderato, found by indexed memo topic, booked exactly once |
+| Settlement saga with on-chain compensation | **Live (testnet)** | Forced partner failures refunded on Tempo in reverse order |
+| Hub-and-spoke routing to 32 currencies | **Live** | Planner enforces the hub; tested |
+| Solana partner funding with SPL memo | **Live (devnet)** | Real USDC transfer with `corridor:<ref>` memo |
+| Paj partner adapter (API v2) and signed webhooks | **Built** | Exercised against a Paj-shaped mock with the same HMAC scheme |
+| Shielded batches on Zcash Ironwood | **Live (testnet)** | One transaction, three recipients, encrypted invoice memos |
+| FROST 2-of-3 vault control | **Live (testnet)** | Signer 2 alone refused; signers 1 + 3 co-signed |
+| NEAR Intents pricing for USD → ZEC | **Live quotes** | Mainnet 1Click quotes; testnet delivery is real testnet ZEC |
+| Across bridge Tempo → Base → Solana | **Built, mainnet pending** | Live quotes verified; testnet has no Tempo deployment, so the testnet route uses a simulated fill with the same interface |
+| Partner fiat leg | **Simulated** | Mock partner with Paj's lifecycle; production needs a Paj business key |
+
+<Warning>
+The demo runs on testnets. Moving to mainnet needs a small funded float (tens of dollars) and a Paj business API key; no code changes. See [Roadmap](/status/roadmap).
+</Warning>

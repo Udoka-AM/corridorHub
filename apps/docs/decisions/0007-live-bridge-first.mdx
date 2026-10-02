@@ -1,0 +1,24 @@
+---
+title: "ADR 0007: Live bridge first, simulation as a labelled fallback"
+sidebarTitle: "0007 · Live bridge first"
+description: "Corridor integrates the live Across bridge and uses a simulated adapter with the same interface only where Across has no deployment, always labelled as simulated."
+---
+
+## Context
+
+Across supports Tempo mainnet but has no Tempo testnet deployment. A demo on Moderato cannot bridge Tempo value through Across.
+
+## Decision
+
+**Build against the live Across Swap API**, verified with live mainnet quotes, and use `bridge.simulated`, which has the same interface, only on testnet. The simulated leg moves real pathUSD on Tempo to an escrow with the reference as memo and simulates only the far side, and its bookings are marked `simulated`.
+
+## Consequences
+
+- Mainnet needs no code change: the planner selects `across.bridge` edges in the mainnet environment.
+- The testnet demo shows real Tempo movements and real compensation refunds.
+- A live Across testnet deposit (Base Sepolia → Solana devnet) completed CCTP attestation but stalled on Across's testnet relayer; this is recorded, not hidden.
+
+## Alternatives rejected
+
+- **Simulate everything:** no evidence the integration works.
+- **Delay the demo for mainnet funds:** blocks every other lane on one dependency.

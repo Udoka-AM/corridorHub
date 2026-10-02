@@ -1,0 +1,78 @@
+---
+title: "Saga engine"
+description: "Durable, lease-guarded execution of route plans: idempotent legs, retries with backoff, reverse-order compensation, and a manual-review stop for failures after money has left Corridor's control."
+icon: "workflow"
+---
+
+Banks and blockchains do not take part in distributed transactions, so a cross-border payment cannot be one atomic commit. Corridor runs each plan as a **saga**: a sequence of legs, each with a compensating action, persisted in Postgres so it survives crashes. See [ADR 0004](/decisions/0004-saga-over-two-phase-commit).
+
+<Frame caption="Fig. 07 · Forward legs, a failure at the partner, and compensation in reverse order with an on-chain refund.">
+  <img className="block dark:hidden" src="/images/diagrams/saga-compensation-light.svg" alt="Saga forward steps and reverse compensation" />
+  <img className="hidden dark:block" src="/images/diagrams/saga-compensation-dark.svg" alt="Saga forward steps and reverse compensation" />
+</Frame>
+
+## The leg contract
+
+```ts
+interface Leg<D> {
+  kind: LegKind;
+  forward(ctx: LegContext<D>): Promise<LegOutcome>;
+  compensate?(ctx: LegContext<D>, output: Json): Promise<LegOutcome>;  // omit if nothing to undo
+  maxAttempts?: number;
+  backoffMs?: number;
+}
+
+interface LegOutcome {
+  output: Json;              // stored on the step; passed to later steps and to compensate()
+  bookings?: EntryInput[];   // posted to the ledger after the leg succeeds
+}
+```
+
+Every call gets an `idempotencyKey` of `${sagaId}:${stepIndex}`. Bookings without an external reference are keyed on it, so re-running a step never double-books. Legs that move money first look for the movement by its Corridor Reference, so a retry after a crash between "sent" and "recorded" finds the transfer instead of sending it again.
+
+## State
+
+```sql
+sagas       (id, kind, reference, status, input, lease_owner, lease_until)
+saga_steps  (saga_id, idx, kind, status, attempts, output, error)
+saga_events (saga_id, idx, event, detail, at)       -- the audit trail shown in the console
+```
+
+```mermaid
+stateDiagram-v2
+  [*] --> running
+  running --> completed: all steps done
+  running --> compensating: step failed after retries
+  compensating --> compensated: completed steps undone in reverse
+  running --> manual_review: ManualReviewError
+  compensating --> manual_review: compensation failed
+```
+
+## Failure semantics
+
+<AccordionGroup>
+  <Accordion title="Retryable errors" icon="rotate-ccw">
+    The step is retried up to `maxAttempts` with backoff. Network errors and RPC timeouts land here.
+  </Accordion>
+  <Accordion title="NonRetryableError" icon="circle-x">
+    The step fails at once (a validation that a retry cannot change), and the saga compensates.
+  </Accordion>
+  <Accordion title="Compensation, in reverse order" icon="undo-2">
+    Completed steps are undone from last to first, each through its own `compensate` with its own bookings. Order matters: unwinding out of order can leave a balanced ledger with a false audit trail. A forced partner failure on testnet refunds the Tempo leg on-chain and reverses every booking.
+  </Accordion>
+  <Accordion title="ManualReviewError" icon="hand">
+    No retries and no automatic compensation. Used when money has already left Corridor's control, for example a partner rejecting a payout it was already funded for. Undoing earlier legs would be wrong until the partner's refund is confirmed, so a human closes it.
+  </Accordion>
+</AccordionGroup>
+
+## Leases
+
+A saga is driven by one worker at a time. `run()` takes a lease (`lease_owner`, `lease_until`, default 120 s) with a conditional update; another live worker that tries gets the current status back without doing work. If a worker dies, its lease expires and any worker can resume from the last durable step.
+
+<Warning>
+A worker whose lease expired mid-leg could still finish its call. Legs are idempotent through the memo lookup, so the chain is never double-spent, but fencing tokens on bookings are on the [roadmap](/status/roadmap) to make this airtight.
+</Warning>
+
+## Fault injection
+
+`SagaInput.faults.failAt` makes a chosen leg kind fail, which is how the demos prove compensation on-chain. The console button "Payout with partner failure" uses it; see [Failure and compensation](/flows/failure-and-compensation).

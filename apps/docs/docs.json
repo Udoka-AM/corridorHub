@@ -1,0 +1,214 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "Corridor",
+  "description": "The settlement hub for money moving into and out of Africa: stablecoin treasury on Tempo, payouts across four regions, and private supplier payments on Zcash.",
+  "colors": {
+    "primary": "#050505",
+    "light": "#F4F4F0",
+    "dark": "#050505"
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "fonts": {
+    "heading": {
+      "family": "Space Mono",
+      "weight": 700
+    },
+    "body": {
+      "family": "Space Mono",
+      "weight": 400
+    }
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "https://udoka-am.github.io/corridor/"
+  },
+  "favicon": "/favicon.svg",
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": "dark"
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude"
+    ]
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Live console",
+        "href": "https://udoka-am.github.io/corridor/console/"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/Udoka-AM/corridor"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Website",
+      "href": "https://udoka-am.github.io/corridor/"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Overview",
+        "icon": "compass",
+        "groups": [
+          {
+            "group": "Start here",
+            "pages": [
+              "index",
+              "start/what-corridor-is",
+              "start/reading-paths",
+              "start/quickstart"
+            ]
+          },
+          {
+            "group": "The opportunity",
+            "pages": [
+              "market/the-problem",
+              "market/africa-stablecoin-flows",
+              "market/business-model"
+            ]
+          },
+          {
+            "group": "Status",
+            "pages": [
+              "status/evidence",
+              "status/roadmap"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Architecture",
+        "icon": "layers",
+        "groups": [
+          {
+            "group": "System",
+            "pages": [
+              "architecture/overview",
+              "architecture/hub-and-spoke",
+              "architecture/core-model",
+              "architecture/corridor-reference"
+            ]
+          },
+          {
+            "group": "Engines",
+            "pages": [
+              "architecture/ledger",
+              "architecture/routing",
+              "architecture/saga",
+              "architecture/reconciliation"
+            ]
+          },
+          {
+            "group": "Operations",
+            "pages": [
+              "architecture/treasury-console",
+              "architecture/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Chains & partners",
+        "icon": "network",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "integrations/overview"
+            ]
+          },
+          {
+            "group": "Settlement hub",
+            "pages": [
+              "integrations/tempo"
+            ]
+          },
+          {
+            "group": "Bridging",
+            "pages": [
+              "integrations/across",
+              "integrations/base"
+            ]
+          },
+          {
+            "group": "Liquidity spokes",
+            "pages": [
+              "integrations/solana",
+              "integrations/paj",
+              "integrations/partner-interface"
+            ]
+          },
+          {
+            "group": "Shielded lane",
+            "pages": [
+              "integrations/zcash",
+              "integrations/frost",
+              "integrations/near-intents"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Flows",
+        "icon": "route",
+        "groups": [
+          {
+            "group": "End-to-end walkthroughs",
+            "pages": [
+              "flows/payout-eur-ngn",
+              "flows/importer-ngn-cny",
+              "flows/shielded-supplier-batch",
+              "flows/failure-and-compensation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Decisions",
+        "icon": "scale",
+        "groups": [
+          {
+            "group": "Architecture decision records",
+            "pages": [
+              "decisions/index",
+              "decisions/0001-pathusd-settlement-unit",
+              "decisions/0002-hub-enforced-by-planner",
+              "decisions/0003-reference-in-native-memo",
+              "decisions/0004-saga-over-two-phase-commit",
+              "decisions/0005-privacy-as-a-venue",
+              "decisions/0006-frost-threshold-vaults",
+              "decisions/0007-live-bridge-first",
+              "decisions/0008-book-from-the-chain"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/Udoka-AM/corridor"
+    }
+  },
+  "background": {
+    "color": {
+      "light": "#F4F4F0",
+      "dark": "#050505"
+    }
+  }
+}

@@ -1,0 +1,58 @@
+---
+title: "Roadmap"
+description: "From testnet to production: the mainnet run, design partners, hardening, and the production custody and signing model."
+icon: "milestone"
+---
+
+## Now: testnet complete
+
+Every lane runs end to end on testnets through one ledger, one saga engine and one reconciliation engine. See [Evidence](/status/evidence).
+
+## Next: mainnet
+
+<Steps>
+  <Step title="Mainnet float">
+    Fund the generated mainnet wallets (Tempo vault, Base relay, Solana vault) with a small USDC float. Keys are generated locally by `pnpm mainnet:wallets` and never leave the machine.
+  </Step>
+  <Step title="Live bridge leg">
+    Run `across.bridge` Tempo → Base on mainnet with micro-amounts. Quotes are already verified live; the adapter is the same code on testnet and mainnet.
+  </Step>
+  <Step title="Live partner leg">
+    A Paj business API key turns the Paj adapter on. Paj settles on Base, so a naira payout is one Across hop: Tempo → Base → Paj → Nigerian bank.
+  </Step>
+  <Step title="Mainnet shielded funding">
+    `near.swap` from Base USDC to ZEC through NEAR Intents, delivered straight to the vault's unified address (NEAR Intents has no Tempo market).
+  </Step>
+</Steps>
+
+## Then: design partners
+
+- EUR → NGN with licensed payout companies first, then KES and GHS.
+- NGN → CNY / HKD for importers on the same integration.
+- Additional spokes per region: candidates include Yellow Card, Kotani Pay, Bitnob, HoneyCoin and Busha in Africa; licensed Hong Kong payment institutions, Nium and Conduit for Asia; Bridge, Bitso Business and Pix partners for the Americas.
+
+## Production hardening
+
+| Area | Today | Production |
+|---|---|---|
+| Ledger | PGlite (embedded Postgres) | Managed Postgres, same schema and triggers |
+| Custody | Locally generated keys in `.env.local` / `.keys/` | KMS-wrapped keys or MPC per vault |
+| FROST | Trusted-dealer keygen; both rounds in one process | Distributed key generation; each signer on their own device relaying through `frostd` |
+| Console | Local, unauthenticated actions | Authenticated, role-based, with the disclosure and action endpoints behind auth |
+| Saga leases | Lease-based exclusivity | Fencing tokens on bookings, so an expired worker can never commit |
+| Gas accounting | Tempo gas booked from the chain | Solana and Base fees booked the same way |
+| Zcash stack | `zcash-devtool` | Z3 node stack and Zallet |
+
+## Known gaps
+
+<AccordionGroup>
+  <Accordion title="Solana and Base gas are not booked yet">
+    Tempo vault gas is booked from the chain (each fee is a TIP-20 transfer to the Fee Manager). SOL and Base ETH fees on the egress and relay wallets are not yet observed and booked.
+  </Accordion>
+  <Accordion title="Lease fencing">
+    A worker whose lease expired mid-leg could still finish its call. Legs are idempotent through the memo lookup, so the chain is never double-spent, but a fencing token on bookings would make this airtight.
+  </Accordion>
+  <Accordion title="Across testnet">
+    Across has no Tempo testnet deployment, and its testnet CCTP relayer did not complete a Base Sepolia → Solana devnet mint. Testnet uses a simulated fill with the same interface; mainnet uses the live bridge.
+  </Accordion>
+</AccordionGroup>

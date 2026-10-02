@@ -1,0 +1,88 @@
+---
+title: "Reading paths"
+description: "Four curated routes through the documentation: for investors, for CTOs and engineers, for chain ecosystem teams, and for liquidity partners."
+icon: "map"
+---
+
+Pick the route that matches what you need to decide. Each takes 15 to 30 minutes.
+
+<Tabs>
+  <Tab title="Investors">
+    You want to know whether the market is real, whether the business earns, and whether the team can build it.
+
+    <Steps>
+      <Step title="The problem">
+        [Why corridors cost so much](/market/the-problem): trapped capital, slow rails and manual reconciliation.
+      </Step>
+      <Step title="The market">
+        [Africa's stablecoin flows](/market/africa-stablecoin-flows): $653B moved on-chain in Sub-Saharan Africa in five years, 43% of it in stablecoins.
+      </Step>
+      <Step title="The business">
+        [Business model](/market/business-model): a 0.30% all-in take, four revenue lines, and revenue at different market shares.
+      </Step>
+      <Step title="The proof">
+        [Evidence](/status/evidence): every testnet transaction, and the [live console replay](https://udoka-am.github.io/corridor/console/).
+      </Step>
+      <Step title="What's next">
+        [Roadmap](/status/roadmap): mainnet, design partners and the path to production.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="CTOs and engineers">
+    You want to know whether the system is correct under failure, and how hard it would be to run.
+
+    <Steps>
+      <Step title="System overview">
+        [Architecture overview](/architecture/overview) and the [core model](/architecture/core-model).
+      </Step>
+      <Step title="Money correctness">
+        [Ledger](/architecture/ledger): double-entry, append-only, exactly-once external references, no-overdraft invariants.
+      </Step>
+      <Step title="Failure handling">
+        [Saga engine](/architecture/saga) and [failure and compensation](/flows/failure-and-compensation).
+      </Step>
+      <Step title="Completeness">
+        [Reconciliation](/architecture/reconciliation): three venues, one matcher, and a vault balance check that books gas from the chain.
+      </Step>
+      <Step title="Why it is built this way">
+        The [architecture decision records](/decisions/index).
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Chain teams">
+    You want to know how Corridor uses your chain, and whether it uses it well.
+
+    <CardGroup cols={2}>
+      <Card title="Tempo" img="/images/chains/tempo.svg" href="/integrations/tempo">
+        The hub: TIP-20 memos, pathUSD, stablecoin gas via the Fee Manager.
+      </Card>
+      <Card title="Solana" img="/images/chains/solana.svg" href="/integrations/solana">
+        Partner liquidity: USDC with SPL Memo in one transaction.
+      </Card>
+      <Card title="Zcash" img="/images/chains/zcash.svg" href="/integrations/zcash">
+        The shielded lane: Ironwood batches, encrypted memos, scoped viewing keys.
+      </Card>
+      <Card title="Base and Across" img="/images/chains/base.svg" href="/integrations/across">
+        Two-hop bridging out of the hub, and direct partner payouts on Base.
+      </Card>
+    </CardGroup>
+  </Tab>
+  <Tab title="Partners">
+    You run a ramp or a payout rail and want to know what it takes to become a spoke.
+
+    <Steps>
+      <Step title="The network">
+        [Hub and spoke](/architecture/hub-and-spoke): why one integration reaches every region.
+      </Step>
+      <Step title="The interface">
+        [Partner interface](/integrations/partner-interface): six methods and a signed webhook.
+      </Step>
+      <Step title="A reference implementation">
+        [Paj](/integrations/paj): offramp, onramp and webhooks against Paj's public API v2.
+      </Step>
+      <Step title="A full payout">
+        [Payout EUR → NGN](/flows/payout-eur-ngn), end to end.
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>

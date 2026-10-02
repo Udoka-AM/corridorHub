@@ -1,0 +1,83 @@
+---
+title: "Zcash: the shielded lane"
+description: "Private supplier payments that stay auditable: per-customer, per-period vaults in the Ironwood pool, one shielded transaction per batch, encrypted invoice memos, and viewing keys scoped to exactly one vault."
+icon: "shield"
+---
+
+<img src="/images/chains/zcash.svg" alt="Zcash" width="56" height="56" />
+
+On a public chain, every supplier price and every salary is visible to competitors. Importers will not put that on a block explorer. Corridor's shielded lane pays through **Zcash's Ironwood pool**: private from the public, open to the auditor.
+
+<Frame caption="Fig. 06 · The shielded lane: funded from the hub, held for 2-of-3 FROST approval, one Ironwood transaction, read by the auditor with a viewing key.">
+  <img className="block dark:hidden" src="/images/diagrams/shielded-lane-light.svg" alt="Shielded lane through NEAR Intents into a FROST vault and out to suppliers" />
+  <img className="hidden dark:block" src="/images/diagrams/shielded-lane-dark.svg" alt="Shielded lane through NEAR Intents into a FROST vault and out to suppliers" />
+</Frame>
+
+## What each party sees
+
+| Party | Sees |
+|---|---|
+| The public | One funding transfer. Nothing about who was paid or how much. |
+| Each supplier | Their own payment and an encrypted invoice memo: `INV-… / corridor:<ref>` |
+| The auditor | Exactly one vault's payouts for one period, through a read-only viewing key that cannot spend |
+| Corridor's ledger | Everything, reconciled against the same viewing-key scan the auditor can run |
+
+## Vaults
+
+Each `(customer, period)` gets its own shielded **vault**: a ZIP-32 account, or a [FROST](/integrations/frost) vault whose spend authority is split between signers. Because a viewing key is per vault, disclosing one customer's October payments reveals nothing about any other customer, any other period, or the treasury.
+
+## A batch is one transaction
+
+<Steps>
+  <Step title="Payment request">
+    The recipients, amounts and memos become a **ZIP-321** payment request URI.
+  </Step>
+  <Step title="Build">
+    `zcash-devtool pczt create --payment-uri …` builds **one shielded transaction with N outputs** as an unsigned PCZT (partially constructed Zcash transaction). Each output carries a **ZIP-302** text memo, encrypted to its recipient.
+  </Step>
+  <Step title="Prove">
+    `pczt prove` adds the zero-knowledge proofs.
+  </Step>
+  <Step title="Authorize">
+    A single-key vault signs directly. A FROST vault waits for its threshold of approvals, then `corridor-frost` co-signs.
+  </Step>
+  <Step title="Combine and send">
+    `pczt combine` merges proofs and signatures; `pczt send` broadcasts. The ZIP-317 fee is reserved from the delivered ZEC up front and booked to `expense:zcash-fees` from the mined transaction.
+  </Step>
+</Steps>
+
+## Tooling
+
+- **[zcash-devtool](https://github.com/zcash/zcash-devtool)** (librustzcash, Ironwood-aware), syncing through `testnet.zec.rocks`. Its wallet database is read read-only for observation. The production path is the Z3 node stack and Zallet.
+- Orchard has been sealed since NU6.3 (July 2026), so all new notes land in **Ironwood**.
+- Compact blocks carry no memos: after `sync`, Corridor runs `enhance` so memos are fetched and decrypted before reconciliation.
+- One small patch (`pczt create --payment-uri`) lives in `services/zcash-frost/patches/`.
+
+## Inside the saga engine
+
+The shielded lane is not a separate subsystem. The planner produces:
+
+| Environment | Route |
+|---|---|
+| Testnet | `ledger.reserve → near.swap → zcash.shieldedBatch` |
+| Mainnet | `ledger.reserve → across.bridge (Tempo→Base) → near.swap (Base USDC→ZEC) → zcash.shieldedBatch` |
+
+`zcash.shieldedBatch` splits the delivered ZEC across recipients by their USD share, builds and proves the PCZT, **opens an approval request and waits** until the vault's threshold approves, co-signs with exactly the approving signers, broadcasts, waits for mining, and books one entry per recipient output plus the fee. Each delivery and broadcast is recorded durably so it is never repeated; failures after broadcast go to `manual_review`.
+
+## Disclosure
+
+The console's **Export auditor disclosure** returns the vault's unified full viewing key, its scope, what it reveals and what it does not, and how to verify:
+
+```bash
+zcash-devtool wallet init-fvk --name audit --fvk <viewingKey> --birthday <height>
+zcash-devtool wallet sync
+zcash-devtool wallet list-tx
+```
+
+## Evidence
+
+| Run | Transaction |
+|---|---|
+| Single-key batch: 3 recipients, memos read in each wallet, auditor matched 3/3 | [de5d2562…](https://testnet.zcashexplorer.app/transactions/de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b) |
+| FROST 2-of-3 batch | [878b44b8…](https://testnet.zcashexplorer.app/transactions/878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c) |
+| Supplier batch through the saga engine, approved by signers 1 + 3 | [ba4e845b…](https://testnet.zcashexplorer.app/transactions/ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7) |

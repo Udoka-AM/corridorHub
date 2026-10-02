@@ -1,0 +1,18 @@
+---
+title: "Architecture decision records"
+description: "Every significant design choice in Corridor: the context that forced it, the decision, the consequences accepted, and the alternatives rejected."
+icon: "scale"
+---
+
+Each record states the decision and the reasoning behind it, so a reviewer can disagree with the reasoning rather than guess at it.
+
+| # | Decision | Status |
+|---|---|---|
+| [0001](/decisions/0001-pathusd-settlement-unit) | pathUSD is the settlement unit; any USD TIP-20 at the edges | Accepted |
+| [0002](/decisions/0002-hub-enforced-by-planner) | The Tempo hub is enforced by the route planner | Accepted |
+| [0003](/decisions/0003-reference-in-native-memo) | A 32-byte reference in each chain's native memo, not an indexer | Accepted |
+| [0004](/decisions/0004-saga-over-two-phase-commit) | A compensating saga rather than two-phase commit | Accepted |
+| [0005](/decisions/0005-privacy-as-a-venue) | Privacy is a venue in the route graph, not a feature flag | Accepted |
+| [0006](/decisions/0006-frost-threshold-vaults) | Shielded vaults are FROST 2-of-3, rerandomized | Accepted |
+| [0007](/decisions/0007-live-bridge-first) | Live Across first; simulation only as a labelled fallback | Accepted |
+| [0008](/decisions/0008-book-from-the-chain) | Gas, funding and deliveries are booked from what the chain shows | Accepted |

@@ -1,0 +1,85 @@
+---
+title: "Ledger"
+description: "A double-entry, append-only journal on Postgres: postings balance per asset, no-overdraft accounts cannot go negative, and every external movement is booked exactly once."
+icon: "book-open"
+---
+
+The ledger (`@corridor/ledger`) is the system of record. Chains and partners are evidence; the ledger is what Corridor says happened, and reconciliation proves the two agree.
+
+## Accounts
+
+An account is identified by its type and owner, scoped by corridor, asset and venue:
+
+```text
+{type}:{ownerType}:{ownerId}:{corridor | *}:{asset}:{venue}
+
+liability:customer:adeola-imports:NGN-CNY:pathUSD:tempo
+asset:vault:treasury:*:pathUSD:tempo
+clearing:clearing:usd-peg:*:USDC:solana
+expense:expense:gas:*:pathUSD:tempo
+```
+
+| Type | Natural balance | Used for |
+|---|---|---|
+| `asset` | Debit | Vaults: real funds Corridor controls on a venue (treasury, Solana egress/ingress, Zcash vaults) |
+| `liability` | Credit | What Corridor owes customers: available balance and funds held for in-flight payouts |
+| `clearing` | Debit | Conversions between assets (pathUSD ↔ USDC, USD ↔ ZEC). Each pair nets to zero over time |
+| `revenue` | Credit | Fees earned |
+| `expense` | Debit | Costs borne: network gas, Zcash fees |
+| `equity` | Credit | Owner funding: gas float, testnet faucet mints |
+
+Named helpers (`Accounts.customer`, `.customerHold`, `.vault`, `.clearing`, `.revenue`, `.expense`, `.equity`) open accounts on first use, so legs never build account ids by hand.
+
+## Invariants
+
+<CardGroup cols={2}>
+  <Card title="Every entry balances per asset" icon="scale">
+    The sum of debits equals the sum of credits **for each asset** in an entry. Checked before any write; an unbalanced entry never reaches the database.
+  </Card>
+  <Card title="No overdraft where it matters" icon="shield-check">
+    Vaults and customer balances are flagged `no_overdraft`. After applying postings, the natural balance of each such account is checked inside the same transaction, which rolls back on violation.
+  </Card>
+  <Card title="Exactly once per external movement" icon="fingerprint">
+    `unique (external_venue, external_ref)` on journal entries. A Tempo log, a Solana signature or a partner order id can be booked once; a second attempt returns the original entry as a duplicate.
+  </Card>
+  <Card title="Append-only" icon="lock">
+    Database triggers reject `UPDATE` and `DELETE` on the journal and postings. Mistakes are corrected with reversing entries, so the history is never rewritten.
+  </Card>
+</CardGroup>
+
+`checkInvariants()` re-verifies globally (every entry balances per asset; the balance projection equals a full recompute from postings) and runs in tests and on demand.
+
+## Schema
+
+```sql
+accounts        (id, type, owner_type, owner_id, corridor, asset, venue, no_overdraft)
+journal_entries (id, kind, saga_id, reference, external_venue, external_ref, metadata,
+                 unique (external_venue, external_ref))
+postings        (entry_id, account_id, asset, direction 'D'|'C', amount numeric(78,0) > 0)
+balances        (account_id, asset, debits, credits)   -- projection, updated in the same transaction
+```
+
+Amounts are `numeric(78,0)` integer minor units, wide enough for any 256-bit on-chain amount. Balance rows are locked in a stable order before posting, so concurrent writers cannot deadlock.
+
+## Posting
+
+```ts
+await ledger.post({
+  kind: "partner.payout",
+  reference: d.reference,               // the Corridor Reference
+  sagaId: ctx.sagaId,
+  external: { venue: "partner_fiat", ref: `paj:${orderId}` },
+  lines: [
+    { account: hold,      direction: "D", money: money("pathUSD", 5_000_000n) },
+    { account: pegTempo,  direction: "C", money: money("pathUSD", 5_000_000n) },
+    { account: pegSolana, direction: "D", money: money("USDC",    5_000_000n) },
+    { account: egress,    direction: "C", money: money("USDC",    5_000_000n) },
+  ],
+});
+```
+
+Two assets, each balanced: the customer's hold is released against the pathUSD side of the peg, and the Solana egress vault is credited against the USDC side. The `usd-peg` clearing pair nets to zero across a flow, and the console shows it doing so.
+
+## Storage
+
+Locally and in tests the ledger runs on **PGlite**, Postgres compiled to WebAssembly, so a developer needs no database server. Production uses managed Postgres with the same schema and triggers. Both satisfy the same small `Db` interface (`query`, `exec`, `transaction`).

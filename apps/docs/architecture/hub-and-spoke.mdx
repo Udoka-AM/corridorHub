@@ -1,0 +1,62 @@
+---
+title: "Hub and spoke"
+description: "Tempo is the settlement hub and every region is a spoke. Every flow is a collection into the hub or a payout out of it, which turns N×N corridors into N integrations."
+icon: "git-merge"
+---
+
+## Two primitives
+
+Every flow on Corridor is one of two things:
+
+- **Collection:** local currency comes in through a ramp partner, becomes USDC, crosses into the hub and is credited to the customer's pathUSD balance.
+- **Payout:** the customer's hub balance goes out to a spoke, either public (a partner pays local currency) or shielded (an Ironwood batch).
+
+A cross-border payment is a collection followed by a payout. The customer's balance on the hub sits between them, so the two halves can happen at different times, in different amounts, and through different partners.
+
+<Frame caption="Fig. 02 · Every flow is a collection into the Tempo hub or a payout out of it.">
+  <img className="block dark:hidden" src="/images/diagrams/hub-and-spoke-light.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
+  <img className="hidden dark:block" src="/images/diagrams/hub-and-spoke-dark.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
+</Frame>
+
+## Why a hub
+
+<CardGroup cols={2}>
+  <Card title="N, not N²" icon="network">
+    A bilateral network of six regions needs fifteen links. A hub needs six. Every partner added reaches every customer and every other region on day one.
+  </Card>
+  <Card title="One place to hold money" icon="vault">
+    Customers keep one balance instead of a float in each country. Pre-funding becomes a forecast on one number.
+  </Card>
+  <Card title="One place to reconcile" icon="scan-search">
+    Every dollar passes through the hub, so every dollar is settled, held and reconciled in one ledger and visible to treasury.
+  </Card>
+  <Card title="New corridors need no code" icon="plug-zap">
+    A corridor is just a currency pair. `GHS-HKD` works the moment a GHS collector and an HKD payer exist.
+  </Card>
+</CardGroup>
+
+## The hub is enforced
+
+The planner refuses flows that bypass the hub. This is a correctness property, tested in `routing.test.ts`, not a convention:
+
+```ts
+// packages/routing/src/index.ts
+if (purpose === "payout" && !onHub(req.source))
+  throw new NoRouteError("payouts are funded from the customer's balance on the Tempo hub");
+if (purpose === "collection" && !onHub(req.destination))
+  throw new NoRouteError("collections settle into the Tempo hub");
+```
+
+## Priority flows
+
+| Flow | Direction | Example | Payout rail |
+|---|---|---|---|
+| Diaspora and B2B payouts into Africa | Inbound | EUR/GBP/USD → NGN, KES, GHS | Local bank or mobile money |
+| Import payments to China and Hong Kong | Outbound | NGN/KES/GHS → CNY, HKD, USD | Supplier's Hong Kong or offshore USD/HKD account (onshore CNY conversion is restricted) |
+| Import payments to India, UAE, Turkey, SE Asia | Outbound | NGN → INR, AED, TRY, IDR | Local payout partners |
+| Payments to the Americas | Outbound | NGN/KES → USD, BRL, MXN | ACH/wire, Pix, SPEI |
+| Intra-African trade | Both | NGN ↔ KES, GHS, XOF | Local ramps |
+
+## Regulation of outbound flows
+
+Outbound FX from markets such as Nigeria is regulated: import payments need a Form M and must go through institutions licensed for FX. Corridor stays infrastructure. The licensed PSP or IMTO holds the FX permissions and the KYC; Corridor carries the compliance references (invoice number, Form M number) in the saga data and produces the reconciliation trail as audit evidence.

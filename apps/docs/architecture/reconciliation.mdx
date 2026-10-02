@@ -1,0 +1,72 @@
+---
+title: "Reconciliation"
+description: "Observers on every venue emit one Observation shape; a matcher joins them with ledger bookings, gas and funding are booked from the chain, and each vault's on-chain balance is checked against the books."
+icon: "scan-search"
+---
+
+Balanced books are not the same as correct books. A ledger can balance perfectly while missing a movement the chain recorded. Corridor reconciles in both directions: **is everything the chains saw booked?** and **does each vault hold what the books say?**
+
+<Frame caption="Fig. 08 · Three observers, one observation shape, one matcher, and a vault check against the chain.">
+  <img className="block dark:hidden" src="/images/diagrams/reconciliation-light.svg" alt="Reconciliation of observations against the ledger" />
+  <img className="hidden dark:block" src="/images/diagrams/reconciliation-dark.svg" alt="Reconciliation of observations against the ledger" />
+</Frame>
+
+## Observers
+
+| Venue | Observer | Observation `externalRef` |
+|---|---|---|
+| Tempo | `TempoObserver`: indexed `TransferWithMemo` logs in and out of the vaults, plus fee transfers to the Fee Manager and plain inbound transfers | `${txHash}:${logIndex}` |
+| Partners | Signed webhooks, stored once per order status | `${partner}:${orderId}` |
+| Zcash | Viewing-key scan of decrypted outputs (the vault's wallet, or an auditor's view-only wallet) | `${txid}:${pool}:${outputIndex}` |
+
+The Tempo observer resumes from a stored block cursor, so restarts neither miss nor double-count events.
+
+## Matching
+
+```ts
+const results = await reconcile(ledger, observations);
+summarize(results); // { matched, amount_mismatch, unbooked, unreferenced }
+```
+
+| Status | Meaning | Action |
+|---|---|---|
+| `matched` | Booked, same amount | None |
+| `amount_mismatch` | Booked, but the ledger amount differs from the chain | Investigate: wrong amount booked or partial fill |
+| `unbooked` | Carries a Corridor Reference but nothing was booked | Our own movement went unrecorded |
+| `unreferenced` | No reference and not booked | An unidentified deposit: never credited automatically |
+
+## Vault accounting from the chain
+
+Memo-tagged movements are booked by the legs that make them. Two kinds of movement are not, and Corridor books them from the chain:
+
+<CardGroup cols={2}>
+  <Card title="Gas" icon="fuel">
+    Tempo charges each fee as a TIP-20 transfer from the payer to the **Fee Manager** (`0xfeec…0000`). Every fee paid by a vault is booked to `expense:gas`, keyed by that log.
+  </Card>
+  <Card title="Funding" icon="banknote">
+    Deposits into a vault from an **approved funding source** (testnet faucet mints from the zero address; owner wallets on mainnet via `CORRIDOR_FUNDING_SOURCES`) are booked to `equity:owner`.
+  </Card>
+</CardGroup>
+
+Movements are processed in chain order, so a top-up is booked before the fees it pays for. Anything else without a reference stays `unreferenced`: a deposit sent without a memo may be a customer's money, so it is never credited automatically.
+
+## The vault check
+
+```ts
+const checks = await checkVaults(accounts, ledger, [{ name: "treasury", address, asset: "pathUSD", venue: "tempo", onchain }]);
+// { vault: "treasury", onchain, ledger, diff, status: "balanced" | "drift" }
+```
+
+To make the check meaningful, the console replays each vault's **whole history** from its first funded block, which it finds by bisecting historical balances (`firstFundedBlock`). On Moderato:
+
+| Treasury vault | Value |
+|---|---|
+| On-chain | 1,000,051.994555 pathUSD |
+| Ledger | 1,000,051.994555 pathUSD |
+| Difference | **0** |
+| Gas booked | 10 transactions, 0.005445 pathUSD |
+| Reconciliation | **45 / 45 matched** (Tempo 30, partners 5, Zcash 10) |
+
+## The auditor's view
+
+Because the Zcash observer only needs a viewing key, an auditor can run it independently: import the vault's unified full viewing key into a view-only wallet, sync, and reconcile the payouts it sees against the ledger. The key reveals exactly one customer's period and cannot spend.

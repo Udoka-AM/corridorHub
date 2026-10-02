@@ -1,0 +1,71 @@
+---
+title: "Chains and partners"
+description: "Each chain does the job it is best at: Tempo settles, Across bridges, Base and Solana carry partner liquidity, Zcash keeps supplier payments private, NEAR Intents funds the shielded lane."
+icon: "network"
+---
+
+Corridor does not pick one chain for everything. It composes chains by role, and every role is reconciled by the same Corridor Reference.
+
+<Frame caption="Fig. 03 · Mainnet topology: Tempo to Base through Across, then partners on Base and Solana, and NEAR Intents into Zcash.">
+  <img className="block dark:hidden" src="/images/diagrams/chain-topology-light.svg" alt="Chain topology from Tempo through Across to Base, Solana, partners and Zcash" />
+  <img className="hidden dark:block" src="/images/diagrams/chain-topology-dark.svg" alt="Chain topology from Tempo through Across to Base, Solana, partners and Zcash" />
+</Frame>
+
+<CardGroup cols={3}>
+  <Card title="Tempo" img="/images/chains/tempo.svg" href="/integrations/tempo">
+    **Settlement hub.** pathUSD balances, TIP-20 memos as indexed topics, gas in stablecoins, 0.6 s finality.
+  </Card>
+  <Card title="Across" icon="arrow-left-right" href="/integrations/across">
+    **Bridge.** Tempo ⇄ Base ⇄ Solana through the Swap API, seconds per hop, fractions of a cent.
+  </Card>
+  <Card title="Base" img="/images/chains/base.svg" href="/integrations/base">
+    **Partner payouts.** Partners that settle on Base pay naira, cedis and shillings one hop from the hub.
+  </Card>
+  <Card title="Solana" img="/images/chains/solana.svg" href="/integrations/solana">
+    **Ramp liquidity.** USDC with an SPL Memo in one transaction; the pattern ramps already read.
+  </Card>
+  <Card title="Zcash" img="/images/chains/zcash.svg" href="/integrations/zcash">
+    **Shielded lane.** Ironwood batches, encrypted invoice memos, viewing keys scoped to a customer and period.
+  </Card>
+  <Card title="NEAR Intents" img="/images/chains/near.svg" href="/integrations/near-intents">
+    **Shielded funding.** USDC → ZEC delivered straight to a vault's unified address.
+  </Card>
+</CardGroup>
+
+<CardGroup cols={3}>
+  <Card title="FROST" icon="key-round" href="/integrations/frost">
+    **Threshold control.** 2-of-3 RedPallas signing over Ironwood spends.
+  </Card>
+  <Card title="Paj" icon="banknote" href="/integrations/paj">
+    **Ramp partner.** NGN offramp and onramp against USDC on Solana and Base.
+  </Card>
+  <Card title="Partner interface" icon="plug" href="/integrations/partner-interface">
+    **Become a spoke.** Six methods and a signed webhook.
+  </Card>
+</CardGroup>
+
+## Networks and environments
+
+| Leg | Testnet (demo) | Mainnet |
+|---|---|---|
+| Tempo | Moderato, chain 42431 | Chain 4217 |
+| Across | Base Sepolia ⇄ Solana devnet (no Tempo testnet deployment) | Tempo ⇄ Base ⇄ Solana |
+| Base | Base Sepolia (84532) | Base (8453) |
+| Solana | Devnet | Mainnet |
+| Zcash | Testnet, Ironwood pool | Mainnet, Ironwood pool |
+| NEAR Intents | Live mainnet quotes; delivery is testnet ZEC | 1Click swaps from Base USDC |
+| Partner | Paj-shaped mock with the same lifecycle and signed webhooks | Paj business API |
+
+## Addresses and identifiers
+
+| Asset or contract | Value |
+|---|---|
+| Tempo pathUSD | `0x20c0000000000000000000000000000000000000` |
+| Tempo USDC.e (Stargate-bridged) | `0x20C000000000000000000000b9537d11c60E8b50` |
+| Tempo Fee Manager | `0xfeec000000000000000000000000000000000000` |
+| Base USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| Solana USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| Solana devnet USDC | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+| Across chain id for Solana | `34268394551451` |
+| NEAR Intents asset, Base USDC | `nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near` |
+| NEAR Intents asset, ZEC | `nep141:zec.omft.near` |

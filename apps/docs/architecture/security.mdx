@@ -1,0 +1,63 @@
+---
+title: "Security and key management"
+description: "How Corridor handles keys, signatures and secrets: threshold-controlled shielded vaults, signed partner webhooks, exactly-once funding, scoped disclosure, and the production custody model."
+icon: "shield-check"
+---
+
+## Principles
+
+<CardGroup cols={2}>
+  <Card title="No single key moves a shielded vault" icon="key-round">
+    Each vault's spend authority is a FROST group key split three ways. Any two of customer approver, customer finance and Corridor can sign; one alone is refused.
+  </Card>
+  <Card title="Disclosure is scoped" icon="eye">
+    A viewing key reveals one customer's vault for one period, read-only. It can verify; it cannot spend.
+  </Card>
+  <Card title="Partner input is authenticated" icon="badge-check">
+    Webhooks are HMAC-signed, time-bounded and compared in constant time. Forgeries get a 401 and change nothing.
+  </Card>
+  <Card title="Money moves exactly once" icon="fingerprint">
+    Funding, deliveries and broadcasts are recorded durably before and after they happen, so retries find them instead of repeating them.
+  </Card>
+</CardGroup>
+
+## Keys
+
+| Key | Where it lives (demo) | Production |
+|---|---|---|
+| Tempo vault, Base relay, Solana vaults | `.env.local`, `.keys/` (gitignored), generated locally | KMS-wrapped keys or MPC, per vault |
+| Corridor Reference secret (`CORRIDOR_REF_SECRET`) | `.env.local` | Secret manager; rotation by reference version |
+| FROST shares (shielded vaults) | `.keys/frost-treasury/signer-<n>.json`, one per signer | Distributed key generation; each share on its signer's device |
+| Partner API keys and webhook secrets | `.env.local` | Secret manager |
+
+Keys are never committed, printed or sent anywhere. The public console snapshot scans its output for every value in `.env.local` and every secret file under `.keys/`, and refuses to publish on a match.
+
+## Webhook verification
+
+Partner deliveries follow Paj's scheme, which Corridor also uses for its own mock partner:
+
+```text
+X-PAJ-Timestamp: <unix seconds>
+X-PAJ-Signature: v1=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>
+```
+
+- The timestamp must be within **5 minutes**.
+- The `v1=` value is compared in constant time (`timingSafeEqual`); during a secret rotation a header may carry several schemes, and any valid `v1` passes.
+- Each order status is stored **once**; redeliveries are acknowledged without effect.
+
+## Exactly-once funding
+
+A partner payout records its partner order and the funding transaction (`partner_order_links`) durably. If a worker crashes after opening an order, the retry reuses it; if it crashes after funding, the retry sees the funding reference and does not send again. A partner failure **after** funding stops at `manual_review`, because the money is at the partner until its refund is confirmed.
+
+## Shielded vault signing
+
+`corridor-frost` only signs spends that belong to its vault. For each unsigned Ironwood action in a PCZT it checks that the randomized key `rk` equals `ak + [alpha]G` for the vault's group key `ak`, then runs both FROST rounds **rerandomized by alpha**, aggregates, and verifies the RedPallas signature against `rk` before applying it. A signer set below the threshold is refused. See [FROST](/integrations/frost).
+
+## Hackathon scope versus production
+
+| Area | Demo | Production |
+|---|---|---|
+| FROST keygen | Trusted dealer | Distributed key generation |
+| FROST rounds | Both rounds in one process over separate share files | Each signer on their own device, relaying through `frostd` |
+| Console | Local, unauthenticated | Authenticated, role-based approvals and disclosures |
+| Ledger | PGlite | Managed Postgres with the same triggers |

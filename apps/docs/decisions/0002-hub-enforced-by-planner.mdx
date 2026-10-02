@@ -1,0 +1,23 @@
+---
+title: "ADR 0002: The hub is enforced by the planner"
+sidebarTitle: "0002 · Hub enforced"
+description: "Every payout is funded from the Tempo hub and every collection lands on it. The route planner rejects anything else."
+---
+
+## Context
+
+A network of bilateral corridors grows as N×N: every new region needs a link to every other. Treasury, reconciliation and visibility fragment the same way.
+
+## Decision
+
+**Tempo is the hub, enforced in code.** `planRoute` throws `NoRouteError` for a payout not funded from the hub or a collection that does not land on it. A corridor is just a currency pair, and the reference encodes the pair, so new corridors need no registry change.
+
+## Consequences
+
+- N integrations instead of N×N: each new partner reaches every customer and region on day one.
+- Every dollar is settled, held and reconciled in one ledger, visible to treasury in one place.
+- Some routes take an extra hop compared with a direct bridge (for example NGN → CNY crosses the hub). The cost is seconds and fractions of a cent per hop; the benefit is one balance and one set of books.
+
+## Alternatives rejected
+
+- **Direct spoke-to-spoke routes when cheaper:** saves a hop, loses the single treasury and the single reconciliation point, which are the product.

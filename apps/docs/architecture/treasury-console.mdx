@@ -1,0 +1,49 @@
+---
+title: "Treasury console"
+description: "The operator's view of the network: hub balances, venues, sagas with explorer links, pre-funding forecast, reconciliation, shielded batches with FROST approvals, and auditor disclosures."
+icon: "layout-dashboard"
+---
+
+<Frame caption="The settlement timeline: every saga, every step, and the transaction behind it.">
+  <img src="/images/product/console-timeline.jpg" alt="Settlement timeline in the treasury console" />
+</Frame>
+
+The console (`apps/console`) is one Node process that owns the ledger and the runtime (Tempo vaults, partner webhooks, saga engine), serves a JSON API and the dashboard, and runs flows on request.
+
+```bash
+pnpm console    # http://localhost:4400
+```
+
+A public, read-only replay recorded from live testnet runs is at [udoka-am.github.io/corridor/console](https://udoka-am.github.io/corridor/console/).
+
+## Panels
+
+| Panel | What it shows | API |
+|---|---|---|
+| KPIs | Hub balances, in flight, settled via partners, saga outcomes, reconciliation rate | `GET /api/overview` |
+| Settlement network | The hub-and-spoke map with live planned routes per corridor and environment | `GET /api/network` |
+| Run a flow | One-click live flows: EUR→NGN payout, payout with forced partner failure, importer ₦→¥, three suppliers paid privately | `POST /api/actions/*` |
+| Settlement timeline | Every saga: steps, status, attempts, FX, and explorer links for each on-chain step | `GET /api/sagas` |
+| Corridor board | Available and held balances per customer and corridor | `GET /api/overview` |
+| Pre-funding forecast | Daily outflow, runway in days and the 7-day top-up per customer | `GET /api/forecast` |
+| Venue balances | Vaults and clearing accounts per venue, with clearing pairs netting to zero | `GET /api/overview` |
+| Reconciliation | Matched / mismatch / unbooked / unreferenced, the vault check and booked gas | `GET /api/reconciliation` |
+| Shielded lane | FROST vault, Ironwood batches with encrypted invoice memos, approval requests | `GET /api/shielded`, `GET/POST /api/approvals` |
+| Disclosures | Export a vault's viewing key with its scope, what it reveals and how to verify | `POST /api/disclosures` |
+
+## FROST approvals
+
+A shielded batch does not broadcast until enough signers approve. The console shows each pending batch with its recipients, USD and ZEC totals and invoice references, and one button per signer (customer approver, customer finance, Corridor). Once the threshold is met, the saga resumes and `corridor-frost` co-signs with exactly the approving signers.
+
+## The public replay
+
+`pnpm console:snapshot` records every API response from a running console into `apps/site/public/console/`, next to the console page in replay mode:
+
+- Data comes from recorded JSON; no action can move funds.
+- Each flow button opens the recorded run of that flow with its explorer links.
+- The disclosure button exports the recorded testnet viewing key, so anyone can verify the shielded payouts independently.
+- **The snapshot refuses to publish** if any value from `.env.local` or any secret file under `.keys/` appears in the recorded data.
+
+<Warning>
+The local console is unauthenticated by design for the demo. Its action, approval and disclosure endpoints must sit behind authentication and role checks before any hosted deployment.
+</Warning>

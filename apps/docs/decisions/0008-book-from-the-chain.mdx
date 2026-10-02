@@ -1,0 +1,25 @@
+---
+title: "ADR 0008: Book from the chain"
+sidebarTitle: "0008 · Book from the chain"
+description: "Gas, owner funding and shielded deliveries are booked against the log or output that proves them, so a vault's on-chain balance always equals the ledger."
+---
+
+## Context
+
+Memo-matched reconciliation proves that every Corridor-referenced movement was booked. It does not prove completeness: fees, faucet mints and top-ups move vault balances without a reference, and a ledger that ignores them drifts from the chain while still balancing.
+
+## Decision
+
+**Book every vault movement from the chain evidence that proves it.** Tempo fees are TIP-20 transfers to the Fee Manager and are booked to `expense:gas` keyed by that log; deposits from approved funding sources are booked to `equity:owner`; Zcash deliveries are booked under the output an auditor's viewing key will see. Unidentified deposits are never credited automatically. A vault check compares on-chain balances with the ledger after replaying each vault's history from its first funded block.
+
+## Consequences
+
+- On Moderato the treasury's on-chain balance equals the ledger to the last unit, gas included.
+- Booking is idempotent: each movement is keyed by its log or output.
+- A deposit without a memo stays `unreferenced` until someone classifies it, because it may be customer money.
+- Solana and Base gas are not yet booked this way; they are on the roadmap.
+
+## Alternatives rejected
+
+- **Estimate gas from receipts at send time:** misses retries, compensations and any transaction the code did not anticipate.
+- **Periodic balance adjustments:** hide the cause of drift instead of booking it.

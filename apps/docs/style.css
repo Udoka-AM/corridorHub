@@ -1,0 +1,51 @@
+/* Corridor brand, matched to the website: Tempo black/white, Space Mono, tight display type, small radii, film grain. */
+:root {
+  --corridor-black: #050505;
+  --corridor-white: #f4f4f0;
+  --corridor-muted: #8d8d8d;
+}
+
+/* Display headings: tight tracking like the site's headlines. */
+h1, h2, #page-title {
+  letter-spacing: -0.045em;
+}
+h3, h4 {
+  letter-spacing: -0.02em;
+}
+
+/* Small radii across cards, callouts, code and frames (site: 4px controls, 8px panels, 14px large surfaces). */
+.card, [class*="callout"], .code-block, pre, [data-component-part="frame"], .frame {
+  border-radius: 8px !important;
+}
+button, .button, a[class*="button"] {
+  border-radius: 4px !important;
+}
+img[src*="/images/product/"] {
+  border-radius: 14px;
+}
+
+/* Section labels and breadcrumbs: the site's uppercase, wide-tracked label style. */
+#sidebar-title, .eyebrow, [class*="breadcrumb"] {
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  font-size: 11px;
+}
+
+/* Tables read like the site's data blocks. */
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Film grain, as on the website. Decorative and inert. */
+body::after {
+  content: "";
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+@media (prefers-reduced-motion: reduce) {
+  body::after { opacity: 0.03; }
+}
