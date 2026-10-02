@@ -65,10 +65,10 @@ export default function Proof() {
     <section className="band" ref={root} aria-label="Proof">
       <div className="marquee" aria-label="Built on Tempo, incubated by Stripe and Paradigm; settles across Solana, Base, USDC, Zcash and NEAR Intents">
         <div className="track" aria-hidden="true">
-          {loop.map(({ name, role, Icon }, i) => (
+          {loop.map(({ name, Icon }, i) => (
             <span className="item" key={i}>
               <Icon variant="mono" />
-              {name} <span className="muted">/ {role}</span>
+              {name}
             </span>
           ))}
         </div>

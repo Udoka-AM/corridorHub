@@ -242,7 +242,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .ref .f.on { color: var(--white); border-color: var(--white); }
 .refcap { margin-top: 12px; min-height: 24px; font-size: 13px; color: var(--muted); }
 .refcap b { color: var(--white); font-weight: 400; }
-.track { display: flex; flex: 1; align-items: stretch; width: max-content; }
+.journey .track { display: flex; flex: 1; align-items: stretch; width: max-content; }
 .panel { position: relative; width: min(78vw, 1040px); padding: 40px var(--gutter) 64px; display: grid; grid-template-columns: 1fr 1fr; align-items: center; gap: 40px; border-right: 1px solid var(--line); }
 .panel:first-child { padding-left: calc(var(--gutter) * 2); }
 .panel .step { font-size: 12px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
@@ -260,7 +260,7 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .panel.lit .check path { stroke-dashoffset: 0; transition: stroke-dashoffset 900ms var(--ease) 200ms; }
 @media (max-width: 900px) {
   .journey .viewport { height: auto; min-height: 0; }
-  .track { flex-direction: column; width: 100%; }
+  .journey .track { flex-direction: column; width: 100%; }
   .panel { width: 100%; grid-template-columns: 1fr; border-right: 0; border-top: 1px solid var(--line); padding: 48px var(--gutter); }
   .panel .visual { height: 260px; }
   .ref { font-size: 11px; }

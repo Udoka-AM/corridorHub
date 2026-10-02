@@ -154,9 +154,9 @@ export default function Journey() {
               <div className="routeviz" aria-hidden="true">
                 <ChainMark name="Tempo" className="chain" />
                 <span className="wire" />
-                <ChainMark name="Solana" className="chain" />
-                <span className="wire" />
                 <ChainMark name="Base" className="chain" />
+                <span className="wire" />
+                <ChainMark name="Solana" className="chain" />
               </div>
             </div>
           </article>
