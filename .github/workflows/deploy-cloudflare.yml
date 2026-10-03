@@ -1,0 +1,52 @@
+name: Deploy Corridor site to Cloudflare Pages
+
+# Keeps the landing page and console replay online when the repository is
+# private (GitHub Pages needs a paid plan for private repositories). Does
+# nothing until CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID are set as
+# repository secrets.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: corridor-cloudflare
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      PROJECT: corridor-site
+    steps:
+      - id: gate
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Cloudflare secrets not set; skipping." && echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.gate.outputs.enabled == 'true'
+        uses: actions/checkout@v5
+      - if: steps.gate.outputs.enabled == 'true'
+        uses: pnpm/action-setup@v4
+      - if: steps.gate.outputs.enabled == 'true'
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+      - if: steps.gate.outputs.enabled == 'true'
+        run: pnpm install --frozen-lockfile --filter @corridor/site...
+      - if: steps.gate.outputs.enabled == 'true'
+        run: pnpm --filter @corridor/site build
+      - if: steps.gate.outputs.enabled == 'true'
+        name: Create the Pages project on first run
+        run: npx --yes wrangler@4 pages project create "$PROJECT" --production-branch main || true
+      - if: steps.gate.outputs.enabled == 'true'
+        run: npx --yes wrangler@4 pages deploy apps/site/dist --project-name "$PROJECT" --branch main --commit-dirty=true
