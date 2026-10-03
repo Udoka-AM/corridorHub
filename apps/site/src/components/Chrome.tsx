@@ -110,7 +110,7 @@ export function Intro({ onDone }: { onDone: () => void }) {
       <div className="half top" />
       <div className="half bottom" />
       <span className="count">000</span>
-      <span className="tag label">Corridor · settlement hub</span>
+      <span className="tag label">Corridor · payment ledger</span>
       <span className="bar"><i /></span>
     </div>
   );

@@ -1,6 +1,6 @@
 # Corridor
 
-**The payment ledger and router licensed payment companies run themselves, with their own keys, for stablecoin payouts into and out of Africa.**
+**The payment ledger and router licensed payment companies run themselves, with their own keys, for cross-border stablecoin payouts. Starting with Africa's trade corridors.**
 
 A single EUR → NGN payout crosses a bank collection, stablecoin providers, several chains, a bridge, a local payout partner and the beneficiary's bank, each with its own ids. Corridor follows every payout through all of it and matches it from funding to bank credit. When it moves the money, it settles on [Tempo](https://tempo.xyz) with a 32-byte reference in every memo and pays out through partners on Solana (Paj today), signing with the customer's own KMS or MPC keys. Customers start **read-only**: Corridor watches the wallets they already run and matches their own payout records, with no keys and nothing moving. USDC, USDT, PYUSD and EURC are all first-class.
 

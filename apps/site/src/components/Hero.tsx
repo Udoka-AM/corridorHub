@@ -74,7 +74,7 @@ export default function Hero({ ready }: { ready: boolean }) {
       <div className="wrap copy">
         <Words as="h1" className="display" text={"Every payout.\nOne ledger."} />
         <p className="lede">
-          Move stablecoin payouts into and out of Africa over Tempo, and match each one from funding to bank credit. On your own keys.
+          Cross-border stablecoin payouts over Tempo, matched from funding to bank credit, on your own keys. Starting with Africa.
         </p>
         <div className="ctas">
           <a className="btn primary" href="#access" data-hot>

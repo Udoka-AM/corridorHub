@@ -2,8 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { ANY_MOTION, EASE, Words, gsap, prefersReducedMotion, useGSAP } from "../motion";
 
 /**
- * On-chain value received in Sub-Saharan Africa, Chainalysis Geography of
- * Crypto reports (July to June years, labelled by the year they end).
+ * The first market: on-chain value received in Sub-Saharan Africa,
+ * Chainalysis Geography of Crypto reports (July to June years, labelled by
+ * the year they end).
  */
 const FLOWS = [
   { y: "2021", v: 105.6 },
@@ -13,9 +14,11 @@ const FLOWS = [
   { y: "2025", v: 205 },
 ];
 const FIVE_YEARS = FLOWS.reduce((s, f) => s + f.v, 0); // ≈ $653B
-const STABLE_SHARE = 0.43; // stablecoins' share of the region's volume, 2024–2025
-const STABLE_NOW = 205 * STABLE_SHARE; // ≈ $88B
-const GROWTH = 0.4; // projection: 40% a year, below the last year's 52%
+/** Global: real B2B stablecoin payments in 2025 (McKinsey and Artemis Analytics), $B. */
+const B2B_STABLE = 226;
+/** Global: cross-border B2B payments in 2024 (FXC Intelligence), $T. */
+const B2B_CROSS_BORDER = 31.6;
+const GROWTH = 0.4; // scenario: 40% a year
 const TAKE = 0.003; // 0.30% all-in take on settled volume
 
 const W = 640;
@@ -56,7 +59,7 @@ export default function Market() {
   const [share, setShare] = useState(5);
   const [future, setFuture] = useState(true);
 
-  const flow = future ? STABLE_NOW * Math.pow(1 + GROWTH, 3) : STABLE_NOW; // $B a year
+  const flow = future ? B2B_STABLE * Math.pow(1 + GROWTH, 3) : B2B_STABLE; // $B a year
   const volume = (flow * share) / 100; // $B settled through Corridor
   const revenue = volume * 1000 * TAKE; // $M a year
 
@@ -81,13 +84,13 @@ export default function Market() {
   return (
     <section className="market" ref={root} id="economics" aria-label="Market and economics">
       <div className="wrap">
-        <Words as="h2" className="h2 reveal" text={"A $205B rail.\nGrowing 52% a year."} />
+        <Words as="h2" className="h2 reveal" text={"A $31.6T market.\nUnder 1% on stablecoins."} />
         <div className="bento">
           <div className="cell c-chart">
             <div className="chart-head">
               <div>
                 <div className="figure tnum">${Math.round(FIVE_YEARS)}B</div>
-                <p>Moved on-chain in Sub-Saharan Africa in five years. The rails exist. The ledger licensed companies need to run on them doesn't.</p>
+                <p>Where we start: moved on-chain in Sub-Saharan Africa in five years, 43% of it in stablecoins. The rails exist. The ledger licensed companies need to run on them doesn't.</p>
               </div>
             </div>
             <svg className="flowchart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`On-chain value received in Sub-Saharan Africa: ${FLOWS.map((f) => `${f.y} $${f.v}B`).join(", ")}`}>
@@ -114,13 +117,13 @@ export default function Market() {
           </div>
 
           <div className="cell c-trade">
-            <div className="figure tnum">$1.5T</div>
-            <p>Africa's trade with the world in 2024. Every import is a payment out. Every export, a payment in.</p>
+            <div className="figure tnum">${B2B_CROSS_BORDER}T</div>
+            <p>Business payments that crossed a border in 2024, out of $194.6T in cross-border flows. Every import is a payment out; every export, a payment in.</p>
           </div>
 
           <div className="cell c-stable">
-            <div className="figure tnum">${Math.round(STABLE_NOW)}B</div>
-            <p>Of it moved in stablecoins last year: 43% of all on-chain volume, already the settlement asset of choice.</p>
+            <div className="figure tnum">${B2B_STABLE}B</div>
+            <p>Real B2B stablecoin payments in 2025, the largest kind of stablecoin payment and still under 1% of cross-border B2B flow.</p>
           </div>
 
           <div className="cell c-sim">
@@ -137,7 +140,7 @@ export default function Market() {
             </div>
             <label className="share">
               <span>
-                Share of the region's stablecoin flow: <b className="tnum">{share}%</b>
+                Share of B2B stablecoin payments: <b className="tnum">{share}%</b>
               </span>
               <input
                 type="range"
@@ -164,7 +167,7 @@ export default function Market() {
               </div>
             </div>
             <p className="note">
-              Routed volume at a 0.30% take; ledger subscriptions come on top. A scenario, not a forecast. {future ? "2028 assumes stablecoin flows grow 40% a year, below the last year's 52%." : "Today's flow: $88B a year."}
+              Routed volume at a 0.30% take; ledger subscriptions come on top. A scenario, not a forecast. {future ? "2028 assumes B2B stablecoin payments grow 40% a year." : "Today's base: $226B a year (2025)."}
             </p>
           </div>
 
@@ -173,7 +176,7 @@ export default function Market() {
             <p>On volume Corridor routes, all in. Before that, a monthly ledger subscription from the first read-only pilot.</p>
           </div>
         </div>
-        <p className="source">Chainalysis Geography of Crypto 2021–2025 (Sub-Saharan Africa, July–June years) · Afreximbank African Trade Report 2025 · shares are scenarios, not forecasts.</p>
+        <p className="source">FXC Intelligence cross-border market sizing (2024) · McKinsey and Artemis Analytics, stablecoin payments (2025) · Chainalysis Geography of Crypto 2021–2025 (Sub-Saharan Africa, July–June years) · shares are scenarios, not forecasts.</p>
       </div>
     </section>
   );

@@ -70,14 +70,14 @@ export default function Collapse() {
       <div className="wrap pin">
         <div className="say">
           <div className="phase a">
-            <span className="big tnum">~9%</span>
-            <Words as="h2" className="h2" text={"Cash trapped in a bank\nin every country."} />
-            <p className="lede">The cost of sending $200 into Sub-Saharan Africa, the most expensive region in the world. Settlement still takes T+1 to T+3.</p>
+            <span className="big tnum">T+2</span>
+            <Words as="h2" className="h2" text={"A bank account and a spreadsheet\nin every country."} />
+            <p className="lede">Cross-border payment companies pre-fund each country they pay into and reconcile each provider by hand. Settlement still takes one to three days.</p>
           </div>
           <div className="phase b">
             <span className="big">1</span>
-            <h2 className="h2">Balance on Tempo. Zero nostros.</h2>
-            <p className="lede">One stablecoin balance funds every corridor: your vault, your keys, every movement matched.</p>
+            <h2 className="h2">One ledger. Your keys.</h2>
+            <p className="lede">One stablecoin balance in your own vault funds every corridor, and every payout is matched from funding to bank credit.</p>
           </div>
         </div>
         <div className="field" aria-hidden="true">
@@ -90,8 +90,8 @@ export default function Collapse() {
           ))}
           <div className="hubdot">
             <div>
-              <b>pathUSD</b>
-              <span>one balance</span>
+              <b>1 ledger</b>
+              <span>your keys</span>
             </div>
           </div>
         </div>

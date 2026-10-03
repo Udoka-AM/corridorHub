@@ -32,7 +32,7 @@ export default function Closing() {
         <div className="paths">
           <div className="path">
             <h3 className="h3">Start read-only. Move money when ready.</h3>
-            <p className="lede">A 60-day pilot on the wallets you already run: matched payouts and an exceptions list, no keys shared. Now taking EUR → NGN and NGN → CNY design partners.</p>
+            <p className="lede">A 60-day pilot on the wallets you already run: matched payouts and an exceptions list, no keys shared. Taking design partners now, starting with Europe → Africa and Africa → Asia.</p>
             <div>
               <a className="btn primary" href={REPO} target="_blank" rel="noreferrer" data-hot>
                 Start a pilot <span className="arr">→</span>
@@ -41,7 +41,7 @@ export default function Closing() {
           </div>
           <div className="path">
             <h3 className="h3">One integration reaches every region.</h3>
-            <p className="lede">Payout partners, ramps and liquidity providers in Africa, Asia and the Americas, in USDC, USDT, PYUSD or EURC.</p>
+            <p className="lede">Payout partners, ramps and liquidity providers on any continent, in USDC, USDT, PYUSD or EURC.</p>
             <div>
               <a className="btn" href="https://corridorapp.mintlify.app/integrations/partner-interface" target="_blank" rel="noreferrer" data-hot>
                 Read the partner interface <span className="arr">↗</span>
