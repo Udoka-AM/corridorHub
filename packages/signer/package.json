@@ -1,0 +1,14 @@
+{
+  "name": "@corridor/signer",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@corridor/core": "workspace:*",
+    "@solana/kit": "^8.4.0",
+    "viem": "2.56.9"
+  }
+}

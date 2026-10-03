@@ -72,3 +72,4 @@ export class PgCursorStore {
 }
 
 export { bookVaultMovements, checkVaults, type VaultBookingOptions, type VaultBookingResult, type VaultCheck, type VaultRef } from "./vaults.ts";
+export { exceptions, readOnlyCsv, reconcileReadOnly, summarizeReadOnly, type PayoutRecord, type ReadOnlyOptions, type ReadOnlyResult, type ReadOnlyStatus } from "./readonly.ts";

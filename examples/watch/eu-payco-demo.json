@@ -1,0 +1,7 @@
+{
+  "name": "eu-payco-demo",
+  "tempo": { "network": "moderato", "addresses": ["0xB4F90ffbF68a7C235D2Fee06adD744AAbE1C312f"], "lookbackBlocks": 3000000 },
+  "solana": { "cluster": "devnet", "addresses": ["QvE6YzSnmEvjbFV8NWgDnB16g3W3487BYbcA76UoXmW"], "limit": 15 },
+  "base": { "network": "base-sepolia", "addresses": ["0x1F9C075152d7b4d075a42d37eb6CBef8247e1b67"], "lookbackBlocks": 10000 },
+  "records": "eu-payco-demo-records.csv"
+}

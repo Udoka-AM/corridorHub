@@ -28,10 +28,12 @@ import { PgCursorStore } from "@corridor/recon";
 import { SagaEngine } from "@corridor/saga";
 import { PartnerEventStore, webhookServer } from "@corridor/webhooks";
 import { testnetKey } from "./env.ts";
+import { tempoAccountFor } from "./signers.ts";
 
 export async function startRuntime(opts: { onCollectionOpened?: (order: PartnerOrder, mock: MockPartner) => Promise<void> } = {}) {
   const customer = tempoClient({ network: "moderato", privateKey: testnetKey("TEMPO_TESTNET_CUSTOMER_KEY") });
-  const treasury = tempoClient({ network: "moderato", privateKey: testnetKey("TEMPO_TESTNET_VAULT_KEY") });
+  // The treasury vault signs through the signer interface: a local key here, KMS or MPC in a customer deployment.
+  const treasury = tempoClient({ network: "moderato", account: await tempoAccountFor("TEMPO_TESTNET_VAULT_KEY") });
   const escrow = tempoClient({ network: "moderato", privateKey: testnetKey("TEMPO_TESTNET_BRIDGE_ESCROW_KEY") });
   for (const [c, label] of [[customer, "customer"], [treasury, "treasury"], [escrow, "bridge escrow"]] as [TempoClient, string][]) {
     if ((await balanceOf(c, "pathUSD", c.account.address)) < parseMoney("pathUSD", "20").amount) {

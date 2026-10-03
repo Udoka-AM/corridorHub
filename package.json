@@ -15,7 +15,8 @@
     "importer:demo": "tsx scripts/importer-demo.ts",
     "console": "tsx apps/console/src/server.ts",
     "console:snapshot": "tsx scripts/snapshot-console.ts",
-    "paj:check": "tsx scripts/paj-check.ts"
+    "paj:check": "tsx scripts/paj-check.ts",
+    "watch:report": "tsx scripts/watch-report.ts"
   },
   "devDependencies": {
     "@types/node": "22",
@@ -38,6 +39,8 @@
     "@corridor/partners": "workspace:*",
     "@corridor/webhooks": "workspace:*",
     "@corridor/chain-solana": "workspace:*",
-    "@corridor/swap-near": "workspace:*"
+    "@corridor/swap-near": "workspace:*",
+    "@corridor/chain-evm": "workspace:*",
+    "@corridor/signer": "workspace:*"
   }
 }

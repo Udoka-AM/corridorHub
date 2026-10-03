@@ -1,6 +1,6 @@
 import { getAbiItem, http, type Address } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { Abis, Actions, Addresses, createClient } from "viem/tempo";
+import { Abis, Account as TempoAccount, Actions, Addresses, createClient } from "viem/tempo";
 import { tryDecodeRef, type Asset, type Hex, type Observation } from "@corridor/core";
 import { tokenAddress } from "./tokens.ts";
 
@@ -19,15 +19,30 @@ const TRANSFER_WITH_MEMO = getAbiItem({ abi: Abis.tip20, name: "TransferWithMemo
 
 export type TempoClient = ReturnType<typeof tempoClient>;
 
-/** A vault client. Gas is paid in pathUSD through the Fee AMM; there is no native gas token. */
-export function tempoClient(opts: { network: TempoNetwork; privateKey: Hex; rpcUrl?: string }) {
+/** Any viem account that can sign Tempo transactions, e.g. `await tempoAccount(awsKmsSigner(...))`. */
+export type TempoSigningAccount = ReturnType<typeof privateKeyToAccount> | Awaited<ReturnType<typeof TempoAccount.from>>;
+
+/**
+ * A vault client. Gas is paid in pathUSD through the Fee AMM; there is no
+ * native gas token. Pass `account` to sign with the customer's own signer
+ * (KMS, MPC: see @corridor/signer's `tempoAccount`); `privateKey` is for
+ * development and testnet only.
+ */
+export function tempoClient(
+  opts: { network: TempoNetwork; rpcUrl?: string } & ({ privateKey: Hex; account?: never } | { account: TempoSigningAccount; privateKey?: never }),
+) {
   return createClient({
-    account: privateKeyToAccount(opts.privateKey),
+    account: opts.account ?? privateKeyToAccount(opts.privateKey!),
     testnet: opts.network === "moderato",
     feeToken: Addresses.pathUsd,
     // Public RPCs stall under load; one slow call shouldn't fail a saga step or a recon run.
     transport: http(opts.rpcUrl, { timeout: 30_000, retryCount: 5 }),
   });
+}
+
+/** A key-less client for watch-only observation (read-only pilots). */
+export function tempoReader(opts: { network: TempoNetwork; rpcUrl?: string }) {
+  return createClient({ testnet: opts.network === "moderato", transport: http(opts.rpcUrl, { timeout: 30_000, retryCount: 5 }) });
 }
 
 /** Moderato only: fund an address from the testnet faucet and wait for inclusion. */

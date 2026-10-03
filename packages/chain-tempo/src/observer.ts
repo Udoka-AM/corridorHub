@@ -19,13 +19,14 @@ const TRANSFER = getAbiItem({ abi: Abis.tip20, name: "Transfer" });
 export const FEE_MANAGER: Address = Addresses.feeManager;
 
 /**
- * Watches Corridor's Tempo vaults for memo-tagged TIP-20 movements in or out,
- * and emits them as Observations for reconciliation. Resumes from a stored
+ * Watches Tempo addresses (Corridor's vaults, or a customer's own wallets in
+ * read-only mode) for TIP-20 movements in or out, and emits them as
+ * Observations for reconciliation. Resumes from a stored
  * block cursor, so restarts neither miss nor double-count events.
  */
 export class TempoObserver {
   constructor(
-    private readonly client: TempoClient,
+    private readonly client: Pick<TempoClient, "getBlockNumber" | "getLogs">,
     private readonly opts: {
       name: string;
       asset: Asset;

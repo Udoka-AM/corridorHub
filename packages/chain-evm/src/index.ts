@@ -1,0 +1,82 @@
+import { erc20Abi, getAbiItem, type Address, type Log, type PublicClient } from "viem";
+import type { Observation, Stablecoin, Venue } from "@corridor/core";
+
+/**
+ * EVM spokes (Base today). Base has no transfer memo, so Corridor's own Base
+ * legs are matched through the bridge's deposit status; this watcher covers
+ * the read-only side: stablecoin movements in and out of any address, such as
+ * a customer's existing treasury wallet with another provider.
+ */
+
+export type BaseNetwork = "base" | "base-sepolia";
+
+/** Stablecoins on Base by network. Bridged USDT has no canonical Base deployment, so it is left out on purpose. */
+export const BASE_STABLES: Record<BaseNetwork, Partial<Record<Stablecoin, Address>>> = {
+  base: {
+    USDC: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    EURC: "0x60a3E35Cc302bFA44Cb288Bc5a4F316Fdb1adb42",
+  },
+  "base-sepolia": {
+    USDC: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+  },
+};
+
+const TRANSFER = getAbiItem({ abi: erc20Abi, name: "Transfer" });
+
+export interface CursorStore {
+  get(name: string): Promise<bigint | undefined>;
+  set(name: string, block: bigint): Promise<void>;
+}
+
+type TransferLog = Log<bigint, number, false, typeof TRANSFER, true>;
+
+/** Map ERC-20 Transfer logs to Observations. Pure, so it is unit-testable. */
+export function transferObservations(venue: Venue, asset: Stablecoin, logs: readonly TransferLog[]): Observation[] {
+  return logs.map((log) => ({
+    venue,
+    externalRef: `${log.transactionHash}:${log.logIndex}`,
+    reference: null,
+    asset,
+    amount: log.args.value,
+    from: log.args.from,
+    to: log.args.to,
+    blockNumber: log.blockNumber,
+    observedAt: new Date(),
+  }));
+}
+
+export class Erc20Watcher {
+  constructor(
+    private readonly client: Pick<PublicClient, "getBlockNumber" | "getLogs">,
+    private readonly opts: {
+      name: string;
+      venue: Venue;
+      tokens: Partial<Record<Stablecoin, Address>>;
+      addresses: Address[];
+      cursors: CursorStore;
+      startBlock: bigint;
+      maxRange?: bigint;
+    },
+  ) {}
+
+  async poll(): Promise<Observation[]> {
+    const { name, cursors, startBlock } = this.opts;
+    const maxRange = this.opts.maxRange ?? 1_000n; // public Base RPCs cap eth_getLogs at 1,000 blocks
+    const latest = await this.client.getBlockNumber();
+    let from = ((await cursors.get(name)) ?? startBlock - 1n) + 1n;
+    const seen = new Map<string, Observation>();
+    while (from <= latest) {
+      const to = from + maxRange - 1n > latest ? latest : from + maxRange - 1n;
+      for (const [asset, token] of Object.entries(this.opts.tokens) as [Stablecoin, Address][]) {
+        const [inbound, outbound] = await Promise.all([
+          this.client.getLogs({ address: token, event: TRANSFER, args: { to: this.opts.addresses }, fromBlock: from, toBlock: to }),
+          this.client.getLogs({ address: token, event: TRANSFER, args: { from: this.opts.addresses }, fromBlock: from, toBlock: to }),
+        ]);
+        for (const o of transferObservations(this.opts.venue, asset, [...inbound, ...outbound] as TransferLog[])) seen.set(o.externalRef, o);
+      }
+      await cursors.set(name, to);
+      from = to + 1n;
+    }
+    return [...seen.values()].sort((a, b) => Number((a.blockNumber ?? 0n) - (b.blockNumber ?? 0n)));
+  }
+}

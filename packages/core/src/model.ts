@@ -57,15 +57,37 @@ export const FIAT = {
 export type Fiat = keyof typeof FIAT;
 export type Region = (typeof FIAT)[Fiat]["region"];
 
-/** On-chain assets Corridor holds or routes through. */
+/**
+ * On-chain assets Corridor holds, routes through or observes. Stablecoins are
+ * issuer-neutral: USDC, USDT, PYUSD and EURC are all first-class, so a
+ * customer's ledger covers whatever its providers settle in. Which assets
+ * exist on which chain lives in each chain package's registry.
+ */
 export const DIGITAL_ASSETS = {
   pathUSD: { decimals: 6, currency: "USD" },
   "USDC.e": { decimals: 6, currency: "USD" },
   USDC: { decimals: 6, currency: "USD" },
   USDT: { decimals: 6, currency: "USD" },
+  PYUSD: { decimals: 6, currency: "USD" },
+  EURC: { decimals: 6, currency: "EUR" },
   ZEC: { decimals: 8, currency: "ZEC" },
 } as const;
 export type DigitalAsset = keyof typeof DIGITAL_ASSETS;
+
+export type Stablecoin = { [K in DigitalAsset]: (typeof DIGITAL_ASSETS)[K]["currency"] extends "ZEC" ? never : K }[DigitalAsset];
+
+export const STABLECOINS = (Object.keys(DIGITAL_ASSETS) as DigitalAsset[]).filter(
+  (a): a is Stablecoin => DIGITAL_ASSETS[a].currency !== "ZEC",
+);
+
+export function isStablecoin(asset: Asset): asset is Stablecoin {
+  return (STABLECOINS as readonly string[]).includes(asset);
+}
+
+/** The fiat currency a stablecoin tracks (USD for USDC/USDT/PYUSD/pathUSD, EUR for EURC). */
+export function pegOf(asset: Stablecoin): "USD" | "EUR" {
+  return DIGITAL_ASSETS[asset].currency;
+}
 
 export type Asset = DigitalAsset | Fiat;
 

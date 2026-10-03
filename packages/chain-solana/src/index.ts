@@ -15,6 +15,7 @@ import {
   type Address,
   type Instruction,
   type KeyPairSigner,
+  type TransactionSigner,
 } from "@solana/kit";
 import {
   TOKEN_PROGRAM_ADDRESS,
@@ -23,15 +24,19 @@ import {
   getTransferCheckedInstruction,
 } from "@solana-program/token";
 import { MEMO_PROGRAM_ADDRESS, getAddMemoInstruction } from "@solana-program/memo";
-import { fromSolanaMemo, toSolanaMemo, tryDecodeRef, type Hex, type Observation } from "@corridor/core";
+import { toSolanaMemo, type Hex, type Observation, type Stablecoin } from "@corridor/core";
+import { solanaStable, type SolanaCluster } from "./stables.ts";
+import { SolanaWatcher } from "./watcher.ts";
+
+export { SOLANA_STABLES, TOKEN_2022_PROGRAM_ADDRESS, solanaStable, stableByMint, type SolanaCluster, type SolanaStable } from "./stables.ts";
+export { SolanaWatcher, extractReference, tokenDeltas, type TokenBalanceMeta, type TokenDelta } from "./watcher.ts";
 
 /**
- * Solana leg: USDC transfers that carry the Corridor Reference as an SPL Memo
- * in the same transaction, so a partner deposit (e.g. into Paj's one-off
- * funding address) is tied to its payout on-chain.
+ * Solana leg: stablecoin transfers (USDC by default; USDT, PYUSD and EURC
+ * through the registry) that carry the Corridor Reference as an SPL Memo in
+ * the same transaction, so a partner deposit (e.g. into Paj's one-off funding
+ * address) is tied to its payout on-chain.
  */
-
-export type SolanaCluster = "mainnet" | "devnet";
 
 export const SOLANA_RPC: Record<SolanaCluster, { http: string; ws: string }> = {
   mainnet: { http: "https://api.mainnet-beta.solana.com", ws: "wss://api.mainnet-beta.solana.com" },
@@ -39,8 +44,8 @@ export const SOLANA_RPC: Record<SolanaCluster, { http: string; ws: string }> = {
 };
 
 export const USDC_MINT: Record<SolanaCluster, Address> = {
-  mainnet: address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"),
-  devnet: address("4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"),
+  mainnet: solanaStable("mainnet", "USDC").mint,
+  devnet: solanaStable("devnet", "USDC").mint,
 };
 
 export function explorerTx(cluster: SolanaCluster, signature: string): string {
@@ -58,30 +63,37 @@ export async function signerFromKeypairFile(path: string): Promise<KeyPairSigner
  * Pure (no network), so it is unit-testable.
  */
 export async function buildTransferWithMemo(args: {
-  from: KeyPairSigner;
+  from: TransactionSigner;
   toOwner: Address;
   mint: Address;
   amount: bigint;
   decimals: number;
   reference: Hex;
+  /** Token-2022 mints (e.g. PYUSD) need their own program for ATAs and transfers. */
+  tokenProgram?: Address;
 }): Promise<Instruction[]> {
-  const [source] = await findAssociatedTokenPda({ owner: args.from.address, mint: args.mint, tokenProgram: TOKEN_PROGRAM_ADDRESS });
-  const [destination] = await findAssociatedTokenPda({ owner: args.toOwner, mint: args.mint, tokenProgram: TOKEN_PROGRAM_ADDRESS });
+  const tokenProgram = args.tokenProgram ?? TOKEN_PROGRAM_ADDRESS;
+  const [source] = await findAssociatedTokenPda({ owner: args.from.address, mint: args.mint, tokenProgram });
+  const [destination] = await findAssociatedTokenPda({ owner: args.toOwner, mint: args.mint, tokenProgram });
   return [
     getCreateAssociatedTokenIdempotentInstruction({
       payer: args.from,
       ata: destination,
       owner: args.toOwner,
       mint: args.mint,
+      tokenProgram,
     }),
-    getTransferCheckedInstruction({
-      source,
-      mint: args.mint,
-      destination,
-      authority: args.from,
-      amount: args.amount,
-      decimals: args.decimals,
-    }),
+    getTransferCheckedInstruction(
+      {
+        source,
+        mint: args.mint,
+        destination,
+        authority: args.from,
+        amount: args.amount,
+        decimals: args.decimals,
+      },
+      { programAddress: tokenProgram },
+    ),
     getAddMemoInstruction({ memo: toSolanaMemo(args.reference) }),
   ];
 }
@@ -90,13 +102,21 @@ export class SolanaVault {
   private readonly rpc;
   private readonly send;
 
+  private readonly watcher: SolanaWatcher;
+
+  /**
+   * `signer` is any @solana/kit transaction signer: a local keypair in
+   * development, or `solanaSigner(...)` from @corridor/signer wrapping the
+   * customer's KMS or MPC key.
+   */
   constructor(
-    private readonly signer: KeyPairSigner,
+    private readonly signer: TransactionSigner,
     readonly cluster: SolanaCluster,
     rpcUrl?: { http: string; ws: string },
   ) {
     const urls = rpcUrl ?? SOLANA_RPC[cluster];
     this.rpc = createSolanaRpc(urls.http);
+    this.watcher = new SolanaWatcher(signer.address, cluster, urls.http);
     this.send = sendAndConfirmTransactionFactory({ rpc: this.rpc, rpcSubscriptions: createSolanaRpcSubscriptions(urls.ws) });
   }
 
@@ -104,8 +124,9 @@ export class SolanaVault {
     return this.signer.address;
   }
 
-  async tokenBalance(mint: Address = USDC_MINT[this.cluster]): Promise<bigint> {
-    const [ata] = await findAssociatedTokenPda({ owner: this.signer.address, mint, tokenProgram: TOKEN_PROGRAM_ADDRESS });
+  async tokenBalance(asset: Stablecoin = "USDC"): Promise<bigint> {
+    const { mint, tokenProgram } = solanaStable(this.cluster, asset);
+    const [ata] = await findAssociatedTokenPda({ owner: this.signer.address, mint, tokenProgram });
     try {
       const { value } = await this.rpc.getTokenAccountBalance(ata).send();
       return BigInt(value.amount);
@@ -114,15 +135,17 @@ export class SolanaVault {
     }
   }
 
-  /** Send `amount` (base units) of `mint` to `toOwner` with the reference as memo. Returns the signature. */
-  async transferWithReference(args: { toOwner: string; amount: bigint; reference: Hex; mint?: Address; decimals?: number }): Promise<string> {
+  /** Send `amount` (base units) of a stablecoin (USDC by default) to `toOwner` with the reference as memo. Returns the signature. */
+  async transferWithReference(args: { toOwner: string; amount: bigint; reference: Hex; asset?: Stablecoin }): Promise<string> {
+    const stable = solanaStable(this.cluster, args.asset ?? "USDC");
     const instructions = await buildTransferWithMemo({
       from: this.signer,
       toOwner: address(args.toOwner),
-      mint: args.mint ?? USDC_MINT[this.cluster],
+      mint: stable.mint,
       amount: args.amount,
-      decimals: args.decimals ?? 6,
+      decimals: stable.decimals,
       reference: args.reference,
+      tokenProgram: stable.tokenProgram,
     });
     const { value: blockhash } = await this.rpc.getLatestBlockhash().send();
     const message = pipe(
@@ -137,35 +160,12 @@ export class SolanaVault {
   }
 
   /**
-   * Observer: recent transactions touching this vault that carry a Corridor
-   * memo. The memo program logs "Memo (len N): \"…\"" in the transaction logs.
+   * Observer: recent stablecoin movements in or out of this vault that carry
+   * a Corridor memo, with amounts read from the transaction's balance changes.
    */
   async recentReferencedTransfers(limit = 20): Promise<Observation[]> {
-    const sigs = await this.rpc.getSignaturesForAddress(this.signer.address, { limit }).send();
-    const out: Observation[] = [];
-    for (const s of sigs) {
-      if (s.err || !s.memo) continue;
-      const hex = extractReference(s.memo);
-      if (!hex) continue;
-      out.push({
-        venue: "solana",
-        externalRef: s.signature,
-        reference: hex,
-        asset: "USDC",
-        amount: 0n, // amount is resolved from the transaction's token balance deltas when reconciling
-        observedAt: new Date(Number(s.blockTime ?? 0) * 1000),
-        blockNumber: BigInt(s.slot),
-      });
-    }
-    return out;
+    return this.watcher.recent({ limit, onlyReferenced: true });
   }
-}
-
-/** RPC `memo` fields look like `[N] corridor:<hex>`; pull the Corridor Reference out if present. */
-export function extractReference(memoField: string): Hex | null {
-  const m = /corridor:[0-9a-f]{64}/.exec(memoField);
-  const hex = m ? fromSolanaMemo(m[0]) : null;
-  return hex && tryDecodeRef(hex) ? hex : null;
 }
 
 export { MEMO_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS };

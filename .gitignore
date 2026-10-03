@@ -12,3 +12,4 @@ coverage/
 .env.local
 .keys/
 *.tsbuildinfo
+examples/watch/*-report.csv
