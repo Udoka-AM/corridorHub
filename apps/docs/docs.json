@@ -27,7 +27,7 @@
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg",
-    "href": "https://udoka-am.github.io/corridor/"
+    "href": "https://corridorapp.udokaam.dev/"
   },
   "favicon": "/favicon.svg",
   "styling": {
@@ -46,7 +46,7 @@
     "links": [
       {
         "label": "Live console",
-        "href": "https://udoka-am.github.io/corridor/console/"
+        "href": "https://corridorapp.udokaam.dev/console/"
       },
       {
         "label": "GitHub",
@@ -56,7 +56,7 @@
     "primary": {
       "type": "button",
       "label": "Website",
-      "href": "https://udoka-am.github.io/corridor/"
+      "href": "https://corridorapp.udokaam.dev/"
     }
   },
   "navigation": {

@@ -6,7 +6,7 @@ A single EUR → NGN payout crosses a bank collection, stablecoin providers, sev
 
 **Documentation:** [corridorapp.mintlify.app](https://corridorapp.mintlify.app) (source in [`apps/docs`](apps/docs), Mintlify): architecture, every chain and partner integration, end-to-end flows with testnet evidence, and decision records.
 
-**Live demo:** [udoka-am.github.io/corridor/console](https://udoka-am.github.io/corridor/console/): a replay of the treasury console recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet. Every ↗ link opens the real transaction.
+**Live demo:** [corridorapp.udokaam.dev/console](https://corridorapp.udokaam.dev/console/): a replay of the treasury console recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet. Every ↗ link opens the real transaction.
 
 > Corridor is software for licensed players, not a custodian or a money transmitter. It runs in the customer's environment and signs with the customer's keys. Customers keep their licences, their funds and their end-customer relationships.
 
