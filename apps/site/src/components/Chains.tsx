@@ -1,4 +1,4 @@
-import { NetworkBase, NetworkSolana, NetworkTempo, TokenNEAR, TokenUSDC, TokenZEC } from "@web3icons/react";
+import { NetworkBase, NetworkSolana, NetworkTempo, TokenEURC, TokenNEAR, TokenPYUSD, TokenUSDC, TokenUSDT, TokenZEC } from "@web3icons/react";
 import type { ComponentType, SVGProps } from "react";
 
 type Icon = ComponentType<SVGProps<SVGSVGElement> & { variant?: "mono" | "branded" | "background"; size?: number | string }>;
@@ -8,9 +8,16 @@ export const CHAINS: { name: string; role: string; Icon: Icon }[] = [
   { name: "Tempo", role: "settlement hub", Icon: NetworkTempo as Icon },
   { name: "Solana", role: "ramp liquidity", Icon: NetworkSolana as Icon },
   { name: "Base", role: "partner payouts", Icon: NetworkBase as Icon },
-  { name: "USDC", role: "settlement asset", Icon: TokenUSDC as Icon },
   { name: "Zcash", role: "shielded lane", Icon: TokenZEC as Icon },
   { name: "NEAR Intents", role: "USD → ZEC", Icon: TokenNEAR as Icon },
+];
+
+/** Stablecoins Corridor moves and reconciles, each with the company that issues it. */
+export const STABLES: { name: string; issuer: string; Icon: Icon }[] = [
+  { name: "USDC", issuer: "Circle", Icon: TokenUSDC as Icon },
+  { name: "USDT", issuer: "Tether", Icon: TokenUSDT as Icon },
+  { name: "EURC", issuer: "Circle", Icon: TokenEURC as Icon },
+  { name: "PYUSD", issuer: "Paxos", Icon: TokenPYUSD as Icon },
 ];
 
 // Tempo's incubators. Marks drawn monochrome: Stripe from Simple Icons, Paradigm from paradigm.xyz.
