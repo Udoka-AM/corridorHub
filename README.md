@@ -4,7 +4,7 @@
 
 A single EUR → NGN payout crosses a bank collection, stablecoin providers, several chains, a bridge, a local payout partner and the beneficiary's bank, each with its own ids. Corridor follows every payout through all of it and matches it from funding to bank credit. When it moves the money, it settles on [Tempo](https://tempo.xyz) with a 32-byte reference in every memo and pays out through partners on Solana (Paj today), signing with the customer's own KMS or MPC keys. Customers start **read-only**: Corridor watches the wallets they already run and matches their own payout records, with no keys and nothing moving. USDC, USDT, PYUSD and EURC are all first-class.
 
-**Documentation:** [corridorapp.mintlify.app](https://corridorapp.mintlify.app) (source in [`apps/docs`](apps/docs), Mintlify): architecture, every chain and partner integration, end-to-end flows with testnet evidence, and decision records.
+**Documentation:** [corridor.udokaam.dev](https://corridor.udokaam.dev) (source in [`apps/docs`](apps/docs), Mintlify): architecture, every chain and partner integration, end-to-end flows with testnet evidence, and decision records.
 
 **Live demo:** [corridorapp.udokaam.dev/console](https://corridorapp.udokaam.dev/console/): a replay of the treasury console recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet. Every ↗ link opens the real transaction.
 

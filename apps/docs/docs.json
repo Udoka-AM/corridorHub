@@ -216,5 +216,10 @@
       "light": "#F4F4F0",
       "dark": "#050505"
     }
+  },
+  "seo": {
+    "metatags": {
+      "canonical": "https://corridor.udokaam.dev"
+    }
   }
 }

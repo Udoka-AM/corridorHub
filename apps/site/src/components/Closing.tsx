@@ -43,7 +43,7 @@ export default function Closing() {
             <h3 className="h3">One integration reaches every region.</h3>
             <p className="lede">Payout partners, ramps and liquidity providers on any continent, in USDC, USDT, PYUSD or EURC.</p>
             <div>
-              <a className="btn" href="https://corridorapp.mintlify.app/integrations/partner-interface" target="_blank" rel="noreferrer" data-hot>
+              <a className="btn" href="https://corridor.udokaam.dev/integrations/partner-interface" target="_blank" rel="noreferrer" data-hot>
                 Read the partner interface <span className="arr">↗</span>
               </a>
             </div>
