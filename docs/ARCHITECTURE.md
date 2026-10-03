@@ -17,6 +17,9 @@
 | D-2 | Tempo ↔ Solana bridge | **Live Across integration first.** The simulated adapter is only a fallback. | Across supports Tempo mainnet (4217). There is no direct Tempo↔Solana route, so we go in **two hops through Base**, both live and quoted (§6.3). |
 | D-3 | First ramp partner | Paj (Solana → NGN, business API) for the demo; approach FossaPay, Yellow Card, Kotani Pay and others in parallel | See §9 |
 | D-4 | Shielded lane in this submission | **Yes, native to the architecture** | See §2 |
+| D-5 | Who holds the keys (3 Oct 2026) | **The customer.** Corridor runs in the customer's environment and signs through `@corridor/signer` (local for testnet, AWS KMS built, MPC next). | A licensed payment company cannot route funds through wallets an unlicensed vendor controls. Docs: ADR 0009. |
+| D-6 | Which stablecoins (3 Oct 2026) | **Issuer-neutral:** USDC, USDT, PYUSD, EURC alongside pathUSD, each booked in its own asset. | African payout liquidity is USDT-heavy; Solana partners lean USDC; euro senders want EURC. Docs: ADR 0010. |
+| D-7 | How a customer starts (3 Oct 2026) | **Read-only first:** watch existing wallets, match the customer's payout records, exceptions and CSV. Routing comes second. | No keys and no money at risk to start; the visibility problem is the one customers feel daily. Docs: ADR 0011. |
 
 ### 0.1 D-1 in detail: which stablecoin on Tempo
 

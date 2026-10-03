@@ -1,14 +1,16 @@
 # Corridor
 
-**Stablecoin settlement and treasury infrastructure for payment companies moving money into emerging markets.**
+**The payment ledger and router licensed payment companies run themselves, with their own keys, for stablecoin payouts into and out of Africa.**
 
-Corridor lets a licensed payment company collect USD or EUR abroad and pay out NGN or KES without pre-funding foreign bank accounts or waiting days on correspondent banks. It holds working balances in stablecoins, quotes and executes FX, settles on [Tempo](https://tempo.xyz), and routes on/off-ramp liquidity through Solana. On top of that runs a treasury console that shows balances per corridor, forecasts pre-funding needs and reconciles every payment automatically.
+A single EUR → NGN payout crosses a bank collection, stablecoin providers, several chains, a bridge, a local payout partner and the beneficiary's bank, each with its own ids. Corridor follows every payout through all of it and matches it from funding to bank credit. When it moves the money, it settles on [Tempo](https://tempo.xyz) with a 32-byte reference in every memo and pays out through partners on Solana (Paj today), signing with the customer's own KMS or MPC keys. Customers start **read-only**: Corridor watches the wallets they already run and matches their own payout records, with no keys and nothing moving. USDC, USDT, PYUSD and EURC are all first-class.
 
 **Documentation:** [corridorapp.mintlify.app](https://corridorapp.mintlify.app) (source in [`apps/docs`](apps/docs), Mintlify): architecture, every chain and partner integration, end-to-end flows with testnet evidence, and decision records.
 
 **Live demo:** [udoka-am.github.io/corridor/console](https://udoka-am.github.io/corridor/console/): a replay of the treasury console recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet. Every ↗ link opens the real transaction.
 
-> Corridor is infrastructure for licensed players. It is not a money transmitter. Our customers hold the licenses and the end-customer relationships; Corridor moves and reconciles their treasury.
+> Corridor is software for licensed players, not a custodian or a money transmitter. It runs in the customer's environment and signs with the customer's keys. Customers keep their licences, their funds and their end-customer relationships.
+
+**Try the read-only pilot:** `pnpm watch:report examples/watch/eu-payco-demo.json` watches the demo's real testnet wallets on Tempo, Solana and Base and matches them against sample payout records.
 
 ---
 
@@ -18,14 +20,17 @@ A remittance operator or payout company serving Europe → Nigeria today:
 
 1. **Locks up capital.** It pre-funds NGN and KES accounts at local banks days ahead of demand, so millions sit idle in nostro accounts.
 2. **Waits on correspondent banks.** Top-ups take T+1 to T+3, go through several intermediary banks, and settlement times are hard to predict.
-3. **Pays the most expensive rails on earth.** Sending $200 to Sub-Saharan Africa averaged close to **9%** in Q1 2025, against a 6.49% global average and a 3% SDG target (World Bank, Remittance Prices Worldwide).
-4. **Reconciles by hand.** Ops teams match bank statements to payout batches in spreadsheets, with no shared reference between the collection leg and the payout leg.
+3. **Pays some of the most expensive rails in the world** for sending money into Sub-Saharan Africa.
+4. **Reconciles by hand, across providers.** A payout crosses several providers and chains with no shared reference; ops teams match them in spreadsheets, and a stuck or short-paid payout is usually found when the customer complains.
 
 ## What Corridor does
 
 | Capability | What it means for the operator |
 |---|---|
-| **Stablecoin working balances** | USDC and USD-denominated TIP-20 balances replace idle fiat pre-funding in every corridor |
+| **Read-only reconciliation** | Watch existing wallets on Tempo, Solana and Base; match the company's own payout records; exceptions queue and CSV. No keys needed |
+| **Customer-held keys** | One signer interface for Tempo, Base and Solana; AWS KMS adapter built. Corridor never holds funds or keys |
+| **Issuer-neutral stablecoins** | USDC, USDT, PYUSD (Token-2022) and EURC alongside pathUSD, each booked in its own asset |
+| **Stablecoin working balances** | One balance in the customer's own Tempo vault replaces idle fiat pre-funding in every corridor |
 | **FX quote and execute** | Firm quotes (USD/EUR → NGN/KES) with TTL, executed against a pool of liquidity partners |
 | **Settlement on Tempo** | Sub-second deterministic finality, gas paid in USD stablecoins, and a 32-byte memo on every transfer that maps it to an invoice or payout batch |
 | **Liquidity and routing on Solana** | Access to the deepest stablecoin on/off-ramp liquidity for African corridors, with smart routing across ramp partners |
@@ -55,10 +60,9 @@ Sender (EUR, SEPA)                                     Recipient (NGN, bank / mo
 
 | Stream | Indicative pricing |
 |---|---|
-| Settlement fee | 10–30 bps on settled volume (tested per corridor) |
+| Ledger and reconciliation subscription | Monthly per customer, from the read-only pilot onwards |
+| Routing fee | 0.10–0.30% on volume Corridor moves on the customer's signer |
 | FX spread share | Revenue share with liquidity partners on executed FX |
-| Treasury & reconciliation SaaS | Monthly platform fee per customer, tiered by corridors and volume |
-| Float yield | Share of yield on idle stablecoin float held in approved yield venues |
 
 ## Who it's for
 

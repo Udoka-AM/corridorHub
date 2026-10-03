@@ -35,7 +35,7 @@ export const VENUES = ["tempo", "base", "solana", "partner_fiat", "zcash_ironwoo
 | Africa | NGN 40 · KES 41 · GHS 42 · ZAR 43 · EGP 44 · UGX 45 · TZS 46 · RWF 47 · XOF 48 · XAF 49 · MAD 50 |
 | Asia & Middle East | CNY 70 · HKD 71 · INR 72 · AED 73 · SGD 74 · JPY 75 · TRY 76 · IDR 77 · VND 78 · PHP 79 |
 
-Digital assets: `pathUSD`, `USDC.e`, `USDC`, `USDT` (6 decimals) and `ZEC` (8 decimals).
+Digital assets: `pathUSD`, `USDC.e`, `USDC`, `USDT`, `PYUSD`, `EURC` (6 decimals) and `ZEC` (8 decimals). Stablecoins are issuer-neutral: each is booked in its own asset, and `pegOf` says which fiat it tracks (EUR for EURC, USD for the rest). Which stablecoins exist on which chain lives in each chain package's registry. See [ADR 0010](/decisions/0010-issuer-neutral-stablecoins).
 
 ## Money
 

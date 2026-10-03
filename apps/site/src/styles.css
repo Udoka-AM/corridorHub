@@ -178,7 +178,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 @keyframes blink { 50% { opacity: 0.2; } }
 @media (max-width: 900px) {
   .hero .shade { background: linear-gradient(0deg, var(--black) 8%, rgb(5 5 5 / 0.7) 55%, rgb(5 5 5 / 0.25) 100%); }
-  .hero .copy { justify-content: flex-end; padding-bottom: 150px; }
+  .hero { height: auto; min-height: max(640px, 100svh); }
+  /* Grow with the copy instead of pushing it up under the nav on narrow phones. */
+  .hero .copy { height: auto; min-height: max(640px, 100svh); justify-content: flex-end; padding-top: 104px; padding-bottom: 150px; }
   .hud { left: var(--gutter); right: var(--gutter); min-width: 0; bottom: 20px; }
 }
 

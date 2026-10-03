@@ -37,6 +37,19 @@ const signature = await vault.transferWithReference({
 
 RPC signature lists expose each transaction's memo as `[N] corridor:<hex>`. `extractReference` pulls the reference out, so the observer can join Solana movements to ledger entries without decoding instructions.
 
+`SolanaWatcher` reads amounts from each transaction's pre- and post-token balances, so it sees the real amount and asset of any stablecoin movement, whichever program made it. It needs only an address, which is what a [read-only pilot](/flows/read-only-pilot) runs on.
+
+## Stablecoins
+
+| Stablecoin | Mainnet mint | Token program |
+|---|---|---|
+| USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` | SPL Token |
+| USDT | `Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB` | SPL Token |
+| PYUSD | `2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo` | Token-2022 |
+| EURC | `HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr` | SPL Token |
+
+Transfers create the recipient's token account and move funds with the mint's own token program, so Token-2022 stablecoins work the same way as SPL ones. The vault signs through any `@solana/kit` transaction signer, including `solanaSigner(...)` from [Keys and signers](/architecture/keys-and-signers).
+
 ## Environments
 
 | Cluster | RPC | USDC mint |

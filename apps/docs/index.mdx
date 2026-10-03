@@ -1,7 +1,7 @@
 ---
 title: "Corridor"
 sidebarTitle: "Introduction"
-description: "The settlement hub for licensed payment companies moving money into and out of Africa. One stablecoin balance on Tempo, every corridor, settled in 0.6 seconds."
+description: "Stablecoin payouts into and out of Africa for licensed payment companies: moved over Tempo, matched from funding to bank credit, on the company's own keys."
 icon: "sparkles"
 ---
 
@@ -9,10 +9,10 @@ icon: "sparkles"
   <img src="/images/product/console-overview.jpg" alt="Corridor treasury console: hub balances, settlement network and recorded testnet flows" />
 </Frame>
 
-Corridor is settlement and treasury infrastructure for **licensed payment companies** (PSPs, remittance operators, payout companies and the banks behind importers) moving money into and out of Africa. Instead of pre-funding a bank account in every country, a customer holds **one stablecoin balance on Tempo**, and Corridor routes each payment to the local rail that pays it out, reconciles every movement across every chain, and pays suppliers privately on Zcash when the amounts should not be public.
+Corridor is the payment ledger and router that **licensed payment companies** (PSPs, remittance operators, payout companies and the banks behind importers) run themselves for money moving into and out of Africa. It moves stablecoin payouts over **Tempo** and the partners that pay out locally, and matches **every payout from customer funding to beneficiary bank credit**, whichever provider and chain carried it. Suppliers can be paid privately on Zcash, with a viewing key for the auditor.
 
 <Note>
-Corridor is infrastructure, not a money transmitter. Customers keep their licences, their KYC and their end-customer relationships. Corridor holds, moves and reconciles their treasury.
+Corridor is software, not a custodian or a money transmitter. It runs in the customer's environment and signs with the customer's own keys ([Keys and signers](/architecture/keys-and-signers)). Customers keep their licences, their KYC, their funds and their end-customer relationships. They start [read-only](/flows/read-only-pilot): no keys, nothing moves.
 </Note>
 
 ## What is built and running
@@ -46,6 +46,12 @@ Every flow is either a **collection** into the Tempo hub or a **payout** out of 
 ## Where to go next
 
 <CardGroup cols={2}>
+  <Card title="Read-only pilot" icon="eye" href="/flows/read-only-pilot">
+    How a payment company starts: watch the wallets it already runs and match its own payout records.
+  </Card>
+  <Card title="Keys and signers" icon="key-square" href="/architecture/keys-and-signers">
+    One signing interface for Tempo, Base and Solana; AWS KMS today, MPC next.
+  </Card>
   <Card title="What Corridor is" icon="info" href="/start/what-corridor-is">
     The product, who it serves, and exactly what is live versus simulated.
   </Card>

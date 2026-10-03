@@ -1,0 +1,25 @@
+---
+title: "ADR 0010: Issuer-neutral stablecoins"
+sidebarTitle: "0010 · Issuer-neutral stablecoins"
+description: "USDC, USDT, PYUSD and EURC are first-class assets on every chain where they exist, alongside pathUSD on Tempo."
+---
+
+## Context
+
+African payout liquidity is heavily USDT; Western payout providers and Solana partners lean on USDC; euro senders want EURC. A ledger that only understands one issuer forces the customer to convert before Corridor can see the money, and shuts out partners who settle in anything else.
+
+## Decision
+
+**Every stablecoin is a first-class asset.** Core lists pathUSD, USDC.e, USDC, USDT, PYUSD and EURC with their pegs. Each chain package keeps a registry of where each one exists (Solana mints including Token-2022 for PYUSD; Base contracts; Tempo TIP-20s). Observers, transfers and the ledger book each in its own asset; nothing is silently treated as interchangeable.
+
+## Consequences
+
+- A customer's ledger covers whatever its providers settle in.
+- Solana transfers use the mint's own token program, so Token-2022 stablecoins work.
+- Conversions between stablecoins are explicit legs with their own bookings, never an implicit 1:1.
+- pathUSD remains the canonical unit on Tempo ([ADR 0001](/decisions/0001-pathusd-settlement-unit)).
+
+## Alternatives rejected
+
+- **One canonical stablecoin everywhere:** forces conversions at every edge and excludes partners.
+- **Treat all USD stablecoins as one asset:** hides depeg and liquidity risk and breaks exact reconciliation.

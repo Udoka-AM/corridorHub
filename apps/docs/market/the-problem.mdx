@@ -30,12 +30,12 @@ Many African currencies trade thinly against the dollar, and onshore conversion 
 A firm rate from the partner that pays out, quoted with a time limit before funds move, and settlement in dollar stablecoins between hops so there is no intermediate conversion.
 </Card>
 
-## 4. Reconciliation by hand
+## 4. Reconciliation by hand, across providers
 
-A single payout touches the operator's ledger, a bank or chain, and a payout partner. Matching those three records is still largely done with statements and spreadsheets, and breaks surface days later.
+A single payout touches the operator's ledger, a bank collection, one or more stablecoin providers, several chains and a payout partner, each with its own ids and dashboard. Matching them is still largely done with statements and spreadsheets. A payout that bridged but never reached the bank is usually found when the customer complains, float is stranded across venues nobody sees together, and switching providers breaks the process.
 
 <Card title="Corridor's answer" icon="circle-check">
-A 32-byte [Corridor Reference](/architecture/corridor-reference) rides in every chain's native memo and every partner's free-text field, so chain logs, partner webhooks and the ledger match automatically. On testnet, 45 of 45 movements reconcile, and the treasury vault's on-chain balance equals the ledger exactly.
+Every payout is matched from funding to bank credit. Read-only, Corridor matches the company's own records against the wallets it already runs and flags what is missing, short or unidentified ([pilot](/flows/read-only-pilot)). When Corridor moves the money, a 32-byte [Corridor Reference](/architecture/corridor-reference) rides in every chain's native memo and every partner's free-text field, so matching is exact: on testnet, 45 of 45 movements reconcile, and the treasury vault's on-chain balance equals the ledger exactly.
 </Card>
 
 ## And in the other direction: imports

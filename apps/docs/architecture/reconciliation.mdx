@@ -18,6 +18,10 @@ Balanced books are not the same as correct books. A ledger can balance perfectly
 | Tempo | `TempoObserver`: indexed `TransferWithMemo` logs in and out of the vaults, plus fee transfers to the Fee Manager and plain inbound transfers | `${txHash}:${logIndex}` |
 | Partners | Signed webhooks, stored once per order status | `${partner}:${orderId}` |
 | Zcash | Viewing-key scan of decrypted outputs (the vault's wallet, or an auditor's view-only wallet) | `${txid}:${pool}:${outputIndex}` |
+| Solana | `SolanaWatcher`: stablecoin balance changes of any address, with the memo reference when present | signature, or `${signature}:${asset}` when one transaction moved several stablecoins |
+| Base | `Erc20Watcher`: USDC and EURC `Transfer` logs in and out of any address | `${txHash}:${logIndex}` |
+
+In a [read-only pilot](/flows/read-only-pilot) the same observers watch the customer's existing wallets and `reconcileReadOnly` matches them against the customer's own payout records instead of Corridor's ledger.
 
 The Tempo observer resumes from a stored block cursor, so restarts neither miss nor double-count events.
 

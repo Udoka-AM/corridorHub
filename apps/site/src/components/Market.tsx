@@ -87,7 +87,7 @@ export default function Market() {
             <div className="chart-head">
               <div>
                 <div className="figure tnum">${Math.round(FIVE_YEARS)}B</div>
-                <p>Moved on-chain in Sub-Saharan Africa in five years. The rails already exist; the licensed layer doesn't.</p>
+                <p>Moved on-chain in Sub-Saharan Africa in five years. The rails exist. The ledger licensed companies need to run on them doesn't.</p>
               </div>
             </div>
             <svg className="flowchart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`On-chain value received in Sub-Saharan Africa: ${FLOWS.map((f) => `${f.y} $${f.v}B`).join(", ")}`}>
@@ -164,16 +164,16 @@ export default function Market() {
               </div>
             </div>
             <p className="note">
-              At a 0.30% take. {future ? "2028 assumes stablecoin flows grow 40% a year, below the last year's 52%." : "Today's flow: $88B a year."}
+              Routed volume at a 0.30% take; ledger subscriptions come on top. A scenario, not a forecast. {future ? "2028 assumes stablecoin flows grow 40% a year, below the last year's 52%." : "Today's flow: $88B a year."}
             </p>
           </div>
 
           <div className="cell c-take">
             <div className="figure tnum">0.30%</div>
-            <p>Of every dollar settled, all in: 0.10–0.30% settlement, ~0.10% FX share, plus treasury software and float.</p>
+            <p>On volume Corridor routes, all in. Before that, a monthly ledger subscription from the first read-only pilot.</p>
           </div>
         </div>
-        <p className="source">Chainalysis Geography of Crypto 2021–2025 (Sub-Saharan Africa, July–June years) · Afreximbank African Trade Report 2025 · projections illustrative.</p>
+        <p className="source">Chainalysis Geography of Crypto 2021–2025 (Sub-Saharan Africa, July–June years) · Afreximbank African Trade Report 2025 · shares are scenarios, not forecasts.</p>
       </div>
     </section>
   );

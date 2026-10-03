@@ -4,9 +4,15 @@ description: "From testnet to production: the mainnet run, design partners, hard
 icon: "milestone"
 ---
 
-## Now: testnet complete
+## Now: testnet complete, customer-held keys, read-only pilots
 
 Every lane runs end to end on testnets through one ledger, one saga engine and one reconciliation engine. See [Evidence](/status/evidence).
+
+Done on 3 October 2026:
+
+- **Customer-held signing.** One signer interface for Tempo, Base and Solana; AWS KMS adapter built and tested; the Tempo treasury signs through it. See [Keys and signers](/architecture/keys-and-signers).
+- **Issuer-neutral stablecoins.** USDT, PYUSD (Token-2022) and EURC alongside USDC and pathUSD.
+- **Read-only pilot.** Watch-only observers for Tempo, Solana and Base, matching against the customer's payout records, exceptions and CSV. See [Read-only pilot](/flows/read-only-pilot).
 
 ## Next: mainnet
 
@@ -27,6 +33,7 @@ Every lane runs end to end on testnets through one ledger, one saga engine and o
 
 ## Then: design partners
 
+- Read-only pilots first: 60 days on the wallets a licensed payout company already runs, then routing on its own signer.
 - EUR → NGN with licensed payout companies first, then KES and GHS.
 - NGN → CNY / HKD for importers on the same integration.
 - Additional spokes per region: candidates include Yellow Card, Kotani Pay, Bitnob, HoneyCoin and Busha in Africa; licensed Hong Kong payment institutions, Nium and Conduit for Asia; Bridge, Bitso Business and Pix partners for the Americas.
@@ -36,7 +43,11 @@ Every lane runs end to end on testnets through one ledger, one saga engine and o
 | Area | Today | Production |
 |---|---|---|
 | Ledger | PGlite (embedded Postgres) | Managed Postgres, same schema and triggers |
-| Custody | Locally generated keys in `.env.local` / `.keys/` | KMS-wrapped keys or MPC per vault |
+| Custody | Signer interface; local keys for testnet, AWS KMS adapter built | The customer's KMS or MPC for every vault; Fireblocks and Turnkey adapters |
+| Routing | The planner enforces the Tempo hub | Tempo-first, not Tempo-only: direct Solana routes when the sender already holds Solana stablecoins, with measured cost per hop |
+| Stablecoins | USDC, USDT, PYUSD, EURC on Solana; USDC, EURC on Base | USDT on Tron for African payout liquidity |
+| Liquidity | Customer float in its own vault | Liquidity providers (for example Mansa) plugged in as venues |
+| Compliance | Viewing keys for the shielded lane | Address screening (Chainalysis or TRM), a Travel Rule provider hook, audit exports |
 | FROST | Trusted-dealer keygen; both rounds in one process | Distributed key generation; each signer on their own device relaying through `frostd` |
 | Console | Local, unauthenticated actions | Authenticated, role-based, with the disclosure and action endpoints behind auth |
 | Saga leases | Lease-based exclusivity | Fencing tokens on bookings, so an expired worker can never commit |

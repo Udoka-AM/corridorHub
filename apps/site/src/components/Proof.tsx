@@ -26,7 +26,7 @@ function Roll({ value }: { value: string }) {
 const STATS = [
   { value: "0.6", unit: "s", note: "Settlement finality on Tempo" },
   { value: "45/45", unit: "", note: "Testnet movements reconciled across three chains" },
-  { value: "32", unit: "", note: "Currencies reachable through one hub" },
+  { value: "0", unit: "", note: "Customer keys Corridor holds. Your KMS or MPC signs." },
   { value: "2/3", unit: "", note: "Signers to move a shielded vault. One alone is refused." },
 ];
 

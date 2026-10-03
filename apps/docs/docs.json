@@ -116,6 +116,7 @@
           {
             "group": "Operations",
             "pages": [
+              "architecture/keys-and-signers",
               "architecture/treasury-console",
               "architecture/security"
             ]
@@ -170,6 +171,7 @@
           {
             "group": "End-to-end walkthroughs",
             "pages": [
+              "flows/read-only-pilot",
               "flows/payout-eur-ngn",
               "flows/importer-ngn-cny",
               "flows/shielded-supplier-batch",
@@ -193,7 +195,10 @@
               "decisions/0005-privacy-as-a-venue",
               "decisions/0006-frost-threshold-vaults",
               "decisions/0007-live-bridge-first",
-              "decisions/0008-book-from-the-chain"
+              "decisions/0008-book-from-the-chain",
+              "decisions/0009-customer-held-keys",
+              "decisions/0010-issuer-neutral-stablecoins",
+              "decisions/0011-read-only-first"
             ]
           }
         ]

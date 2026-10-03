@@ -1,0 +1,82 @@
+---
+title: "Keys and signers"
+description: "Corridor runs inside the payment company's environment and signs with the company's own keys: one signing interface for Tempo, Base and Solana, with local, AWS KMS and MPC adapters."
+icon: "key-square"
+---
+
+Corridor never needs to hold a customer's money or keys. A licensed payment company runs Corridor in its own environment (or a managed instance dedicated to it) and plugs in the signer it already trusts. The saga engine, route planner and ledger decide **what** to sign; the customer's signer is the only thing that **can** sign.
+
+<CardGroup cols={2}>
+  <Card title="Customer-held keys" icon="lock">
+    Vault keys live in the customer's KMS, HSM or MPC provider. Corridor sends a 32-byte digest and gets a signature back. Key material never enters Corridor's process.
+  </Card>
+  <Card title="One interface, every chain" icon="plug">
+    secp256k1 for Tempo and Base, Ed25519 for Solana. Adding a provider is one adapter, not a change to any leg.
+  </Card>
+</CardGroup>
+
+## The interface
+
+```ts
+// @corridor/signer
+interface Secp256k1Signer {
+  kind: string;                                  // "local", "aws-kms", "fireblocks", …
+  publicKey(): Promise<Hex>;                     // uncompressed, 65 bytes
+  signDigest(digest: Hex): Promise<{ r: bigint; s: bigint; yParity: 0 | 1 }>;
+}
+
+interface Ed25519Signer {
+  kind: string;
+  address: string;                               // base58 Solana address
+  signBytes(message: Uint8Array): Promise<Uint8Array>;
+}
+```
+
+Adapters turn a signer into what each chain SDK expects:
+
+| Adapter | Produces | Used for |
+|---|---|---|
+| `tempoAccount(signer)` | A viem/tempo account (secp256k1 key type) | Tempo vaults: transfers with memo, fees in stablecoins |
+| `evmAccount(signer)` | A viem account (transactions, messages, typed data) | The Base relay wallet and Across deposits |
+| `solanaSigner(signer)` | A @solana/kit transaction signer | Solana vaults and partner funding |
+
+## Adapters available
+
+| Adapter | Status | Notes |
+|---|---|---|
+| `localSecp256k1Signer(privateKey)` | Built | Development and testnet. Produces the same signatures as viem's own local accounts. |
+| `awsKmsSigner(kms, keyId)` | Built, tested | Key spec `ECC_SECG_P256K1`. KMS returns DER signatures with no recovery bit and no low-s rule; the adapter normalises `s` and recovers `yParity` against the key's public key, so the result is a valid Tempo and Base signature. |
+| Solana via `solanaSigner` | Interface built | Any Ed25519 signing service (an MPC provider or a KMS with Ed25519 keys) plugs in through `signBytes`. |
+| Fireblocks, Turnkey | Next | Same interfaces; each is one adapter. |
+
+Corridor does not bundle the AWS SDK. Wrap the customer's own `KMSClient`:
+
+```ts
+import { KMSClient, GetPublicKeyCommand, SignCommand } from "@aws-sdk/client-kms";
+import { awsKmsApi, awsKmsSigner, tempoAccount } from "@corridor/signer";
+import { tempoClient } from "@corridor/chain-tempo";
+
+const kms = awsKmsApi(new KMSClient({ region: "eu-west-1" }), { GetPublicKeyCommand, SignCommand });
+const vault = tempoClient({
+  network: "mainnet",
+  account: await tempoAccount(awsKmsSigner(kms, "alias/corridor-tempo-vault")),
+});
+```
+
+The demo runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` with `<KEY_NAME>_KMS_KEY_ID` switches a vault to KMS; the default is a local key from `.env.local`.
+
+## Evidence
+
+- Unit tests sign Base transactions, messages and Tempo hashes through a KMS stand-in that returns real DER signatures with high-s half the time; every signature recovers to the expected address.
+- The Tempo treasury vault in the testnet runtime now signs through `tempoAccount(...)`.
+- A live Moderato transfer signed through the interface: [0x0c2b2a85…](https://explore.testnet.tempo.xyz/tx/0x0c2b2a85dc748b99afbbae03bba018184207075fae89e8a4643fd7bd0ec2e117).
+
+## Deployment models
+
+| Model | Who runs Corridor | Who holds keys | Fits |
+|---|---|---|---|
+| Self-hosted | The customer, in its cloud | The customer | Banks and larger licensed operators |
+| Dedicated managed instance | Corridor, one instance per customer | The customer (Corridor calls its KMS or MPC) | Mid-size payout companies |
+| Read-only | Either | Nobody: no keys needed | The first 60 days. See [Read-only pilot](/flows/read-only-pilot). |
+
+The shielded lane keeps its own threshold model: Zcash vaults are FROST 2-of-3 across customer approver, customer finance and an operator key. See [FROST](/integrations/frost).

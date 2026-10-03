@@ -1,0 +1,60 @@
+---
+title: "Read-only pilot"
+description: "How a payment company starts: Corridor watches the wallets it already runs, matches what moved against its own payout records, and returns an exceptions queue. No keys, nothing moves."
+icon: "eye"
+---
+
+The first step with Corridor moves no money. A payment company shares the addresses of the wallets it already uses with its current providers, plus an export of its payout records. Corridor watches those wallets, matches every stablecoin movement against the records, and produces the morning exceptions queue.
+
+<Steps>
+  <Step title="Share addresses">
+    Tempo, Solana and Base addresses, in a short config file. No keys, no API access to the company's systems.
+  </Step>
+  <Step title="Share payout records">
+    A CSV from the company's core system: id, chain, stablecoin, amount, direction, counterparty, reference (if any), time.
+  </Step>
+  <Step title="Get matched payouts and exceptions">
+    Every record is matched, short, over, pending or missing; every movement with no record is flagged. A CSV comes back for the finance team.
+  </Step>
+</Steps>
+
+## What gets observed
+
+| Chain | Observer | Stablecoins |
+|---|---|---|
+| Tempo | `TempoObserver` with a key-less reader | pathUSD, USDC.e (TIP-20) |
+| Solana | `SolanaWatcher`: amounts from each transaction's balance changes, so any program's transfers count | USDC, USDT, PYUSD (Token-2022), EURC |
+| Base | `Erc20Watcher` | USDC, EURC |
+
+## How matching works
+
+1. **By Corridor Reference.** A movement that carries a reference (Tempo memo, Solana memo) matches the record with the same reference on the same chain, exactly.
+2. **By amount and counterparty.** Otherwise: same chain, same stablecoin, same direction, same counterparty when the record names one, nearest in time within six hours, exact amounts first.
+
+| Status | Meaning | Action |
+|---|---|---|
+| `matched` | Seen, amount as expected | None |
+| `short` / `over` | Seen, but the amount differs | Chase the partner or the fee |
+| `pending` | Not seen yet, inside the 30-minute grace period | Wait |
+| `missing` | Not seen after the grace period | Chase it before the customer complains |
+| `unexpected` | Moved on-chain with no record | Identify it: it may be customer money |
+
+Amounts stay in integer minor units throughout, so nothing is rounded.
+
+## Run it
+
+```bash
+pnpm watch:report examples/watch/eu-payco-demo.json
+```
+
+The example watches the demo's real testnet wallets (Tempo Moderato treasury, Solana devnet vault, Base Sepolia relay) against eight sample records. A run on 3 October 2026 observed 22 stablecoin movements and returned:
+
+| matched | short | over | pending | missing | unexpected |
+|---|---|---|---|---|---|
+| 6 | 1 | 0 | 0 | 1 | 15 |
+
+The unexpected movements are faucet mints and internal saga legs that the sample records do not cover, which is the point: a real pilot surfaces exactly these.
+
+## From pilot to moving money
+
+The same observers, references and matching run unchanged when Corridor starts moving money. The difference is who signs: the company connects its own signer ([Keys and signers](/architecture/keys-and-signers)), and Corridor's sagas move payouts over Tempo with the reference in every memo, so matching becomes exact instead of heuristic.

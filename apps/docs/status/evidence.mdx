@@ -58,10 +58,17 @@ The auditor disclosure in the console replay exports the FROST vault's unified f
 | Live quote, Base USDC → Solana USDC (mainnet) | Fill ~8 s, fee ≈ $0.0006 | Quote only (29 Sep 2026) |
 | Live testnet deposit, Base Sepolia → Solana devnet | USDC burned and attested by Circle CCTP v2; final mint restricted to Across's testnet relayer, which had not executed | [0x782d8b52…](https://sepolia.basescan.org/tx/0x782d8b52d1278892e5215a7a72bf731fa0e205a9274f38f99e0bcb9992c76e02) |
 
+## Customer-held keys and read-only pilot
+
+| Run | Result | Transaction |
+|---|---|---|
+| Tempo transfer signed through `@corridor/signer` (3 Oct 2026) | The account built by `tempoAccount(localSecp256k1Signer(...))` signs a real Moderato transfer; the KMS adapter produces the same address in tests | [0x0c2b2a85…](https://explore.testnet.tempo.xyz/tx/0x0c2b2a85dc748b99afbbae03bba018184207075fae89e8a4643fd7bd0ec2e117) |
+| `pnpm watch:report` on the demo wallets (3 Oct 2026) | 22 stablecoin movements observed on Tempo, Solana and Base; 8 sample records: 6 matched, 1 short, 1 missing, 15 unrecorded | Read-only, nothing moved |
+
 ## Code
 
 | Measure | Value |
 |---|---|
-| TypeScript tests | 71 passing |
+| TypeScript tests | 87 passing |
 | Rust tests (`corridor-frost`) | 3 passing: any 2 of 3 verify under `rk`, 1 of 3 fails, keygen yields a valid Ironwood viewing key and address |
 | License | MIT |

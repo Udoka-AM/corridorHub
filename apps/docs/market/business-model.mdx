@@ -1,21 +1,20 @@
 ---
 title: "Business model"
-description: "A 0.30% all-in take on settled volume across four revenue lines, unit economics for one customer, and revenue at different shares of Africa's stablecoin flow."
+description: "A ledger subscription from the first read-only pilot, a take on volume Corridor routes, unit economics for one customer, and revenue scenarios against Africa's stablecoin flow."
 icon: "chart-no-axes-combined"
 ---
 
-Corridor earns where it creates value: when money settles, when it converts, while it waits, and on the software the treasury team runs every day.
+Corridor earns before it moves a dollar: the ledger and reconciliation are a subscription from the first read-only pilot. Once the customer routes payouts through Corridor, it also earns on that volume.
 
 ## Revenue lines
 
 | Line | Indicative pricing | Charged on |
 |---|---|---|
-| Settlement fee | 0.10% – 0.30% of volume | Every payout and collection settled through the hub |
+| Ledger and reconciliation subscription | $1,500 – $3,000 per month | Per customer, from the read-only pilot onwards: matching, exceptions, exports, disclosures |
+| Routing fee | 0.10% – 0.30% of volume | Payouts and collections Corridor moves on the customer's signer |
 | FX spread share | ~0.10% | Conversions priced by partners, shared with Corridor |
-| Treasury and reconciliation software | $1,500 – $3,000 per month | Per customer: console, forecast, reconciliation, disclosures |
-| Yield on idle float | Share of yield | Customer balances held between payments |
 
-The all-in take lands at about **0.30% of every dollar settled**: a fraction of what the same payment costs through correspondent banks today.
+Corridor does not take a share of yield on customer balances: the balances sit in the customer's own vaults. The take on routed volume lands at about **0.30% all in**, a fraction of what the same payment costs through correspondent banks today.
 
 ## One customer
 
@@ -25,7 +24,7 @@ A mid-size payout company settling **$5M a month** through Corridor:
 |---|---|
 | Annual volume | $60M |
 | All-in take | ~0.30% |
-| Software | ~$24K a year |
+| Subscription | ~$24K a year, from month one |
 | **Annual revenue** | **~$200K** |
 
 ## At the scale of the market
@@ -40,21 +39,24 @@ Revenue at a 0.30% take on a share of Sub-Saharan Africa's stablecoin flow ([$88
 | 15% | $13.2B | $39.7M | $36.3B | $108.9M |
 
 <Note>
-These are illustrative projections, not forecasts. The live version is the interactive simulator on the [Corridor website](https://udoka-am.github.io/corridor/#economics).
+These are scenarios, not forecasts: they count routed volume only and leave out subscriptions. The live version is the interactive simulator on the [Corridor website](https://udoka-am.github.io/corridor/#economics).
 </Note>
 
 ## Why the margin holds
 
 - **Network effects.** Each partner added reaches every customer and every other region. Customers get more corridors without more integrations, which raises switching costs.
-- **Treasury lock-in.** The operations team runs its daily treasury, forecasting and reconciliation on Corridor. That is the system of record, not a pipe.
+- **System of record.** The operations team's ledger, exceptions and audit history live in Corridor. Providers become interchangeable venues; Corridor does not.
 - **Data compounds.** Pre-funding forecasts improve with volume per corridor, and reconciliation history becomes audit evidence.
 - **Cheap rails underneath.** Hub settlement costs fractions of a cent per transfer on Tempo, and bridge hops cost fractions of a cent on Across, so the take is margin rather than pass-through.
 
 ## Go-to-market
 
 <Steps>
-  <Step title="Land">
-    Licensed payout companies paying into Africa, starting with EUR → NGN.
+  <Step title="Land read-only">
+    Licensed payout companies paying into Africa, starting with EUR → NGN: a 60-day read-only pilot on the wallets they already run.
+  </Step>
+  <Step title="Route">
+    Move payouts through Corridor on the customer's own signer, settling on Tempo.
   </Step>
   <Step title="Reverse the flow">
     The same customers' importer clients paying suppliers in Asia and the Americas (NGN → CNY first), on the same integration.

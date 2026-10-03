@@ -24,7 +24,7 @@ export function Nav() {
         <a href="https://corridorapp.mintlify.app" target="_blank" rel="noreferrer">Docs</a>
       </div>
       <a className="btn primary sm" href="#access" data-hot>
-        Request access
+        Start a pilot
       </a>
     </nav>
   );
@@ -120,7 +120,7 @@ export function Footer() {
   return (
     <footer className="footer">
       <div className="wrap">
-        <span>Corridor · infrastructure for licensed payment companies. Not a money transmitter.</span>
+        <span>Corridor · software licensed payment companies run with their own keys. Corridor never holds customer funds.</span>
         <a href="./console/">Live console</a>
         <a href="https://corridorapp.mintlify.app" target="_blank" rel="noreferrer">Docs</a>
         <a href="https://tempo-solana-swap.pages.dev" target="_blank" rel="noreferrer">Tempo ⇌ Solana swap</a>

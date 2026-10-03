@@ -77,7 +77,7 @@ export default function Collapse() {
           <div className="phase b">
             <span className="big">1</span>
             <h2 className="h2">Balance on Tempo. Zero nostros.</h2>
-            <p className="lede">One stablecoin balance funds every corridor. Topped up when a 7-day forecast says so.</p>
+            <p className="lede">One stablecoin balance funds every corridor: your vault, your keys, every movement matched.</p>
           </div>
         </div>
         <div className="field" aria-hidden="true">

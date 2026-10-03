@@ -72,13 +72,13 @@ export default function Hero({ ready }: { ready: boolean }) {
       </div>
       <div className="shade" />
       <div className="wrap copy">
-        <Words as="h1" className="display" text={"One balance.\nEvery corridor."} />
+        <Words as="h1" className="display" text={"Every payout.\nOne ledger."} />
         <p className="lede">
-          Stablecoin settlement on Tempo for licensed payment companies moving money into and out of Africa. No pre-funding.
+          Move stablecoin payouts into and out of Africa over Tempo, and match each one from funding to bank credit. On your own keys.
         </p>
         <div className="ctas">
           <a className="btn primary" href="#access" data-hot>
-            Request access <span className="arr">→</span>
+            Start a read-only pilot <span className="arr">→</span>
           </a>
           <a className="btn" href="./console/" data-hot>
             Open the live console <span className="arr">↗</span>
