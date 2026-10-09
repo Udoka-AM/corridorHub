@@ -1,5 +1,134 @@
 [
  {
+  "id": "f12c08fd-7ddc-4787-ac4b-8cb40df4d8e6",
+  "kind": "payout",
+  "status": "compensated",
+  "createdAt": "2026-10-09T02:48:52.741Z",
+  "corridor": "EUR-NGN",
+  "customer": "eu-payco-demo",
+  "amount": "4 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "held": "4000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "compensated",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "4000000",
+     "direction": "out",
+     "tempoMove": "0x22f2d500b2bbcc267ba87f2426156af719aae14e0000597e373d39ece3128d6a:12"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x22f2d500b2bbcc267ba87f2426156af719aae14e0000597e373d39ece3128d6a"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "failed",
+    "attempts": 1,
+    "output": null,
+    "error": "injected failure at partner.payout",
+    "links": []
+   }
+  ],
+  "refunds": [
+   "https://explore.testnet.tempo.xyz/tx/0x7430fe542203290d23a3b06268e04330b65201a56dacfba0918cf05a4ea30cf5"
+  ]
+ },
+ {
+  "id": "46a54658-6346-4e37-9843-7025ca14f071",
+  "kind": "payout",
+  "status": "completed",
+  "createdAt": "2026-10-09T02:48:43.033Z",
+  "corridor": "EUR-NGN",
+  "customer": "eu-payco-demo",
+  "amount": "7 pathUSD",
+  "recipient": "Ada Obi",
+  "route": [
+   "ledger.reserve",
+   "bridge.simulated",
+   "partner.payout"
+  ],
+  "steps": [
+   {
+    "idx": 0,
+    "kind": "ledger.reserve",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "held": "7000000"
+    },
+    "error": null,
+    "links": []
+   },
+   {
+    "idx": 1,
+    "kind": "bridge.simulated",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "fill": "simulated",
+     "amount": "7000000",
+     "direction": "out",
+     "tempoMove": "0x7b21528ff2a1d31b5fd48526cf9316b9572f365ca6fdb14aef453284800950f0:28"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Tempo tx",
+      "url": "https://explore.testnet.tempo.xyz/tx/0x7b21528ff2a1d31b5fd48526cf9316b9572f365ca6fdb14aef453284800950f0"
+     }
+    ]
+   },
+   {
+    "idx": 2,
+    "kind": "partner.payout",
+    "status": "done",
+    "attempts": 1,
+    "output": {
+     "rate": 1530,
+     "status": "completed",
+     "orderId": "mock_b57f1ac2-8022-4f77-80e3-5d86c86d52e2",
+     "partner": "mock",
+     "currency": "NGN",
+     "fiatAmount": "1071000",
+     "fundingRef": "5dww7Tbsk6rUJ8vnmeGXcsW3rMmrHSxcFJ9CJdnhHDqdPumcaFNQefiGXonXMb4TCmswDqvGH733Kc6werNBNjiA"
+    },
+    "error": null,
+    "links": [
+     {
+      "label": "Solana funding",
+      "url": "https://explorer.solana.com/tx/5dww7Tbsk6rUJ8vnmeGXcsW3rMmrHSxcFJ9CJdnhHDqdPumcaFNQefiGXonXMb4TCmswDqvGH733Kc6werNBNjiA?cluster=devnet"
+     }
+    ]
+   }
+  ],
+  "refunds": []
+ },
+ {
   "id": "eaef848f-4826-48bc-8c6f-3bbdafe9d020",
   "kind": "payout",
   "status": "compensated",

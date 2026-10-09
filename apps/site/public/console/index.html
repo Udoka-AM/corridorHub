@@ -156,7 +156,7 @@
 
 <div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
 
-<script>window.CORRIDOR_REPLAY = {"snapshotDate":"9 Oct 2026","recordedAt":"2026-10-09T02:23:30.965Z"};</script>
+<script>window.CORRIDOR_REPLAY = {"snapshotDate":"9 Oct 2026","recordedAt":"2026-10-09T03:06:47.121Z"};</script>
 <script>
 // Set by scripts/snapshot-console.ts for the public replay: data comes from
 // recorded JSON, and nothing can move funds.
@@ -229,7 +229,8 @@ async function refreshRecon() {
   $("vaultCheck").innerHTML = (r.vaults || []).map((v) =>
     `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${chip(v.status)}<strong>${esc(v.vault)} vault</strong>` +
     `<span style="color:var(--muted)">on-chain ${esc(v.onchain)} · ledger ${esc(v.ledger)}${v.status === "drift" ? ` · <span style="color:var(--bad)">${v.short ? "missing" : "unbooked"} ${esc(v.diff)}</span>` : ""}</span></div>`).join("") +
-    (r.gas ? `<div style="color:var(--muted);margin-top:4px">Gas booked as expense: ${esc(r.gas.total)} across ${r.gas.transactions} Tempo transactions</div>` : "");
+    (r.gas ? `<div style="color:var(--muted);margin-top:4px">Gas booked as expense: ${esc(r.gas.total)} across ${r.gas.transactions} Tempo transactions</div>` : "") +
+    (r.solanaGas ? `<div style="color:var(--muted);margin-top:2px">Solana: ${esc(r.solanaGas.fees)} network fees across ${r.solanaGas.transactions} transactions, ${esc(r.solanaGas.rent)} account rent for partner deposit accounts</div>` : "");
   $("recon").innerHTML = `<tr><th>Status</th><th>Venue</th><th>Movement</th><th class="num">Amount</th></tr>` +
     (r.rows.slice().reverse().map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.venue)}</td><td class="mono">${esc(short(x.ref, 10))}</td><td class="num">${esc(x.amount)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">Nothing observed yet</td></tr>`);
 }

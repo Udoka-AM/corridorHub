@@ -64,4 +64,41 @@ describe("vault accounting", () => {
     const [off] = await checkVaults(accounts, ledger, [{ ...opts.vaults[0]!, onchain: 1_000_098n }]);
     expect(off).toMatchObject({ status: "drift", diff: 98n });
   });
+
+  it("books Solana and Base gas in their native assets the same way, and checks the SOL vault", async () => {
+    const SOL_VAULT = "GNaeRSd8Q2LRsTVubmdBF3NzHX8KTSeLUV2rMxN2oMHL";
+    const FUNDER = "Funder1111111111111111111111111111111111111";
+    const BASE_RELAY = "0x7b54a95e0708b32c6a1299c3930b9abc06ebe43a";
+    const at = new Date();
+    const sol: Observation[] = [
+      { venue: "solana", externalRef: "sigA:sol", reference: null, asset: "SOL", amount: 1_000_000_000n, from: FUNDER, to: SOL_VAULT, blockNumber: 1n, observedAt: at },
+      { venue: "solana", externalRef: "sigB:fee", reference: null, asset: "SOL", amount: 5_000n, from: SOL_VAULT, to: "solana:network-fees", blockNumber: 2n, observedAt: at },
+      { venue: "solana", externalRef: "sigC:fee", reference: null, asset: "SOL", amount: 5_000n, from: SOL_VAULT, to: "solana:network-fees", blockNumber: 3n, observedAt: at },
+      { venue: "solana", externalRef: "sigC:sol", reference: null, asset: "SOL", amount: 1_488_440n, from: SOL_VAULT, to: "solana:account-rent", blockNumber: 3n, observedAt: at },
+    ];
+    const solOpts = {
+      vaults: [{ name: "solana-vault", address: SOL_VAULT, asset: "SOL" as const, venue: "solana" as const }],
+      fundingSources: [FUNDER],
+      feeCollector: "solana:network-fees",
+      expenses: { "solana:account-rent": "account-rent" },
+    };
+    expect(await bookVaultMovements(ledger, accounts, sol, solOpts)).toEqual({ gas: 2, other: 1, funding: 1, failed: [] });
+    const [check] = await checkVaults(accounts, ledger, [{ ...solOpts.vaults[0]!, onchain: 1_000_000_000n - 10_000n - 1_488_440n }]);
+    expect(check).toMatchObject({ status: "balanced", diff: 0n });
+    expect((await ledger.balance(await accounts.expense("gas", "SOL", "solana"))).amount).toBe(10_000n);
+    expect((await ledger.balance(await accounts.expense("account-rent", "SOL", "solana"))).amount).toBe(1_488_440n);
+
+    const base: Observation[] = [
+      { venue: "base", externalRef: "0xfund:0", reference: null, asset: "ETH", amount: 10n ** 15n, from: FUNDER, to: BASE_RELAY, blockNumber: 5n, observedAt: at },
+      { venue: "base", externalRef: "0xdeposit:fee", reference: null, asset: "ETH", amount: 400_000_000_000n, from: BASE_RELAY, to: "base:network-fees", blockNumber: 6n, observedAt: at },
+    ];
+    const baseOpts = {
+      vaults: [{ name: "base-relay", address: BASE_RELAY, asset: "ETH" as const, venue: "base" as const }],
+      fundingSources: [FUNDER],
+      feeCollector: "base:network-fees",
+    };
+    expect(await bookVaultMovements(ledger, accounts, base, baseOpts)).toEqual({ gas: 1, funding: 1, failed: [] });
+    expect((await ledger.balance(await accounts.expense("gas", "ETH", "base"))).amount).toBe(400_000_000_000n);
+    expect(await ledger.checkInvariants()).toEqual([]);
+  });
 });

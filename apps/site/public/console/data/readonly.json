@@ -1,8 +1,8 @@
 {
  "customer": "eu-payco-demo",
  "errors": [],
- "generatedAt": "2026-10-09T02:23:30.923Z",
- "observed": 27,
+ "generatedAt": "2026-10-09T03:06:47.080Z",
+ "observed": 32,
  "records": 8,
  "summary": {
   "matched": 6,
@@ -10,7 +10,7 @@
   "over": 0,
   "pending": 0,
   "missing": 1,
-  "unexpected": 20
+  "unexpected": 25
  },
  "exceptions": [
   {
@@ -264,6 +264,66 @@
    "matchedBy": null,
    "ref": "0xfcb4374aa118639ac244f537edc111e711b0dbdd1a60d4ad19d1897f59cc3845:3",
    "at": "2026-10-09T01:44:58.000Z"
+  },
+  {
+   "status": "unexpected",
+   "record": null,
+   "venue": "tempo",
+   "asset": "pathUSD",
+   "expected": null,
+   "observed": "20 pathUSD",
+   "difference": null,
+   "matchedBy": null,
+   "ref": "0x23882cdc50176e28bee9edc91c2168ee869f97b7b80a1eaa4db37733caa10c4a:5",
+   "at": "2026-10-09T02:48:41.000Z"
+  },
+  {
+   "status": "unexpected",
+   "record": null,
+   "venue": "tempo",
+   "asset": "pathUSD",
+   "expected": null,
+   "observed": "7 pathUSD",
+   "difference": null,
+   "matchedBy": null,
+   "ref": "0x7b21528ff2a1d31b5fd48526cf9316b9572f365ca6fdb14aef453284800950f0:28",
+   "at": "2026-10-09T02:48:43.000Z"
+  },
+  {
+   "status": "unexpected",
+   "record": null,
+   "venue": "tempo",
+   "asset": "pathUSD",
+   "expected": null,
+   "observed": "4 pathUSD",
+   "difference": null,
+   "matchedBy": null,
+   "ref": "0x22f2d500b2bbcc267ba87f2426156af719aae14e0000597e373d39ece3128d6a:12",
+   "at": "2026-10-09T02:48:54.000Z"
+  },
+  {
+   "status": "unexpected",
+   "record": null,
+   "venue": "tempo",
+   "asset": "pathUSD",
+   "expected": null,
+   "observed": "4 pathUSD",
+   "difference": null,
+   "matchedBy": null,
+   "ref": "0x7430fe542203290d23a3b06268e04330b65201a56dacfba0918cf05a4ea30cf5:5",
+   "at": "2026-10-09T02:48:56.000Z"
+  },
+  {
+   "status": "unexpected",
+   "record": null,
+   "venue": "solana",
+   "asset": "USDC",
+   "expected": null,
+   "observed": "7 USDC",
+   "difference": null,
+   "matchedBy": null,
+   "ref": "5dww7Tbsk6rUJ8vnmeGXcsW3rMmrHSxcFJ9CJdnhHDqdPumcaFNQefiGXonXMb4TCmswDqvGH733Kc6werNBNjiA",
+   "at": "2026-10-09T02:48:50.000Z"
   },
   {
    "status": "unexpected",

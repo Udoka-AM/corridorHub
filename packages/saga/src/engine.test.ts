@@ -183,4 +183,46 @@ describe("saga engine", () => {
     expect(await engine.run(id)).toBe("completed");
     expect(log.filter((l) => l === "fwd bridge.simulated")).toHaveLength(1);
   });
+
+  it("fences out a worker whose lease expired mid-leg: its bookings and step result are never committed", async () => {
+    const calls: string[] = [];
+    /** A leg whose every call books a distinct movement, so only fencing (not idempotency) can stop a double booking. */
+    const slowThenFast = (worker: string, delayMs: number): Leg<PayoutData> => ({
+      kind: "bridge.simulated",
+      backoffMs: 1,
+      async forward(ctx) {
+        calls.push(worker);
+        await new Promise((r) => setTimeout(r, delayMs));
+        const vault = await ctx.accounts.vault("treasury", "pathUSD", "tempo");
+        const clearing = await ctx.accounts.clearing("bridge", "pathUSD", "tempo");
+        return {
+          output: { by: worker },
+          bookings: [
+            {
+              kind: "bridge.move",
+              external: { venue: "internal", ref: `${worker}:${Date.now()}` },
+              lines: [
+                { account: clearing, direction: "D", money: money("pathUSD", 1n) },
+                { account: vault, direction: "C", money: money("pathUSD", 1n) },
+              ],
+            },
+          ],
+        };
+      },
+    });
+    const a = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, slowThenFast("A", 250), fakeLeg("partner.payout", [])], { leaseMs: 60 });
+    const b = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, slowThenFast("B", 0), fakeLeg("partner.payout", [])], { leaseMs: 60_000 });
+    const id = await a.start({ kind: "payout", plan, data });
+
+    const runA = a.run(id); // A takes the lease, then stalls inside the bridge leg
+    await new Promise((r) => setTimeout(r, 120)); // A's 60 ms lease lapses
+    expect(await b.run(id)).toBe("completed"); // B takes over and finishes
+    expect(await runA).toBe("completed"); // A wakes up, is fenced out, and reports the real status
+
+    expect(calls).toEqual(["A", "B"]);
+    const { rows } = await db.query<{ n: number }>(`select count(*)::int as n from journal_entries where kind = 'bridge.move'`);
+    expect(rows[0]!.n).toBe(1);
+    expect((await a.get(id)).steps[1]!.output).toEqual({ by: "B" });
+    expect(await ledger.checkInvariants()).toEqual([]);
+  });
 });

@@ -16,7 +16,8 @@ import { fileURLToPath } from "node:url";
 import { formatMoney, fromZcashMemo, parseCorridor, type Asset, type CorridorCode, type Fiat, type Observation } from "@corridor/core";
 import { EXPLORER, FEE_MANAGER, TempoObserver, balanceOf, firstFundedBlock } from "@corridor/chain-tempo";
 import { ZcashWallet, formatZec, shieldedObservations } from "@corridor/chain-zcash";
-import { bookVaultMovements, checkVaults, reconcile, summarize, type VaultRef } from "@corridor/recon";
+import { SOLANA_ACCOUNT_RENT, SOLANA_FEES, SolanaWatcher } from "@corridor/chain-solana";
+import { bookVaultMovements, checkVaults, reconcile, summarize, type VaultCheck, type VaultRef } from "@corridor/recon";
 import { COLLECTION_CURRENCIES, PAYOUT_CURRENCIES, planRoute } from "@corridor/routing";
 import type { PartnerOrder } from "@corridor/partners";
 import { PgCursorStore } from "@corridor/recon";
@@ -187,6 +188,29 @@ const vaultObserver = new TempoObserver(rt.treasury, {
   unreferenced: true,
 });
 
+// Solana vault: network fees and account rent are paid in SOL and booked from
+// each transaction the vault signed, like Tempo gas. Devnet SOL comes from the
+// faucet; on mainnet list the owner's top-up wallets.
+const SOLANA_VAULTS: VaultRef[] = rt.solana ? [{ name: "solana", address: rt.solana.address, asset: "SOL", venue: "solana" }] : [];
+const SOLANA_FUNDING = ["dev2JBjyB5CshoGsiJCwzdmJYiEUwAXMdqDR7txoFBJ", ...(process.env.SOLANA_FUNDING_SOURCES ?? "").split(",").filter(Boolean)];
+let solanaCache: { at: number; checks: VaultCheck[] } | undefined;
+async function solanaVaultAccounting(): Promise<VaultCheck[]> {
+  if (!SOLANA_VAULTS.length) return [];
+  if (solanaCache && Date.now() - solanaCache.at < 5 * 60_000) return solanaCache.checks;
+  const watcher = new SolanaWatcher(SOLANA_VAULTS[0]!.address, "devnet");
+  const movements = (await watcher.history({ native: true })).filter((o) => o.asset === "SOL");
+  const booked = await bookVaultMovements(rt.ledger, rt.accounts, movements, {
+    vaults: SOLANA_VAULTS,
+    fundingSources: SOLANA_FUNDING,
+    feeCollector: SOLANA_FEES,
+    expenses: { [SOLANA_ACCOUNT_RENT]: "account-rent" },
+  });
+  for (const f of booked.failed) console.warn(`solana vault booking pending for ${f.externalRef}: ${f.error}`);
+  const checks = await checkVaults(rt.accounts, rt.ledger, [{ ...SOLANA_VAULTS[0]!, onchain: await watcher.nativeBalance() }]);
+  solanaCache = { at: Date.now(), checks };
+  return checks;
+}
+
 /** Partner orders as last reported by their (verified) webhooks; survives restarts. */
 async function partnerObservations(): Promise<Observation[]> {
   const rows = await q<{ body: Row }>(`select body from partner_events where status = 'completed'`);
@@ -215,16 +239,23 @@ async function reconciliation() {
   for (const f of booked.failed) console.warn(`vault booking pending for ${f.externalRef}: ${f.error}`);
   const all = [...seen.values(), ...(await partnerObservations()), ...zcashObservations()];
   const results = await reconcile(rt.ledger, all);
-  const vaults = await checkVaults(
-    rt.accounts,
-    rt.ledger,
-    await Promise.all(TEMPO_VAULTS.map(async (v) => ({ ...v, onchain: await balanceOf(rt.treasury, v.asset, v.address as `0x${string}`) }))),
-  );
+  const vaults = [
+    ...(await checkVaults(
+      rt.accounts,
+      rt.ledger,
+      await Promise.all(TEMPO_VAULTS.map(async (v) => ({ ...v, onchain: await balanceOf(rt.treasury, v.asset, v.address as `0x${string}`) }))),
+    )),
+    ...(await solanaVaultAccounting()),
+  ];
   const gas = (await rt.ledger.balance(await rt.accounts.expense("gas", "pathUSD", "tempo"))).amount;
-  const gasTxs = (await q<{ n: number }>(`select count(*)::int n from journal_entries where kind = 'gas'`))[0]?.n ?? 0;
+  const gasTxs = (await q<{ n: number }>(`select count(*)::int n from journal_entries where kind = 'gas' and external_venue = 'tempo'`))[0]?.n ?? 0;
+  const solGas = (await rt.ledger.balance(await rt.accounts.expense("gas", "SOL", "solana"))).amount;
+  const solRent = (await rt.ledger.balance(await rt.accounts.expense("account-rent", "SOL", "solana"))).amount;
+  const solTxs = (await q<{ n: number }>(`select count(*)::int n from journal_entries where kind = 'gas' and external_venue = 'solana'`))[0]?.n ?? 0;
   return {
     vaults: vaults.map((v) => ({ ...v, onchain: fmt(v.asset, v.onchain), ledger: fmt(v.asset, v.ledger), diff: fmt(v.asset, v.diff < 0n ? -v.diff : v.diff), short: v.diff < 0n })),
     gas: { total: fmt("pathUSD", gas), transactions: gasTxs },
+    solanaGas: SOLANA_VAULTS.length ? { fees: fmt("SOL", solGas), rent: fmt("SOL", solRent), transactions: solTxs } : null,
     summary: summarize(results),
     byVenue: Object.fromEntries(
       ["tempo", "partner_fiat", "zcash_ironwood"].map((v) => [v, summarize(results.filter((r) => r.observation.venue === v))]),

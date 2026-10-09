@@ -256,3 +256,4 @@ function hexToBytes(hex: Hex): Uint8Array {
 function bytesToHex(bytes: Uint8Array): Hex {
   return `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")}` as Hex;
 }
+export { TurnkeyApi, TurnkeyError, turnkeyEd25519Signer, turnkeySecp256k1Signer, type TurnkeyConfig } from "./turnkey.ts";

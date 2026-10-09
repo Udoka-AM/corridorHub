@@ -10,6 +10,28 @@ import type { Observation, Stablecoin, Venue } from "@corridor/core";
 
 export type BaseNetwork = "base" | "base-sepolia";
 
+/**
+ * Pseudo-address that Base fee observations are "paid to", so vault
+ * accounting books them to expense:gas exactly like Tempo's Fee Manager
+ * transfers and Solana's network fees.
+ */
+export const BASE_FEES = "base:network-fees";
+
+/** A Base transaction's fee (execution gas plus L1 data fee, in wei) as an Observation for vault accounting. */
+export function gasObservation(args: { txHash: string; payer: string; wei: bigint; blockNumber?: bigint; at?: Date }): Observation {
+  return {
+    venue: "base",
+    externalRef: `${args.txHash}:fee`,
+    reference: null,
+    asset: "ETH",
+    amount: args.wei,
+    from: args.payer,
+    to: BASE_FEES,
+    blockNumber: args.blockNumber,
+    observedAt: args.at ?? new Date(),
+  };
+}
+
 /** Stablecoins on Base by network. Bridged USDT has no canonical Base deployment, so it is left out on purpose. */
 export const BASE_STABLES: Record<BaseNetwork, Partial<Record<Stablecoin, Address>>> = {
   base: {

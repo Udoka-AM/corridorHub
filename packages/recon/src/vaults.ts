@@ -27,12 +27,16 @@ export interface VaultBookingOptions {
   vaults: VaultRef[];
   /** Addresses whose deposits are owner funding. The zero address covers testnet faucet mints. */
   fundingSources: string[];
-  /** Where fees go on this venue (Tempo's Fee Manager). */
+  /** Where fees go on this venue (Tempo's Fee Manager, or a pseudo-address for Solana and Base fees). */
   feeCollector: string;
+  /** Other costs a vault pays, by pseudo-address → expense name, e.g. Solana account rent. */
+  expenses?: Record<string, string>;
 }
 
 export interface VaultBookingResult {
   gas: number;
+  /** Bookings to the other expenses in `expenses` (e.g. account rent). */
+  other?: number;
   funding: number;
   /** Fee and funding movements that could not be booked yet (e.g. would overdraw the vault). */
   failed: { externalRef: string; error: string }[];
@@ -59,23 +63,28 @@ export async function bookVaultMovements(
   for (const o of ordered) {
     const payer = vaults.get(lower(o.from)!);
     const payee = vaults.get(lower(o.to)!);
-    const isGas = payer && lower(o.to) === collector && payer.asset === o.asset && payer.venue === o.venue;
+    const sameVenue = payer && payer.asset === o.asset && payer.venue === o.venue;
+    const otherExpense = sameVenue ? Object.entries(opts.expenses ?? {}).find(([addr]) => lower(addr) === lower(o.to))?.[1] : undefined;
+    const isGas = sameVenue && (lower(o.to) === collector || otherExpense !== undefined);
     const isFunding = payee && sources.has(lower(o.from)) && payee.asset === o.asset && payee.venue === o.venue;
     if (!isGas && !isFunding) continue;
     try {
       if (isGas) {
-        const vault = await accounts.vault(payer.name, o.asset, o.venue);
-        const gas = await accounts.expense("gas", o.asset, o.venue);
+        const vault = await accounts.vault(payer!.name, o.asset, o.venue);
+        const gas = await accounts.expense(otherExpense ?? "gas", o.asset, o.venue);
         const { duplicate } = await ledger.post({
-          kind: "gas",
+          kind: otherExpense ?? "gas",
           external: { venue: o.venue, ref: o.externalRef },
-          metadata: { vault: payer.name },
+          metadata: { vault: payer!.name },
           lines: [
             { account: gas, direction: "D", money: money(o.asset, o.amount) },
             { account: vault, direction: "C", money: money(o.asset, o.amount) },
           ],
         });
-        if (!duplicate) result.gas++;
+        if (!duplicate) {
+          if (otherExpense) result.other = (result.other ?? 0) + 1;
+          else result.gas++;
+        }
       } else {
         const vault = await accounts.vault(payee!.name, o.asset, o.venue);
         const owner = await accounts.equity("owner", o.asset, o.venue);

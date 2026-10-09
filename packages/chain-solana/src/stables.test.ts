@@ -59,3 +59,32 @@ describe("Solana stablecoins", () => {
     expect(ix[0]!.accounts!.some((a) => a.address === TOKEN_2022_PROGRAM_ADDRESS)).toBe(true);
   });
 });
+
+import { SOLANA_FEES, nativeMovements } from "./index.ts";
+
+describe("Solana native fee and SOL movements", () => {
+  const VAULT = "GNaeRSd8Q2LRsTVubmdBF3NzHX8KTSeLUV2rMxN2oMHL";
+  const PAJ = "9NqowirX9S8pXSPGY4D5K73huhWH4qVRTF97HiH14LD5";
+
+  it("separates the fee the vault paid from its other SOL changes", () => {
+    // The vault pays a 5,000-lamport fee and 2,039,280 lamports of rent for the partner's token account.
+    const tx = {
+      message: { accountKeys: [{ pubkey: VAULT }, { pubkey: "AtaNew111" }, { pubkey: PAJ }] },
+      meta: { fee: 5_000n, preBalances: [100_000_000n, 0n, 7n], postBalances: [100_000_000n - 5_000n - 2_039_280n, 2_039_280n, 7n] },
+    };
+    expect(nativeMovements(tx, VAULT)).toEqual({ fee: 5_000n, delta: -2_039_280n, counterparty: "AtaNew111", createdAccount: true });
+  });
+
+  it("reports an inbound top-up with its sender and no fee when someone else paid it", () => {
+    const tx = {
+      message: { accountKeys: ["Funder1111", VAULT] },
+      meta: { fee: 5_000, preBalances: [2_000_000_000, 0], postBalances: [2_000_000_000 - 1_000_000_000 - 5_000, 1_000_000_000] },
+    };
+    expect(nativeMovements(tx, VAULT)).toEqual({ fee: 0n, delta: 1_000_000_000n, counterparty: "Funder1111" });
+  });
+
+  it("ignores transactions the address isn't in", () => {
+    expect(nativeMovements({ message: { accountKeys: [PAJ] }, meta: { fee: 1n, preBalances: [5n], postBalances: [4n] } }, VAULT)).toEqual({ fee: 0n, delta: 0n });
+    expect(SOLANA_FEES).toBe("solana:network-fees");
+  });
+});

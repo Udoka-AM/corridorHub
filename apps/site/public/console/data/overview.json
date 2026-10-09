@@ -6,12 +6,12 @@
   "partner": "Paj-shaped partner (mock)"
  },
  "kpis": {
-  "hubBalance": "65 pathUSD",
+  "hubBalance": "78 pathUSD",
   "inFlight": "0 pathUSD",
-  "settled": "1,035 USDC",
+  "settled": "1,042 USDC",
   "sagas": {
-   "completed": 9,
-   "compensated": 4
+   "completed": 10,
+   "compensated": 5
   }
  },
  "customers": [
@@ -44,7 +44,7 @@
    "corridor": "EUR-NGN",
    "asset": "pathUSD",
    "venue": "tempo",
-   "available": "13 pathUSD",
+   "available": "26 pathUSD",
    "held": "0 pathUSD"
   },
   {
@@ -86,11 +86,18 @@
    "raw": "0"
   },
   {
+   "name": "solana",
+   "venue": "solana",
+   "asset": "SOL",
+   "balance": "0.99402624 SOL",
+   "raw": "994026240"
+  },
+  {
    "name": "treasury",
    "venue": "tempo",
    "asset": "pathUSD",
-   "balance": "1,000,064.994513 pathUSD",
-   "raw": "1000064994513"
+   "balance": "1,000,077.994471 pathUSD",
+   "raw": "1000077994471"
   }
  ],
  "clearing": [

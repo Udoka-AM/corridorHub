@@ -57,6 +57,67 @@ export function tokenDeltas(meta: TokenBalanceMeta, owner: string, cluster: Sola
   return out;
 }
 
+/**
+ * Pseudo-address that Solana fee observations are "paid to", so vault
+ * accounting books them to expense:gas the same way it books Tempo's Fee
+ * Manager transfers.
+ */
+export const SOLANA_FEES = "solana:network-fees";
+
+/**
+ * Pseudo-address for SOL a vault spends creating accounts (for example the
+ * recipient's token account when funding a partner's one-off deposit
+ * address). It is rent, not a transfer, and is booked to its own expense.
+ */
+export const SOLANA_ACCOUNT_RENT = "solana:account-rent";
+
+/** The parts of a parsed transaction the native (SOL) accounting reads. */
+export interface NativeTx {
+  message: { accountKeys: readonly ({ pubkey: string } | string)[] };
+  meta: { fee: bigint | number; preBalances: readonly (bigint | number)[]; postBalances: readonly (bigint | number)[] };
+}
+
+/**
+ * SOL movements for `owner` in one transaction: the network fee it paid (if it
+ * was the fee payer) and any other change in its SOL balance, with the account
+ * whose balance moved the opposite way.
+ */
+export function nativeMovements(tx: NativeTx, owner: string): { fee: bigint; delta: bigint; counterparty?: string; createdAccount?: boolean } {
+  const keys = tx.message.accountKeys.map((k) => (typeof k === "string" ? k : k.pubkey));
+  const i = keys.indexOf(owner);
+  if (i < 0) return { fee: 0n, delta: 0n };
+  const fee = i === 0 ? BigInt(tx.meta.fee) : 0n;
+  const change = (j: number) => BigInt(tx.meta.postBalances[j] ?? 0) - BigInt(tx.meta.preBalances[j] ?? 0);
+  const delta = change(i) + fee; // the fee is reported separately, so take it out of the owner's change
+  let counterparty: string | undefined;
+  let createdAccount = false;
+  if (delta !== 0n) {
+    let best = 0n;
+    keys.forEach((k, j) => {
+      if (j === i) return;
+      const c = change(j) + (j === 0 ? BigInt(tx.meta.fee) : 0n);
+      if ((delta > 0n ? c < 0n : c > 0n) && (c < 0n ? -c : c) > best) {
+        best = c < 0n ? -c : c;
+        counterparty = k;
+        createdAccount = delta < 0n && BigInt(tx.meta.preBalances[j] ?? 0) === 0n;
+      }
+    });
+  }
+  return createdAccount ? { fee, delta, counterparty, createdAccount } : { fee, delta, counterparty };
+}
+
+/** Public Solana RPCs answer 429 under load: wait and retry rather than fail a whole scan. */
+async function retrying<T>(fn: () => Promise<T>, attempts = 6): Promise<T> {
+  for (let i = 0; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (i + 1 >= attempts || !/429|too many requests|rate limit/i.test(String((e as Error)?.message ?? e))) throw e;
+      await new Promise((r) => setTimeout(r, 500 * 2 ** i));
+    }
+  }
+}
+
 /** RPC `memo` fields look like `[N] corridor:<hex>`; pull the Corridor Reference out if present. */
 export function extractReference(memoField: string | null | undefined): Hex | null {
   if (!memoField) return null;
@@ -85,19 +146,68 @@ export class SolanaWatcher {
     this.rpc = createSolanaRpc(rpcUrl ?? (cluster === "mainnet" ? "https://api.mainnet-beta.solana.com" : "https://api.devnet.solana.com"));
   }
 
-  async recent(opts: { limit?: number; before?: string; onlyReferenced?: boolean } = {}): Promise<Observation[]> {
-    const sigs = await this.rpc
-      .getSignaturesForAddress(address(this.owner), { limit: opts.limit ?? 25, ...(opts.before ? { before: opts.before as Signature } : {}) })
-      .send();
+  /**
+   * Every transaction touching the address, oldest first, following the RPC's
+   * pages back to the first one (or `max`). Used to replay a vault's history.
+   */
+  async history(opts: { native?: boolean; max?: number } = {}): Promise<Observation[]> {
+    const out: Observation[] = [];
+    let before: string | undefined;
+    for (let fetched = 0; fetched < (opts.max ?? 1_000); ) {
+      const sigs = await this.signatures(100, before);
+      out.push(...(await this.observe(sigs, { native: opts.native })));
+      fetched += sigs.length;
+      if (sigs.length < 100) break;
+      before = sigs[sigs.length - 1]!.signature;
+    }
+    return out.sort((a, b) => Number((a.blockNumber ?? 0n) - (b.blockNumber ?? 0n)));
+  }
+
+  async recent(opts: { limit?: number; before?: string; onlyReferenced?: boolean; native?: boolean } = {}): Promise<Observation[]> {
+    return this.observe(await this.signatures(opts.limit ?? 25, opts.before), opts);
+  }
+
+  /** The address's SOL balance in lamports, for the vault check. */
+  async nativeBalance(): Promise<bigint> {
+    const { value } = await retrying(() => this.rpc.getBalance(address(this.owner)).send());
+    return BigInt(value);
+  }
+
+  private async signatures(limit: number, before?: string) {
+    return retrying(() => this.rpc.getSignaturesForAddress(address(this.owner), { limit, ...(before ? { before: before as Signature } : {}) }).send());
+  }
+
+  private async observe(
+    sigs: Awaited<ReturnType<SolanaWatcher["signatures"]>>,
+    opts: { onlyReferenced?: boolean; native?: boolean },
+  ): Promise<Observation[]> {
     const out: Observation[] = [];
     for (const s of sigs) {
       if (s.err) continue;
       const reference = extractReference(s.memo);
       if (opts.onlyReferenced && !reference) continue;
-      const tx = await this.rpc
-        .getTransaction(s.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" })
-        .send();
+      const tx = await retrying(() =>
+        this.rpc.getTransaction(s.signature, { encoding: "jsonParsed", maxSupportedTransactionVersion: 0, commitment: "confirmed" }).send(),
+      );
       if (!tx?.meta) continue;
+      const at = new Date(Number(s.blockTime ?? 0) * 1000);
+      const slot = BigInt(s.slot);
+      if (opts.native) {
+        const n = nativeMovements({ message: (tx.transaction as unknown as NativeTx).message, meta: tx.meta as unknown as NativeTx["meta"] }, this.owner);
+        if (n.fee > 0n) {
+          out.push({ venue: "solana", externalRef: `${s.signature}:fee`, reference: null, asset: "SOL", amount: n.fee, from: this.owner, to: SOLANA_FEES, blockNumber: slot, observedAt: at });
+        }
+        if (n.delta !== 0n) {
+          const incoming = n.delta > 0n;
+          out.push({
+            // No leg books SOL, so this is never matched by reference: vault accounting books it (rent, funding).
+            venue: "solana", externalRef: `${s.signature}:sol`, reference: null, asset: "SOL", amount: incoming ? n.delta : -n.delta,
+            from: incoming ? n.counterparty : this.owner,
+            to: incoming ? this.owner : n.createdAccount ? SOLANA_ACCOUNT_RENT : n.counterparty,
+            blockNumber: slot, observedAt: at,
+          });
+        }
+      }
       const deltas = tokenDeltas(tx.meta as unknown as TokenBalanceMeta, this.owner, this.cluster);
       for (const d of deltas) {
         const incoming = d.delta > 0n;
@@ -109,8 +219,8 @@ export class SolanaWatcher {
           amount: incoming ? d.delta : -d.delta,
           from: incoming ? d.counterparty : this.owner,
           to: incoming ? this.owner : d.counterparty,
-          blockNumber: BigInt(s.slot),
-          observedAt: new Date(Number(s.blockTime ?? 0) * 1000),
+          blockNumber: slot,
+          observedAt: at,
         });
       }
     }

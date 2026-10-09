@@ -16,7 +16,7 @@ A cross-border payment moves value on a chain, through a bridge, at a partner an
 
 - Every intermediate state is a real state, visible in the console with its transactions.
 - Legs must be idempotent: they look for their movement by reference before sending.
-- A lease that expires mid-leg can let a slow worker finish a call; fencing tokens on bookings are on the roadmap.
+- A lease that expires mid-leg can let a slow worker finish a call; fencing tokens on every commit (bookings, step results, status) refuse anything it tries to write afterwards.
 
 ## Alternatives rejected
 

@@ -17,7 +17,7 @@ Memo-matched reconciliation proves that every Corridor-referenced movement was b
 - On Moderato the treasury's on-chain balance equals the ledger to the last unit, gas included.
 - Booking is idempotent: each movement is keyed by its log or output.
 - A deposit without a memo stays `unreferenced` until someone classifies it, because it may be customer money.
-- Solana and Base gas are not yet booked this way; they are on the roadmap.
+- Solana network fees and account rent are booked the same way, from each transaction the vault signed, and the Solana vault's SOL balance is checked against the ledger. Base gas is booked from each Across deposit's receipts (execution gas plus the L1 data fee).
 
 ## Alternatives rejected
 

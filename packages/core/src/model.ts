@@ -71,14 +71,20 @@ export const DIGITAL_ASSETS = {
   PYUSD: { decimals: 6, currency: "USD" },
   EURC: { decimals: 6, currency: "EUR" },
   ZEC: { decimals: 8, currency: "ZEC" },
+  // Native gas assets on the spokes. Held only as fee float and booked to expense:gas.
+  SOL: { decimals: 9, currency: "SOL" },
+  ETH: { decimals: 18, currency: "ETH" },
 } as const;
 export type DigitalAsset = keyof typeof DIGITAL_ASSETS;
 
-export type Stablecoin = { [K in DigitalAsset]: (typeof DIGITAL_ASSETS)[K]["currency"] extends "ZEC" ? never : K }[DigitalAsset];
+export type Stablecoin = { [K in DigitalAsset]: (typeof DIGITAL_ASSETS)[K]["currency"] extends "USD" | "EUR" ? K : never }[DigitalAsset];
 
 export const STABLECOINS = (Object.keys(DIGITAL_ASSETS) as DigitalAsset[]).filter(
-  (a): a is Stablecoin => DIGITAL_ASSETS[a].currency !== "ZEC",
+  (a): a is Stablecoin => DIGITAL_ASSETS[a].currency === "USD" || DIGITAL_ASSETS[a].currency === "EUR",
 );
+
+/** The asset each venue charges network fees in (Tempo charges in the stablecoin itself). */
+export const GAS_ASSET = { tempo: "pathUSD", base: "ETH", solana: "SOL" } as const;
 
 export function isStablecoin(asset: Asset): asset is Stablecoin {
   return (STABLECOINS as readonly string[]).includes(asset);

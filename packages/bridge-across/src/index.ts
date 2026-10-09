@@ -118,20 +118,40 @@ export async function quote(req: QuoteRequest, fetchImpl: Fetch = fetch): Promis
 /** The subset of a viem wallet client the adapter needs; Tempo and Base clients both satisfy it. */
 export interface EvmSender {
   sendTransaction(args: { to: Address; data: Hex; value?: bigint; chain?: any; account?: any }): Promise<Hex>;
-  waitForTransactionReceipt(args: { hash: Hex }): Promise<{ status: "success" | "reverted"; transactionHash: Hex }>;
+  waitForTransactionReceipt(args: { hash: Hex }): Promise<GasReceipt>;
+}
+
+export interface GasReceipt {
+  status: "success" | "reverted";
+  transactionHash: Hex;
+  gasUsed?: bigint;
+  effectiveGasPrice?: bigint;
+  /** OP Stack chains (Base) also charge an L1 data fee, reported on the receipt. */
+  l1Fee?: bigint | null;
+}
+
+/** What a transaction actually cost its sender, in wei: execution gas plus any L1 data fee. */
+export function gasPaid(r: GasReceipt): bigint {
+  return (r.gasUsed ?? 0n) * (r.effectiveGasPrice ?? 0n) + (r.l1Fee ?? 0n);
 }
 
 /** Sign and send the approvals, then the deposit. Returns the origin-chain deposit transaction. */
-export async function executeEvm(sender: EvmSender, q: AcrossQuote): Promise<{ depositTxHash: Hex; approvals: Hex[] }> {
+export async function executeEvm(
+  sender: EvmSender,
+  q: AcrossQuote,
+): Promise<{ depositTxHash: Hex; approvals: Hex[]; gas: { txHash: Hex; wei: bigint }[] }> {
   if (q.swapTx.ecosystem !== "evm") throw new AcrossError(`origin ecosystem ${q.swapTx.ecosystem} is not EVM`);
   // 0 means the route has no quote expiry (e.g. CCTP-backed routes).
   if (q.quoteExpiryTimestamp > 0 && Date.now() / 1000 > q.quoteExpiryTimestamp) {
     throw new AcrossError("quote expired; re-quote before sending");
   }
   const approvals: Hex[] = [];
+  // Every transaction's real cost, so the leg can book gas from the receipts (ADR 0008).
+  const gas: { txHash: Hex; wei: bigint }[] = [];
   for (const tx of q.approvalTxns) {
     const hash = await sender.sendTransaction({ to: tx.to, data: tx.data, value: tx.value ? BigInt(tx.value) : undefined });
     const r = await sender.waitForTransactionReceipt({ hash });
+    gas.push({ txHash: hash, wei: gasPaid(r) });
     if (r.status !== "success") throw new AcrossError(`approval reverted: ${hash}`);
     approvals.push(hash);
   }
@@ -141,8 +161,9 @@ export async function executeEvm(sender: EvmSender, q: AcrossQuote): Promise<{ d
     value: q.swapTx.value ? BigInt(q.swapTx.value) : undefined,
   });
   const r = await sender.waitForTransactionReceipt({ hash });
+  gas.push({ txHash: hash, wei: gasPaid(r) });
   if (r.status !== "success") throw new AcrossError(`deposit reverted: ${hash}`);
-  return { depositTxHash: hash, approvals };
+  return { depositTxHash: hash, approvals, gas };
 }
 
 export type FillStatus = "pending" | "filled" | "expired" | "refunded" | "slowFillRequested" | "not_found";

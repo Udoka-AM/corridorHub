@@ -69,9 +69,14 @@ stateDiagram-v2
 
 A saga is driven by one worker at a time. `run()` takes a lease (`lease_owner`, `lease_until`, default 120 s) with a conditional update; another live worker that tries gets the current status back without doing work. If a worker dies, its lease expires and any worker can resume from the last durable step.
 
-<Warning>
-A worker whose lease expired mid-leg could still finish its call. Legs are idempotent through the memo lookup, so the chain is never double-spent, but fencing tokens on bookings are on the [roadmap](/status/roadmap) to make this airtight.
-</Warning>
+### Fencing tokens
+
+Every lease carries a **fencing token** (`sagas.fence`). A renewal by the live holder keeps it; any takeover (another worker, or the same worker after its lease lapsed) increments it. Every commit runs inside a transaction that first checks the token:
+
+- ledger bookings, through the ledger's `precondition` hook;
+- step results (`done`, `failed`, `compensated`) and saga status changes.
+
+So a worker that stalls inside a leg, loses its lease and wakes up later is refused at its next commit with `StaleLeaseError`, writes nothing, and returns the saga's real status. The chain side is covered separately: legs find their own earlier transfers by memo, so a repeated call never moves money twice. A test runs exactly this race (a worker stalled past its lease while a second worker completes the saga) and checks that only one booking exists; with fencing disabled the same test finds two.
 
 ## Fault injection
 

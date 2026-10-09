@@ -12,6 +12,9 @@ Done on 3 October 2026:
 
 - **Customer-held signing.** One signer interface for Tempo, Base and Solana; AWS KMS adapter built and tested; every vault in the runtime signs through it. See [Keys and signers](/architecture/keys-and-signers).
 - **Issuer-neutral stablecoins.** USDT, PYUSD (Token-2022) and EURC alongside USDC and pathUSD.
+- **Turnkey adapter.** Keys held in the customer's Turnkey organisation sign Tempo, Base and Solana transactions through raw-payload signing, with policy approvals respected.
+- **Lease fencing.** Every saga commit checks a fencing token, so a worker whose lease expired mid-leg can never book or mark a step done.
+- **Gas and rent booking beyond Tempo.** Solana network fees and account rent are booked from each transaction and the Solana vault's SOL balance is checked against the ledger; Base gas is booked from Across deposit receipts.
 - **Read-only pilot.** Watch-only observers for Tempo, Solana and Base, matching against the customer's payout records; an exceptions queue in the console and a CSV export. See [Read-only pilot](/flows/read-only-pilot).
 
 ## Next: mainnet
@@ -43,25 +46,25 @@ Done on 3 October 2026:
 | Area | Today | Production |
 |---|---|---|
 | Ledger | PGlite (embedded Postgres) | Managed Postgres, same schema and triggers |
-| Custody | Signer interface; local keys for testnet, AWS KMS adapter built | The customer's KMS or MPC for every vault; Fireblocks and Turnkey adapters |
+| Custody | Signer interface on every vault; local keys for testnet; AWS KMS and Turnkey adapters built | The customer's KMS or MPC for every vault; a Fireblocks adapter (needs raw signing enabled) |
 | Routing | The planner enforces the Tempo hub | Tempo-first, not Tempo-only: direct Solana routes when the sender already holds Solana stablecoins, with measured cost per hop |
 | Stablecoins | USDC, USDT, PYUSD, EURC on Solana; USDC, EURC on Base | USDT on Tron for African payout liquidity |
 | Liquidity | Customer float in its own vault | Liquidity providers (for example Mansa) plugged in as venues |
 | Compliance | Viewing keys for the shielded lane | Address screening (Chainalysis or TRM), a Travel Rule provider hook, audit exports |
 | FROST | Trusted-dealer keygen; both rounds in one process | Distributed key generation; each signer on their own device relaying through `frostd` |
 | Console | Local, unauthenticated actions | Authenticated, role-based, with the disclosure and action endpoints behind auth |
-| Saga leases | Lease-based exclusivity | Fencing tokens on bookings, so an expired worker can never commit |
-| Gas accounting | Tempo gas booked from the chain | Solana and Base fees booked the same way |
+| Saga leases | Leases with fencing tokens: an expired worker can never commit a booking or a step result | Same, on managed Postgres |
+| Gas accounting | Tempo gas and Solana fees and account rent booked from the chain; Base gas from deposit receipts | Gas paid in stablecoins on every chain (a USDC paymaster on Base, a fee relayer on Solana), batched bridging per partner |
 | Zcash stack | `zcash-devtool` | Z3 node stack and Zallet |
 
 ## Known gaps
 
 <AccordionGroup>
-  <Accordion title="Solana and Base gas are not booked yet">
-    Tempo vault gas is booked from the chain (each fee is a TIP-20 transfer to the Fee Manager). SOL and Base ETH fees on the egress and relay wallets are not yet observed and booked.
+  <Accordion title="Base gas is booked from receipts, not yet from a watcher">
+    Every Across deposit returns its exact cost from the transaction receipts (execution gas plus Base's L1 data fee), and vault accounting books it to `expense:gas` in ETH. The Base relay's ETH top-ups are native transfers that log no event, so a full on-chain vs ledger check for the relay's ETH balance waits for the live mainnet bridge leg.
   </Accordion>
-  <Accordion title="Lease fencing">
-    A worker whose lease expired mid-leg could still finish its call. Legs are idempotent through the memo lookup, so the chain is never double-spent, but a fencing token on bookings would make this airtight.
+  <Accordion title="Solana account rent on every Paj payout">
+    Paj issues a one-off deposit address per order, so each payout creates a new token account and costs about 0.0015 SOL in rent, more than the network fee. It is booked as `expense:account-rent`. Fixes: ask Paj for a reusable deposit address with a memo, or have the bridge deliver straight to the partner.
   </Accordion>
   <Accordion title="Across testnet">
     Across has no Tempo testnet deployment, and its testnet CCTP relayer did not complete a Base Sepolia → Solana devnet mint. Testnet uses a simulated fill with the same interface; mainnet uses the live bridge.

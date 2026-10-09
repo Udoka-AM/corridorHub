@@ -74,6 +74,21 @@ describe("Across adapter", () => {
     await expect(executeEvm(reverting, q)).rejects.toThrow(AcrossError);
   });
 
+  it("reports what each transaction cost from its receipt, including Base's L1 data fee", async () => {
+    let n = 0;
+    const sender: EvmSender = {
+      sendTransaction: async () => `0x${(++n).toString(16).padStart(64, "0")}`,
+      waitForTransactionReceipt: async ({ hash }) => ({ status: "success", transactionHash: hash, gasUsed: 50_000n, effectiveGasPrice: 2_000_000n, l1Fee: 300_000_000n }),
+    };
+    const q = await quote(
+      { env: "mainnet", originChainId: 8453, destinationChainId: 34268394551451, inputToken: "a", outputToken: "b", amount: 1n, depositor: "d", recipient: "r" },
+      fakeFetch({ "/swap/approval": QUOTE }),
+    );
+    const out = await executeEvm(sender, q);
+    expect(out.gas).toHaveLength(2);
+    expect(out.gas.every((g) => g.wei === 50_000n * 2_000_000n + 300_000_000n)).toBe(true);
+  });
+
   it("refuses to send on an expired quote", async () => {
     const q = await quote(
       { env: "mainnet", originChainId: 4217, destinationChainId: 8453, inputToken: "a", outputToken: "b", amount: 1n, depositor: "d", recipient: "r" },

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Accounts, Db, EntryInput, Ledger } from "@corridor/ledger";
+import type { Accounts, Db, EntryInput, Ledger, Sql } from "@corridor/ledger";
 import type { LegKind, PlannedStep, RoutePlan } from "@corridor/routing";
 
 /**
@@ -58,6 +58,12 @@ export class FaultInjected extends Error {}
 export class NonRetryableError extends Error {}
 
 /**
+ * This worker's lease was taken over (its fencing token is stale). Nothing it
+ * was about to commit is written; the worker that holds the lease carries on.
+ */
+export class StaleLeaseError extends Error {}
+
+/**
  * Stop the saga for a human: no retries and no automatic compensation.
  * For failures after money has left Corridor's control (e.g. a partner
  * rejected a payout it was already funded for), where undoing earlier legs
@@ -78,6 +84,9 @@ create table if not exists sagas (
   updated_at timestamptz not null default now()
 );
 create index if not exists sagas_reference on sagas (reference);
+-- Fencing token: incremented every time a different worker (or an expired
+-- lease) takes the saga over. Every commit checks it.
+alter table sagas add column if not exists fence bigint not null default 0;
 
 create table if not exists saga_steps (
   saga_id     text not null references sagas (id),
@@ -119,6 +128,8 @@ export class SagaEngine {
   private readonly legs: Map<LegKind, Leg>;
   private readonly workerId = randomUUID();
   private readonly leaseMs: number;
+  /** The fencing token this worker holds for each saga it has leased. */
+  private readonly fences = new Map<string, bigint>();
 
   private constructor(
     private readonly db: Db,
@@ -164,7 +175,12 @@ export class SagaEngine {
     if (!(await this.acquireLease(sagaId))) return (await this.get(sagaId)).status;
     try {
       return await this.drive(sagaId);
+    } catch (err) {
+      // Another worker took over while this one was waiting on a leg: stop quietly.
+      if (err instanceof StaleLeaseError) return (await this.get(sagaId)).status;
+      throw err;
     } finally {
+      this.fences.delete(sagaId);
       await this.db.query(`update sagas set lease_owner = null, lease_until = null where id = $1 and lease_owner = $2`, [
         sagaId,
         this.workerId,
@@ -172,14 +188,50 @@ export class SagaEngine {
     }
   }
 
+  /**
+   * Take or renew the lease. A renewal by the live holder keeps its fencing
+   * token; any takeover (another worker, or this one after its lease lapsed)
+   * increments it, which invalidates whatever the previous holder still has in
+   * flight.
+   */
   private async acquireLease(sagaId: string): Promise<boolean> {
-    const { rows } = await this.db.query(
-      `update sagas set lease_owner = $2, lease_until = now() + ($3::int * interval '1 millisecond')
+    const { rows } = await this.db.query<{ fence: string }>(
+      `update sagas set
+          fence = case when lease_owner = $2 and lease_until >= now() then fence else fence + 1 end,
+          lease_owner = $2,
+          lease_until = now() + ($3::int * interval '1 millisecond')
         where id = $1 and (lease_until is null or lease_until < now() or lease_owner = $2)
-        returning id`,
+        returning fence::text as fence`,
       [sagaId, this.workerId, this.leaseMs],
     );
-    return rows.length === 1;
+    if (rows.length !== 1) return false;
+    const fence = BigInt(rows[0]!.fence);
+    const held = this.fences.get(sagaId);
+    // Our lease lapsed and was taken (and maybe returned) in between: what we hold is stale.
+    if (held !== undefined && held !== fence) {
+      this.fences.set(sagaId, fence);
+      throw new StaleLeaseError(`lease on saga ${sagaId} changed hands (fence ${held} → ${fence})`);
+    }
+    this.fences.set(sagaId, fence);
+    return true;
+  }
+
+  /** Inside a transaction: abort unless this worker still holds the saga under the same fencing token. */
+  private async checkFence(tx: Sql, sagaId: string): Promise<void> {
+    const fence = this.fences.get(sagaId);
+    const { rows } = await tx.query(
+      `select 1 from sagas where id = $1 and lease_owner = $2 and fence = $3::bigint for update`,
+      [sagaId, this.workerId, String(fence ?? -1n)],
+    );
+    if (rows.length !== 1) throw new StaleLeaseError(`stale fencing token for saga ${sagaId}`);
+  }
+
+  /** Run a state change only while the fencing token is current. */
+  private async fenced(sagaId: string, sql: string, params: unknown[]): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await this.checkFence(tx, sagaId);
+      await tx.query(sql, params);
+    });
   }
 
   private async drive(sagaId: string): Promise<SagaStatus> {
@@ -261,18 +313,21 @@ export class SagaEngine {
         if (input.faults?.failAt === step.kind) throw new FaultInjected(`injected failure at ${step.kind}`);
         const ctx = this.context(sagaId, input, step, view);
         const outcome = await leg.forward(ctx);
-        await this.book(outcome, ctx.idempotencyKey);
-        await this.db.query(
+        await this.book(sagaId, outcome, ctx.idempotencyKey);
+        await this.fenced(
+          sagaId,
           `update saga_steps set status = 'done', output = $3, error = null, updated_at = now() where saga_id = $1 and idx = $2`,
           [sagaId, step.index, JSON.stringify(outcome.output)],
         );
         await this.event(sagaId, step.index, "forward.done");
         return true;
       } catch (err) {
+        if (err instanceof StaleLeaseError) throw err;
         const msg = err instanceof Error ? err.message : String(err);
         await this.event(sagaId, step.index, "forward.error", msg);
         if (err instanceof ManualReviewError) {
-          await this.db.query(
+          await this.fenced(
+            sagaId,
             `update saga_steps set status = 'failed', error = $3, updated_at = now() where saga_id = $1 and idx = $2`,
             [sagaId, step.index, msg],
           );
@@ -280,7 +335,8 @@ export class SagaEngine {
           return false;
         }
         if (err instanceof FaultInjected || err instanceof NonRetryableError || attempts >= max) {
-          await this.db.query(
+          await this.fenced(
+            sagaId,
             `update saga_steps set status = 'failed', error = $3, updated_at = now() where saga_id = $1 and idx = $2`,
             [sagaId, step.index, msg],
           );
@@ -303,28 +359,32 @@ export class SagaEngine {
     for (let attempt = 1; attempt <= max; attempt++) {
       try {
         const ctx = this.context(sagaId, input, step, view);
+        if (!(await this.acquireLease(sagaId))) throw new StaleLeaseError(`lost lease on saga ${sagaId}`);
         const outcome = await leg.compensate(ctx, row.output);
-        await this.book(outcome, `${ctx.idempotencyKey}:compensate`);
+        await this.book(sagaId, outcome, `${ctx.idempotencyKey}:compensate`);
         await this.markCompensated(sagaId, step.index, JSON.stringify(outcome.output));
         return true;
       } catch (err) {
+        if (err instanceof StaleLeaseError) throw err;
         const msg = err instanceof Error ? err.message : String(err);
         await this.event(sagaId, step.index, "compensate.error", msg);
         if (attempt < max) await sleep((leg.backoffMs ?? 500) * 2 ** (attempt - 1));
       }
     }
-    await this.db.query(
+    await this.fenced(
+      sagaId,
       `update saga_steps set status = 'compensation_failed', updated_at = now() where saga_id = $1 and idx = $2`,
       [sagaId, step.index],
     );
     return false;
   }
 
-  private async book(outcome: LegOutcome, idempotencyKey: string): Promise<void> {
+  private async book(sagaId: string, outcome: LegOutcome, idempotencyKey: string): Promise<void> {
     for (const [i, entry] of (outcome.bookings ?? []).entries()) {
       await this.ledger.post({
         ...entry,
         external: entry.external ?? { venue: "internal", ref: `${idempotencyKey}:${i}` },
+        precondition: (tx) => this.checkFence(tx, sagaId),
       });
     }
   }
@@ -349,12 +409,12 @@ export class SagaEngine {
   }
 
   private async setStatus(sagaId: string, status: SagaStatus) {
-    await this.db.query(`update sagas set status = $2, updated_at = now() where id = $1`, [sagaId, status]);
+    await this.fenced(sagaId, `update sagas set status = $2, updated_at = now() where id = $1`, [sagaId, status]);
     await this.event(sagaId, null, status);
   }
 
   private async markCompensated(sagaId: string, idx: number, detail: string) {
-    await this.db.query(`update saga_steps set status = 'compensated', updated_at = now() where saga_id = $1 and idx = $2`, [
+    await this.fenced(sagaId, `update saga_steps set status = 'compensated', updated_at = now() where saga_id = $1 and idx = $2`, [
       sagaId,
       idx,
     ]);

@@ -64,12 +64,13 @@ The auditor disclosure in the console replay exports the FROST vault's unified f
 |---|---|---|
 | Tempo transfer signed through `@corridor/signer` (3 Oct 2026) | The account built by `tempoAccount(localSecp256k1Signer(...))` signs a real Moderato transfer; the KMS adapter produces the same address in tests | [0x0c2b2a85…](https://explore.testnet.tempo.xyz/tx/0x0c2b2a85dc748b99afbbae03bba018184207075fae89e8a4643fd7bd0ec2e117) |
 | Payout demo with every vault on the signer interface (9 Oct 2026) | Tempo treasury and escrow, and Solana devnet funding, all signed through `@corridor/signer`; reconciliation 52/52; treasury on-chain = ledger exactly | [Solana 2CnGSGDg…](https://explorer.solana.com/tx/2CnGSGDg7hppHZJBu88TvMdtFiKKzTX6BugXQoPqDqoKtwbRBtsFj8pSZTZ47FYTJ3h5tvwcm9bJPoKXkePADKCJ?cluster=devnet) |
+| Solana vault accounting from the chain (9 Oct 2026) | 1 SOL faucet funding, 4 network fees (0.00002 SOL) and 4 account-rent payments (0.00595376 SOL) booked; Solana vault on-chain 0.99402624 SOL = ledger; Tempo treasury still balanced | Replay console, reconciliation panel |
 | `pnpm watch:report` on the demo wallets (3 Oct 2026) | 22 stablecoin movements observed on Tempo, Solana and Base; 8 sample records: 6 matched, 1 short, 1 missing, 15 unrecorded | Read-only, nothing moved |
 
 ## Code
 
 | Measure | Value |
 |---|---|
-| TypeScript tests | 93 passing |
+| TypeScript tests | 102 passing |
 | Rust tests (`corridor-frost`) | 3 passing: any 2 of 3 verify under `rk`, 1 of 3 fails, keygen yields a valid Ironwood viewing key and address |
 | License | MIT |

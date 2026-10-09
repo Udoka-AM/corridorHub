@@ -48,7 +48,8 @@ Adapters turn a signer into what each chain SDK expects:
 | `awsKmsSigner(kms, keyId)` | Built, tested | Key spec `ECC_SECG_P256K1`. KMS returns DER signatures with no recovery bit and no low-s rule; the adapter normalises `s` and recovers `yParity` against the key's public key, so the result is a valid Tempo and Base signature. |
 | `localEd25519Signer(secretKey)` | Built | Development and testnet Solana keys behind the same interface. |
 | Solana via `solanaSigner` | Interface built | Any Ed25519 signing service (an MPC provider or a KMS with Ed25519 keys) plugs in through `signBytes`. |
-| Fireblocks, Turnkey | Next | Same interfaces; each is one adapter. |
+| `turnkeySecp256k1Signer`, `turnkeyEd25519Signer` | Built, tested | Keys in the customer's Turnkey organisation. Raw-payload signing (digest for secp256k1, message for Ed25519), API-key stamped requests, and polling while an activity waits for policy approvals. The secp256k1 public key is recovered from a probe signature, so no read permission is needed. |
+| Fireblocks | Next | Needs a workspace with raw signing enabled, since Fireblocks does not support Tempo's transaction type. |
 
 Corridor does not bundle the AWS SDK. Wrap the customer's own `KMSClient`:
 
@@ -64,7 +65,7 @@ const vault = tempoClient({
 });
 ```
 
-The demo runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` with `<KEY_NAME>_KMS_KEY_ID` switches a vault to KMS; the default is a local key from `.env.local`.
+The demo runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` with `<KEY_NAME>_KMS_KEY_ID` switches a vault to KMS; `CORRIDOR_SIGNER=turnkey` with `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PRIVATE_KEY` and `<KEY_NAME>_TURNKEY_SIGN_WITH` (or `SOLANA_VAULT_TURNKEY_ADDRESS`) switches to Turnkey; the default is a local key from `.env.local`.
 
 ## Evidence
 

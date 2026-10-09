@@ -44,6 +44,12 @@ export interface EntryInput {
    */
   external?: { venue: Venue | "internal"; ref: string };
   metadata?: Record<string, unknown>;
+  /**
+   * Runs first inside the posting transaction; throwing aborts the entry. The
+   * saga engine uses it to check its fencing token, so a worker whose lease
+   * expired can never commit a booking.
+   */
+  precondition?: (tx: Sql) => Promise<void>;
 }
 
 export interface PostResult {
@@ -91,6 +97,7 @@ export class Ledger {
 
     try {
       return await this.db.transaction(async (tx) => {
+        if (input.precondition) await input.precondition(tx);
         const entryId = randomUUID();
         await tx.query(
           `insert into journal_entries (id, kind, saga_id, reference, external_venue, external_ref, metadata)

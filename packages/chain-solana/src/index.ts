@@ -29,7 +29,7 @@ import { solanaStable, type SolanaCluster } from "./stables.ts";
 import { SolanaWatcher } from "./watcher.ts";
 
 export { SOLANA_STABLES, TOKEN_2022_PROGRAM_ADDRESS, solanaStable, stableByMint, type SolanaCluster, type SolanaStable } from "./stables.ts";
-export { SolanaWatcher, extractReference, tokenDeltas, type TokenBalanceMeta, type TokenDelta } from "./watcher.ts";
+export { SOLANA_ACCOUNT_RENT, SOLANA_FEES, SolanaWatcher, extractReference, nativeMovements, tokenDeltas, type NativeTx, type TokenBalanceMeta, type TokenDelta } from "./watcher.ts";
 
 /**
  * Solana leg: stablecoin transfers (USDC by default; USDT, PYUSD and EURC
