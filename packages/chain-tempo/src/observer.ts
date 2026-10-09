@@ -4,6 +4,34 @@ import { tryDecodeRef, type Asset, type Hex, type Observation } from "@corridor/
 import type { TempoClient } from "./index.ts";
 import { tokenAddress } from "./tokens.ts";
 
+type BlockReader = Pick<TempoClient, "getBlock">;
+
+/**
+ * Block timestamps for a set of block numbers, fetched once each. Observations
+ * carry when the movement happened on-chain, not when it was observed, so
+ * time-window matching (read-only pilots) works on Tempo too.
+ */
+export async function blockTimes(client: BlockReader, blocks: Iterable<bigint>, cache = new Map<bigint, Date>()): Promise<Map<bigint, Date>> {
+  const missing = [...new Set(blocks)].filter((b) => !cache.has(b));
+  for (let i = 0; i < missing.length; i += 4) {
+    await Promise.all(
+      missing.slice(i, i + 4).map(async (blockNumber) => {
+        for (let attempt = 0; ; attempt++) {
+          try {
+            const block = await client.getBlock({ blockNumber });
+            cache.set(blockNumber, new Date(Number(block.timestamp) * 1000));
+            return;
+          } catch (e) {
+            if (attempt >= 5) throw e;
+            await new Promise((r) => setTimeout(r, 500 * 2 ** attempt));
+          }
+        }
+      }),
+    );
+  }
+  return cache;
+}
+
 export interface CursorStore {
   get(name: string): Promise<bigint | undefined>;
   set(name: string, block: bigint): Promise<void>;
@@ -26,7 +54,7 @@ export const FEE_MANAGER: Address = Addresses.feeManager;
  */
 export class TempoObserver {
   constructor(
-    private readonly client: Pick<TempoClient, "getBlockNumber" | "getLogs">,
+    private readonly client: Pick<TempoClient, "getBlockNumber" | "getLogs" | "getBlock">,
     private readonly opts: {
       name: string;
       asset: Asset;
@@ -45,16 +73,38 @@ export class TempoObserver {
     },
   ) {}
 
+  private readonly times = new Map<bigint, Date>();
+
   async poll(): Promise<Observation[]> {
     const { name, cursors, startBlock } = this.opts;
-    const maxRange = this.opts.maxRange ?? 10_000n;
+    let maxRange = this.opts.maxRange ?? 10_000n;
+    let throttled = 0;
     const latest = await this.client.getBlockNumber();
     let from = ((await cursors.get(name)) ?? startBlock - 1n) + 1n;
     const seen = new Map<string, Observation>();
 
     while (from <= latest) {
       const to = from + maxRange - 1n > latest ? latest : from + maxRange - 1n;
-      for (const obs of await this.range(from, to)) seen.set(obs.externalRef, obs);
+      let found: Observation[];
+      try {
+        found = await this.range(from, to);
+      } catch (e) {
+        const message = String((e as Error)?.message ?? e);
+        // Moderato answers "Request exceeds defined limit" when rate limited: wait and retry the same window.
+        if (/exceeds defined limit|rate limit|429|too many requests/i.test(message) && throttled < 6) {
+          await new Promise((r) => setTimeout(r, 1_000 * 2 ** throttled++));
+          continue;
+        }
+        // Other public RPCs cap getLogs by block range or response size: shrink the window.
+        if (/limited to|block range|response size|query returned more than/i.test(message) && maxRange > 100n) {
+          maxRange /= 2n;
+          continue;
+        }
+        throw e;
+      }
+      throttled = 0;
+      const times = await blockTimes(this.client, found.flatMap((o) => (o.blockNumber === undefined ? [] : [o.blockNumber])), this.times);
+      for (const obs of found) seen.set(obs.externalRef, { ...obs, observedAt: (obs.blockNumber !== undefined && times.get(obs.blockNumber)) || obs.observedAt });
       await cursors.set(name, to);
       from = to + 1n;
     }

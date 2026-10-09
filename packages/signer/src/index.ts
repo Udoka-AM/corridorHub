@@ -2,7 +2,7 @@ import { hashMessage, hashTypedData, keccak256, numberToHex, serializeSignature,
 import { publicKeyToAddress } from "viem/utils";
 import { toAccount, type LocalAccount } from "viem/accounts";
 import { Account as TempoAccount, PublicKey, Secp256k1 } from "viem/tempo";
-import type { Address as SolanaAddress, SignatureBytes, TransactionPartialSigner } from "@solana/kit";
+import { createKeyPairSignerFromBytes, signBytes as ed25519Sign, type Address as SolanaAddress, type SignatureBytes, type TransactionPartialSigner } from "@solana/kit";
 import type { Hex } from "@corridor/core";
 
 /**
@@ -116,6 +116,21 @@ export function localSecp256k1Signer(privateKey: Hex): Secp256k1Signer {
     async signDigest(digest) {
       const { r, s, yParity } = Secp256k1.sign({ payload: digest, privateKey });
       return { r, s, yParity: yParity as 0 | 1 };
+    },
+  };
+}
+
+/**
+ * Local Ed25519 key from a solana-keygen secret (64 bytes: seed + public key).
+ * Development and testnet only; production uses an MPC or KMS signer.
+ */
+export async function localEd25519Signer(secretKey: Uint8Array): Promise<Ed25519Signer> {
+  const { address, keyPair } = await createKeyPairSignerFromBytes(secretKey);
+  return {
+    kind: "local",
+    address,
+    async signBytes(message) {
+      return new Uint8Array(await ed25519Sign(keyPair.privateKey, message));
     },
   };
 }

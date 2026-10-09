@@ -48,6 +48,8 @@
   .s-compensated { background: rgba(124,183,255,.12); color: var(--info); border-color: rgba(124,183,255,.35); }
   .s-running, .s-pending, .s-compensating { background: rgba(242,193,78,.12); color: var(--warn); border-color: rgba(242,193,78,.35); }
   .s-failed, .s-manual_review, .s-unbooked, .s-drift, .s-amount_mismatch, .s-compensation_failed { background: rgba(240,113,103,.12); color: var(--bad); border-color: rgba(240,113,103,.4); }
+  .s-short, .s-over, .s-missing { background: rgba(240,113,103,.12); color: var(--bad); border-color: rgba(240,113,103,.4); }
+  .s-unexpected { background: rgba(242,193,78,.12); color: var(--warn); border-color: rgba(242,193,78,.35); }
   .s-unreferenced { background: rgba(159,176,198,.12); color: var(--muted); border-color: var(--line); }
   .route { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
   .step { font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
@@ -138,6 +140,12 @@
     <table id="recon"></table>
   </section>
 
+  <section class="card span-12">
+    <h2>Exceptions queue <small>read-only pilot · the customer's own wallets on Tempo, Solana and Base vs. its payout records · no keys, nothing moves</small></h2>
+    <div id="roSummary" style="margin-bottom:10px"></div>
+    <table id="roExceptions"></table>
+  </section>
+
   <section class="card span-6">
     <h2>Shielded lane <small>Zcash testnet · Ironwood pool · FROST 2-of-3</small></h2>
     <div id="vault"></div>
@@ -223,6 +231,26 @@ async function refreshRecon() {
     (r.gas ? `<div style="color:var(--muted);margin-top:4px">Gas booked as expense: ${esc(r.gas.total)} across ${r.gas.transactions} Tempo transactions</div>` : "");
   $("recon").innerHTML = `<tr><th>Status</th><th>Venue</th><th>Movement</th><th class="num">Amount</th></tr>` +
     (r.rows.slice().reverse().map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.venue)}</td><td class="mono">${esc(short(x.ref, 10))}</td><td class="num">${esc(x.amount)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">Nothing observed yet</td></tr>`);
+}
+
+async function refreshReadOnly() {
+  $("roSummary").innerHTML = `<span class="meta" style="color:var(--muted)">Scanning the customer's wallets…</span>`;
+  try {
+    const r = await get("/api/readonly");
+    $("roSummary").innerHTML = Object.entries(r.summary).map(([k, v]) => `${chip(k)} <span style="margin-right:12px">${v}</span>`).join("") +
+      `<span class="meta" style="color:var(--muted);font-size:12.5px">${r.observed} stablecoin movements · ${r.records} payout records · ${esc(r.customer)} · scanned ${new Date(r.generatedAt).toLocaleString()}</span>` +
+      (r.errors || []).map((e) => `<div style="color:var(--warn);font-size:12.5px;margin-top:4px">${esc(e.chain)} not scanned this time (public RPC): ${esc(e.message)}</div>`).join("");
+    const SHOW_UNEXPECTED = 6;
+    const unexpected = r.exceptions.filter((x) => x.status === "unexpected");
+    const shown = [...r.exceptions.filter((x) => x.status !== "unexpected"), ...unexpected.slice(-SHOW_UNEXPECTED).reverse()];
+    const more = unexpected.length - Math.min(unexpected.length, SHOW_UNEXPECTED);
+    const rows = shown.map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.record ?? "no record")}</td><td>${esc(x.venue)}</td><td>${esc(x.asset)}</td><td class="num">${esc(x.expected ?? "—")}</td><td class="num">${esc(x.observed ?? "—")}</td><td class="mono">${esc(short(x.ref ?? "", 10))}</td><td style="color:var(--muted);font-size:12.5px">${x.at ? new Date(x.at).toLocaleString() : ""}</td></tr>`);
+    $("roExceptions").innerHTML = `<tr><th>Status</th><th>Payout record</th><th>Chain</th><th>Asset</th><th class="num">Expected</th><th class="num">Observed</th><th>Movement</th><th>When</th></tr>` +
+      (rows.join("") || `<tr><td colspan="8" class="empty">No exceptions: every payout matched</td></tr>`) +
+      (more > 0 ? `<tr><td colspan="8" style="color:var(--muted);font-size:12.5px">+ ${more} more unrecorded movements (faucet mints and internal legs the sample records don't cover)</td></tr>` : "");
+  } catch (e) {
+    $("roSummary").innerHTML = `<span style="color:var(--bad)">Couldn't scan the customer's wallets: ${esc(e.message ?? e)}. Retrying in five minutes.</span>`;
+  }
 }
 
 async function refreshShielded() {
@@ -351,10 +379,11 @@ async function slow() {
 }
 if (REPLAY) {
   $("replayBanner").hidden = false;
-  $("replayBanner").innerHTML = `<strong>Replay of live testnet runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. Every balance, saga and reconciliation figure below came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../" style="color:#F2A65A">About Corridor</a> · <a href="https://github.com/Udoka-AM/corridor" style="color:#F2A65A">Source</a>`;
+  $("replayBanner").innerHTML = `<strong>Replay of live testnet runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. Every balance, saga and reconciliation figure below came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../" style="color:#F2A65A">About Corridor</a> · Source available to reviewers on request`;
   $("actionStatus").textContent = "Replay: each button opens the recorded run of that flow.";
 }
-drawMap(); loop(); slow();
+drawMap(); loop(); slow(); refreshReadOnly();
+if (!REPLAY) setInterval(refreshReadOnly, 5 * 60_000);
 if (!REPLAY) {
   setInterval(loop, 4000);
   setInterval(slow, 15000);

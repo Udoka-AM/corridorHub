@@ -49,8 +49,8 @@
         "href": "https://corridorapp.udokaam.dev/console/"
       },
       {
-        "label": "GitHub",
-        "href": "https://github.com/Udoka-AM/corridor"
+        "label": "Read-only pilot",
+        "href": "https://corridor.udokaam.dev/flows/read-only-pilot"
       }
     ],
     "primary": {
@@ -205,11 +205,6 @@
         ]
       }
     ]
-  },
-  "footer": {
-    "socials": {
-      "github": "https://github.com/Udoka-AM/corridor"
-    }
   },
   "background": {
     "color": {

@@ -38,4 +38,24 @@ describe("Base stablecoin watcher", () => {
     expect(calls).toHaveLength(4);
     expect(await watcher.poll()).toEqual([]);
   });
+
+  it("shrinks its range when the RPC reports a lower eth_getLogs cap", async () => {
+    const ranges: bigint[] = [];
+    const client = {
+      getBlockNumber: async () => 1_499n,
+      getLogs: async (q: { fromBlock: bigint; toBlock: bigint }) => {
+        const span = q.toBlock - q.fromBlock + 1n;
+        if (span > 200n) throw new Error("RPC Request failed. Details: eth_getLogs is limited to a 200 range");
+        ranges.push(span);
+        return [];
+      },
+    };
+    const cursor = new Map<string, bigint>();
+    await new Erc20Watcher(client as never, {
+      name: "b", venue: "base", tokens: { USDC: BASE_STABLES.base.USDC! }, addresses: [ME],
+      cursors: { get: async (n) => cursor.get(n), set: async (n, b) => void cursor.set(n, b) }, startBlock: 1_000n,
+    }).poll();
+    expect(Math.max(...ranges.map(Number))).toBe(200);
+    expect(cursor.get("b")).toBe(1_499n);
+  });
 });

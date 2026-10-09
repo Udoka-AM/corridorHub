@@ -31,7 +31,7 @@ icon: "shield-check"
 
 | Key | Where it lives (demo) | Production |
 |---|---|---|
-| Tempo vault, Base relay, Solana vaults | `.env.local`, `.keys/` (gitignored), generated locally; the Tempo treasury signs through `@corridor/signer` | The customer's KMS, HSM or MPC provider, through `@corridor/signer` (AWS KMS adapter built) |
+| Tempo vault, Base relay, Solana vaults | `.env.local`, `.keys/` (gitignored), generated locally; every vault signs through `@corridor/signer` | The customer's KMS, HSM or MPC provider, through `@corridor/signer` (AWS KMS adapter built) |
 | Corridor Reference secret (`CORRIDOR_REF_SECRET`) | `.env.local` | Secret manager; rotation by reference version |
 | FROST shares (shielded vaults) | `.keys/frost-treasury/signer-<n>.json`, one per signer | Distributed key generation; each share on its signer's device |
 | Partner API keys and webhook secrets | `.env.local` | Secret manager |

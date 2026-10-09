@@ -8,7 +8,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import type { AddressInfo } from "node:net";
 import { parseMoney, type Hex } from "@corridor/core";
 import { TempoObserver, balanceOf, fundFromFaucet, tempoClient, type TempoClient } from "@corridor/chain-tempo";
-import { SolanaVault, explorerTx as solanaTx, signerFromKeypairFile } from "@corridor/chain-solana";
+import { SolanaVault, explorerTx as solanaTx } from "@corridor/chain-solana";
 import { Accounts, Ledger, openLocalDb } from "@corridor/ledger";
 import {
   ApprovalStore,
@@ -22,19 +22,18 @@ import {
   simulatedBridgeLeg,
 } from "@corridor/legs";
 import { FrostSigner, ZcashWallet } from "@corridor/chain-zcash";
-import { privateKeyToAccount } from "viem/accounts";
 import { MockPartner, PartnerRegistry, type PartnerOrder } from "@corridor/partners";
 import { PgCursorStore } from "@corridor/recon";
 import { SagaEngine } from "@corridor/saga";
 import { PartnerEventStore, webhookServer } from "@corridor/webhooks";
 import { testnetKey } from "./env.ts";
-import { tempoAccountFor } from "./signers.ts";
+import { evmAddressFor, solanaSignerForKeypair, tempoAccountFor } from "./signers.ts";
 
 export async function startRuntime(opts: { onCollectionOpened?: (order: PartnerOrder, mock: MockPartner) => Promise<void> } = {}) {
   const customer = tempoClient({ network: "moderato", privateKey: testnetKey("TEMPO_TESTNET_CUSTOMER_KEY") });
   // The treasury vault signs through the signer interface: a local key here, KMS or MPC in a customer deployment.
   const treasury = tempoClient({ network: "moderato", account: await tempoAccountFor("TEMPO_TESTNET_VAULT_KEY") });
-  const escrow = tempoClient({ network: "moderato", privateKey: testnetKey("TEMPO_TESTNET_BRIDGE_ESCROW_KEY") });
+  const escrow = tempoClient({ network: "moderato", account: await tempoAccountFor("TEMPO_TESTNET_BRIDGE_ESCROW_KEY") });
   for (const [c, label] of [[customer, "customer"], [treasury, "treasury"], [escrow, "bridge escrow"]] as [TempoClient, string][]) {
     if ((await balanceOf(c, "pathUSD", c.account.address)) < parseMoney("pathUSD", "20").amount) {
       console.log(`funding ${label} from the Tempo faucet…`);
@@ -51,7 +50,7 @@ export async function startRuntime(opts: { onCollectionOpened?: (order: PartnerO
 
   // Solana devnet vault: real memo-tagged funding when it holds devnet USDC.
   const keypair = ".keys/solana-devnet-vault.json";
-  const solana = existsSync(keypair) ? new SolanaVault(await signerFromKeypairFile(keypair), "devnet") : undefined;
+  const solana = existsSync(keypair) ? new SolanaVault(await solanaSignerForKeypair(keypair), "devnet") : undefined;
 
   // Partner webhooks arrive over HTTP and are verified before they count.
   const registry = new PartnerRegistry();
@@ -96,6 +95,7 @@ export async function startRuntime(opts: { onCollectionOpened?: (order: PartnerO
   const artifacts = await ArtifactStore.open(db);
   const approvals = await ApprovalStore.open(db);
   const hasShielded = existsSync(".keys/frost-treasury/public.json") && existsSync(".data/zcash-testnet/data.sqlite");
+  const baseRelay = await evmAddressFor("BASE_MAINNET_RELAY_KEY");
   const shielded = hasShielded
     ? (() => {
         const vaultAcct = zcash.importUfvk("acme-2026-10-vault", frost.vault().ufvk, zcash.chainTip() - 5);
@@ -105,7 +105,7 @@ export async function startRuntime(opts: { onCollectionOpened?: (order: PartnerO
           vaultName: "acme-2026-10-vault",
           deliveryAccount: zcash.account("acme-2026-10").uuid,
           quoteRecipient: quoteWallet.defaultAddress(quoteWallet.accounts()[0]!.uuid),
-          quoteRefundTo: privateKeyToAccount(testnetKey("BASE_MAINNET_RELAY_KEY")).address,
+          quoteRefundTo: baseRelay,
         };
       })()
     : undefined;

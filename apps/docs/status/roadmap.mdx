@@ -10,9 +10,9 @@ Every lane runs end to end on testnets through one ledger, one saga engine and o
 
 Done on 3 October 2026:
 
-- **Customer-held signing.** One signer interface for Tempo, Base and Solana; AWS KMS adapter built and tested; the Tempo treasury signs through it. See [Keys and signers](/architecture/keys-and-signers).
+- **Customer-held signing.** One signer interface for Tempo, Base and Solana; AWS KMS adapter built and tested; every vault in the runtime signs through it. See [Keys and signers](/architecture/keys-and-signers).
 - **Issuer-neutral stablecoins.** USDT, PYUSD (Token-2022) and EURC alongside USDC and pathUSD.
-- **Read-only pilot.** Watch-only observers for Tempo, Solana and Base, matching against the customer's payout records, exceptions and CSV. See [Read-only pilot](/flows/read-only-pilot).
+- **Read-only pilot.** Watch-only observers for Tempo, Solana and Base, matching against the customer's payout records; an exceptions queue in the console and a CSV export. See [Read-only pilot](/flows/read-only-pilot).
 
 ## Next: mainnet
 

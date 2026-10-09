@@ -4,7 +4,18 @@
  * <KEY_NAME>_KMS_KEY_ID to sign with a key that never leaves AWS KMS; this
  * needs `@aws-sdk/client-kms` installed in the deployment.
  */
-import { awsKmsApi, awsKmsSigner, localSecp256k1Signer, tempoAccount, type Secp256k1Signer } from "@corridor/signer";
+import { readFileSync } from "node:fs";
+import {
+  awsKmsApi,
+  awsKmsSigner,
+  evmAccount,
+  evmAddress,
+  localEd25519Signer,
+  localSecp256k1Signer,
+  solanaSigner,
+  tempoAccount,
+  type Secp256k1Signer,
+} from "@corridor/signer";
 import { testnetKey } from "./env.ts";
 
 export async function secp256k1SignerFor(keyName: string): Promise<Secp256k1Signer> {
@@ -22,4 +33,22 @@ export async function secp256k1SignerFor(keyName: string): Promise<Secp256k1Sign
 
 export async function tempoAccountFor(keyName: string) {
   return tempoAccount(await secp256k1SignerFor(keyName));
+}
+
+/** A Base (EVM) account for the relay wallet, through the same signer selection. */
+export async function evmAccountFor(keyName: string) {
+  return evmAccount(await secp256k1SignerFor(keyName));
+}
+
+export async function evmAddressFor(keyName: string) {
+  return evmAddress(await secp256k1SignerFor(keyName));
+}
+
+/**
+ * A Solana transaction signer for a vault. Local keypair files are for
+ * development; a deployment passes its MPC or KMS Ed25519 signer to
+ * `solanaSigner` instead.
+ */
+export async function solanaSignerForKeypair(path: string) {
+  return solanaSigner(await localEd25519Signer(new Uint8Array(JSON.parse(readFileSync(path, "utf8")))));
 }

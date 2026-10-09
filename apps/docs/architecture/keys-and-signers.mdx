@@ -46,6 +46,7 @@ Adapters turn a signer into what each chain SDK expects:
 |---|---|---|
 | `localSecp256k1Signer(privateKey)` | Built | Development and testnet. Produces the same signatures as viem's own local accounts. |
 | `awsKmsSigner(kms, keyId)` | Built, tested | Key spec `ECC_SECG_P256K1`. KMS returns DER signatures with no recovery bit and no low-s rule; the adapter normalises `s` and recovers `yParity` against the key's public key, so the result is a valid Tempo and Base signature. |
+| `localEd25519Signer(secretKey)` | Built | Development and testnet Solana keys behind the same interface. |
 | Solana via `solanaSigner` | Interface built | Any Ed25519 signing service (an MPC provider or a KMS with Ed25519 keys) plugs in through `signBytes`. |
 | Fireblocks, Turnkey | Next | Same interfaces; each is one adapter. |
 
@@ -68,7 +69,7 @@ The demo runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-k
 ## Evidence
 
 - Unit tests sign Base transactions, messages and Tempo hashes through a KMS stand-in that returns real DER signatures with high-s half the time; every signature recovers to the expected address.
-- The Tempo treasury vault in the testnet runtime now signs through `tempoAccount(...)`.
+- Every vault in the testnet runtime signs through the interface: the Tempo treasury and bridge escrow (`tempoAccount`), the Base relay (`evmAccount`) and the Solana vault (`solanaSigner`). A full payout demo on 9 October 2026 ran end to end this way.
 - A live Moderato transfer signed through the interface: [0x0c2b2a85…](https://explore.testnet.tempo.xyz/tx/0x0c2b2a85dc748b99afbbae03bba018184207075fae89e8a4643fd7bd0ec2e117).
 
 ## Deployment models

@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { ANY_MOTION, EASE, gsap, useGSAP } from "../motion";
 
-const REPO = "https://github.com/Udoka-AM/corridor";
+const PILOT = "https://corridor.udokaam.dev/flows/read-only-pilot";
 
 export default function Closing() {
   const root = useRef<HTMLElement>(null);
@@ -34,7 +34,7 @@ export default function Closing() {
             <h3 className="h3">Start read-only. Move money when ready.</h3>
             <p className="lede">A 60-day pilot on the wallets you already run: matched payouts and an exceptions list, no keys shared. Taking design partners now, starting with Europe → Africa and Africa → Asia.</p>
             <div>
-              <a className="btn primary" href={REPO} target="_blank" rel="noreferrer" data-hot>
+              <a className="btn primary" href={PILOT} target="_blank" rel="noreferrer" data-hot>
                 Start a pilot <span className="arr">→</span>
               </a>
             </div>

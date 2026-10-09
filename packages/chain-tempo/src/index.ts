@@ -5,7 +5,8 @@ import { tryDecodeRef, type Asset, type Hex, type Observation } from "@corridor/
 import { tokenAddress } from "./tokens.ts";
 
 export { TEMPO_TOKENS, tokenAddress } from "./tokens.ts";
-export { FEE_MANAGER, TempoObserver, type CursorStore } from "./observer.ts";
+export { FEE_MANAGER, TempoObserver, blockTimes, type CursorStore } from "./observer.ts";
+import { blockTimes } from "./observer.ts";
 
 export type TempoNetwork = "moderato" | "mainnet";
 
@@ -117,6 +118,7 @@ export async function findTransfersByReference(
     fromBlock: args.fromBlock,
     toBlock: args.toBlock ?? "latest",
   });
+  const times = await blockTimes(client, logs.flatMap((l) => (l.blockNumber === null ? [] : [l.blockNumber])));
   return logs.map((log) => ({
     venue: "tempo" as const,
     externalRef: `${log.transactionHash}:${log.logIndex}`,
@@ -126,7 +128,7 @@ export async function findTransfersByReference(
     from: log.args.from,
     to: log.args.to,
     blockNumber: log.blockNumber ?? undefined,
-    observedAt: new Date(),
+    observedAt: (log.blockNumber !== null && times.get(log.blockNumber)) || new Date(),
   }));
 }
 

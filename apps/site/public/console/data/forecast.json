@@ -2,9 +2,17 @@
  {
   "customer": "eu-payco-demo",
   "corridor": "EUR-NGN",
-  "dailyOutflow": "9.697275 pathUSD",
+  "dailyOutflow": "7 pathUSD",
+  "available": "13 pathUSD",
+  "runwayDays": 1.8,
+  "topUpFor7Days": "36 pathUSD"
+ },
+ {
+  "customer": "eu-payco-demo",
+  "corridor": "EUR-NGN",
+  "dailyOutflow": "2.794308 pathUSD",
   "available": "37 pathUSD",
-  "runwayDays": 3.8,
-  "topUpFor7Days": "30.880925 pathUSD"
+  "runwayDays": 13.2,
+  "topUpFor7Days": "0 pathUSD"
  }
 ]

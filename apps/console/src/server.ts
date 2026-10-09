@@ -23,6 +23,8 @@ import { PgCursorStore } from "@corridor/recon";
 import { partnerObservation } from "@corridor/webhooks";
 import { startRuntime } from "../../../scripts/runtime.ts";
 import { collect, payout, prefund, shieldedBatch } from "../../../scripts/flows.ts";
+import { runWatch } from "../../../scripts/watch.ts";
+import { exceptions, summarizeReadOnly } from "@corridor/recon";
 
 const PORT = Number(process.env.PORT ?? 4400);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -358,6 +360,42 @@ async function body(req: IncomingMessage): Promise<Row> {
   return chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
 }
 
+/**
+ * Read-only pilot for the demo customer: its wallets on Tempo, Solana and Base
+ * matched against its payout records (examples/watch). Public RPC scans are
+ * slow, so the result is cached for five minutes.
+ */
+const WATCH_CONFIG = process.env.CORRIDOR_WATCH ?? "examples/watch/eu-payco-demo.json";
+let readOnlyCache: { at: number; body: unknown } | undefined;
+async function readOnly() {
+  if (readOnlyCache && Date.now() - readOnlyCache.at < 5 * 60_000) return readOnlyCache.body;
+  const { config, errors, observations, records, results } = await runWatch(WATCH_CONFIG);
+  const row = (r: (typeof results)[number]) => ({
+    status: r.status,
+    record: r.record?.id ?? null,
+    venue: r.record?.venue ?? r.observation?.venue,
+    asset: r.record?.asset ?? r.observation?.asset,
+    expected: r.record ? formatMoney({ asset: r.record.asset, amount: r.record.amount }) : null,
+    observed: r.observation ? formatMoney({ asset: r.observation.asset, amount: r.observation.amount }) : null,
+    difference: r.difference === undefined ? null : r.difference.toString(),
+    matchedBy: r.matchedBy ?? null,
+    ref: r.observation?.externalRef ?? null,
+    at: (r.observation?.observedAt ?? r.record?.createdAt)?.toISOString() ?? null,
+  });
+  const body = {
+    customer: config.name,
+    errors,
+    generatedAt: new Date().toISOString(),
+    observed: observations.length,
+    records: records.length,
+    summary: summarizeReadOnly(results),
+    exceptions: exceptions(results).map(row),
+    matched: results.filter((r) => r.status === "matched").map(row),
+  };
+  readOnlyCache = { at: Date.now(), body };
+  return body;
+}
+
 function send(res: ServerResponse, status: number, payload: unknown) {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(payload, (_, v) => (typeof v === "bigint" ? v.toString() : v)));
@@ -388,6 +426,7 @@ const server = createServer(async (req, res) => {
         case "/api/forecast": return send(res, 200, await forecast());
         case "/api/network": return send(res, 200, network());
         case "/api/approvals": return send(res, 200, await rt.approvals.list());
+        case "/api/readonly": return send(res, 200, await readOnly());
       }
     }
     if (req.method === "POST") {

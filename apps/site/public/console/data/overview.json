@@ -6,12 +6,12 @@
   "partner": "Paj-shaped partner (mock)"
  },
  "kpis": {
-  "hubBalance": "52 pathUSD",
+  "hubBalance": "65 pathUSD",
   "inFlight": "0 pathUSD",
-  "settled": "1,028 USDC",
+  "settled": "1,035 USDC",
   "sagas": {
-   "completed": 8,
-   "compensated": 3
+   "completed": 9,
+   "compensated": 4
   }
  },
  "customers": [
@@ -37,6 +37,14 @@
    "asset": "pathUSD",
    "venue": "tempo",
    "available": "0 pathUSD",
+   "held": "0 pathUSD"
+  },
+  {
+   "customer": "eu-payco-demo",
+   "corridor": "EUR-NGN",
+   "asset": "pathUSD",
+   "venue": "tempo",
+   "available": "13 pathUSD",
    "held": "0 pathUSD"
   },
   {
@@ -81,8 +89,8 @@
    "name": "treasury",
    "venue": "tempo",
    "asset": "pathUSD",
-   "balance": "1,000,051.994555 pathUSD",
-   "raw": "1000051994555"
+   "balance": "1,000,064.994513 pathUSD",
+   "raw": "1000064994513"
   }
  ],
  "clearing": [

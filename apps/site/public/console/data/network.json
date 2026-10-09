@@ -50,6 +50,7 @@
   "EUR-NGN (mainnet)": [
    "ledger.reserve:tempo",
    "across.bridge:base",
+   "across.bridge:solana",
    "partner.payout:partner_fiat"
   ],
   "NGN-CNY (mainnet)": [

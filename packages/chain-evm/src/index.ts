@@ -59,20 +59,35 @@ export class Erc20Watcher {
     },
   ) {}
 
+  /** Public RPCs cap eth_getLogs ranges and change the cap without notice; shrink to whatever the error says. */
+  private async logs(q: Parameters<Erc20Watcher["client"]["getLogs"]>[0]): Promise<TransferLog[]> {
+    return (await this.client.getLogs(q as never)) as unknown as TransferLog[];
+  }
+
   async poll(): Promise<Observation[]> {
     const { name, cursors, startBlock } = this.opts;
-    const maxRange = this.opts.maxRange ?? 1_000n; // public Base RPCs cap eth_getLogs at 1,000 blocks
+    let maxRange = this.opts.maxRange ?? 1_000n;
     const latest = await this.client.getBlockNumber();
     let from = ((await cursors.get(name)) ?? startBlock - 1n) + 1n;
     const seen = new Map<string, Observation>();
     while (from <= latest) {
       const to = from + maxRange - 1n > latest ? latest : from + maxRange - 1n;
-      for (const [asset, token] of Object.entries(this.opts.tokens) as [Stablecoin, Address][]) {
-        const [inbound, outbound] = await Promise.all([
-          this.client.getLogs({ address: token, event: TRANSFER, args: { to: this.opts.addresses }, fromBlock: from, toBlock: to }),
-          this.client.getLogs({ address: token, event: TRANSFER, args: { from: this.opts.addresses }, fromBlock: from, toBlock: to }),
-        ]);
-        for (const o of transferObservations(this.opts.venue, asset, [...inbound, ...outbound] as TransferLog[])) seen.set(o.externalRef, o);
+      try {
+        for (const [asset, token] of Object.entries(this.opts.tokens) as [Stablecoin, Address][]) {
+          const [inbound, outbound] = await Promise.all([
+            this.logs({ address: token, event: TRANSFER, args: { to: this.opts.addresses }, fromBlock: from, toBlock: to }),
+            this.logs({ address: token, event: TRANSFER, args: { from: this.opts.addresses }, fromBlock: from, toBlock: to }),
+          ]);
+          for (const o of transferObservations(this.opts.venue, asset, [...inbound, ...outbound])) seen.set(o.externalRef, o);
+        }
+      } catch (e) {
+        const cap = /limited to an? ([\d,]+)\s*(?:block)?\s*range/i.exec(String((e as Error)?.message ?? e));
+        const limit = cap ? BigInt(cap[1]!.replace(/,/g, "")) : undefined;
+        if (limit && limit < maxRange) {
+          maxRange = limit;
+          continue; // retry this window at the smaller range
+        }
+        throw e;
       }
       await cursors.set(name, to);
       from = to + 1n;

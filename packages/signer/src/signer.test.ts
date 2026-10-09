@@ -9,6 +9,7 @@ import {
   evmAddress,
   localSecp256k1Signer,
   parseDerSignature,
+  localEd25519Signer,
   solanaSigner,
   tempoAccount,
   toViemSignature,
@@ -105,5 +106,20 @@ describe("signer", () => {
     const [dict] = await signer.signTransactions([{ messageBytes: new Uint8Array([1, 2, 3]), signatures: {} } as never]);
     expect(seen[0]).toEqual(new Uint8Array([1, 2, 3]));
     expect(dict![signer.address]).toEqual(new Uint8Array(64).fill(7));
+  });
+
+  it("signs Solana messages with a local Ed25519 key through the same interface", async () => {
+    const { verifySignature, getAddressEncoder } = await import("@solana/kit");
+    const { webcrypto } = await import("node:crypto");
+    const kp = await webcrypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"]) as CryptoKeyPair;
+    const pkcs8 = new Uint8Array(await webcrypto.subtle.exportKey("pkcs8", kp.privateKey));
+    const raw = new Uint8Array(await webcrypto.subtle.exportKey("raw", kp.publicKey));
+    const secret = new Uint8Array([...pkcs8.slice(-32), ...raw]);
+    const signer = await localEd25519Signer(secret);
+    const message = new TextEncoder().encode("corridor");
+    const signature = await signer.signBytes(message);
+    expect(signature).toHaveLength(64);
+    expect(await verifySignature(kp.publicKey, signature as never, message)).toBe(true);
+    expect(getAddressEncoder().encode(signer.address as never)).toEqual(raw);
   });
 });

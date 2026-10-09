@@ -11,15 +11,16 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync } from "node:fs";
 import { createPublicClient, createWalletClient, formatEther, formatUnits, http, parseAbi, type Hex } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { CHAINS, TOKENS, executeEvm, quote, waitForFill } from "@corridor/bridge-across";
-import { testnetKey } from "./env.ts";
+import "./env.ts";
+import { evmAccountFor } from "./signers.ts";
 
 const SOLANA_DEVNET_KEYPAIR = ".keys/solana-devnet-vault.json";
 const DEVNET = "https://api.devnet.solana.com";
 
-const account = privateKeyToAccount(testnetKey("BASE_SEPOLIA_RELAY_KEY"));
+// The Base relay signs through the signer interface (local key here; KMS or MPC in a deployment).
+const account = await evmAccountFor("BASE_SEPOLIA_RELAY_KEY");
 const base = createPublicClient({ chain: baseSepolia, transport: http() });
 const wallet = createWalletClient({ account, chain: baseSepolia, transport: http() });
 
