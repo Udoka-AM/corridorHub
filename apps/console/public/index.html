@@ -400,7 +400,7 @@ async function slow() {
 }
 if (REPLAY) {
   $("replayBanner").hidden = false;
-  $("replayBanner").innerHTML = `<strong>Replay of live testnet runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. Every balance, saga and reconciliation figure below came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../" style="color:#F2A65A">About Corridor</a> · Source available to reviewers on request`;
+  $("replayBanner").innerHTML = `<strong>Replay of live runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. The Live on mainnet panel is a real payout with real money. Every other balance, saga and reconciliation figure came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../" style="color:#F2A65A">About Corridor</a> · Source available to reviewers on request`;
   $("actionStatus").textContent = "Replay: each button opens the recorded run of that flow.";
 }
 drawMap(); loop(); slow(); refreshReadOnly(); refreshMainnet();
