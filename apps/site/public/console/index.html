@@ -29,6 +29,8 @@
     --line: rgb(244 244 240 / 0.09);
     --line-strong: rgb(244 244 240 / 0.24);
     --bad: #ff6a5c;
+    --ok: #3ddc84;          /* success on dark surfaces */
+    --ok-inv: #0f7a3d;      /* success on the inverted hero card */
     --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset;
     color-scheme: dark;
   }
@@ -43,6 +45,8 @@
     --line: rgb(5 5 5 / 0.09);
     --line-strong: rgb(5 5 5 / 0.26);
     --bad: #c8321f;
+    --ok: #0f7a3d;
+    --ok-inv: #3ddc84;
     --shadow: 0 1px 2px rgb(5 5 5 / 0.04), 0 8px 24px -16px rgb(5 5 5 / 0.12);
     color-scheme: light;
   }
@@ -116,6 +120,9 @@
   .st.unreferenced i, .st.unexpected i { background: var(--muted); }
   .st.bad, .st.failed, .st.manual_review, .st.unbooked, .st.drift, .st.amount_mismatch, .st.compensation_failed, .st.short, .st.over, .st.missing { color: var(--bad); }
   .st.bad i, .st.failed i, .st.manual_review i, .st.unbooked i, .st.drift i, .st.amount_mismatch i, .st.compensation_failed i, .st.short i, .st.over i, .st.missing i { background: var(--bad); }
+  /* Success: green text and green marks wherever a transaction or check succeeded. */
+  .st.completed, .st.done, .st.matched, .st.balanced, .st.ok { color: var(--ok); }
+  .st.completed i, .st.done i, .st.matched i, .st.balanced i, .st.ok i { background: var(--ok); }
   .st.zero { color: var(--muted); }
   .st.zero i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
   .live i { animation: pulse 2.2s var(--ease) infinite; }
@@ -131,6 +138,8 @@
   .hero .checks { display: grid; gap: 4px; font-size: 11.5px; }
   .hero .checks .st { color: var(--bg); }
   .hero .checks .st i { background: var(--bg); }
+  .hero .checks .st.balanced { color: var(--ok-inv); }
+  .hero .checks .st.balanced i { background: var(--ok-inv); }
   .hero .checks .st.drift i { background: var(--bad); }
   .supports { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow); }
   .kpi { padding: 16px 20px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "label label" "value sub"; align-items: end; gap: 10px 16px; min-width: 0; }
@@ -148,10 +157,11 @@
   .trace-head .big { font-size: 34px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; font-variant-numeric: tabular-nums; }
   .trace-head .side-stat { text-align: right; }
   .hops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: relative; }
-  .hops::before { content: ""; position: absolute; left: 6px; right: 6px; top: 6px; height: 1px; background: var(--line-strong); }
+  .hops::before { content: ""; position: absolute; left: 6px; right: 6px; top: 6px; height: 1px; background: var(--ok); opacity: 0.7; }
   .hop { position: relative; padding: 22px 12px 0 0; display: grid; gap: 4px; align-content: start; min-width: 0; }
-  .hop::before { content: ""; position: absolute; top: 0; left: 0; width: 13px; height: 13px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
-  .hop.end::before { background: var(--fg); }
+  .hop::before { content: ""; position: absolute; top: 0; left: 0; width: 13px; height: 13px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--ok); }
+  .hop.end::before { background: var(--ok); }
+  .ok-text { color: var(--ok); }
   .hop b { font-size: 12.5px; }
   .hop .faint { font-size: 11px; }
   .hop a { font-size: 11.5px; color: var(--muted); }
@@ -169,6 +179,7 @@
   .saga .meta { color: var(--muted); font-size: 11.5px; }
   .route { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
   .step { font-size: 11px; padding: 2px 8px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); color: var(--fg); }
+  .step.done { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 55%, transparent); }
   .step.pending { border-style: dashed; color: var(--muted); }
   .step.compensated { color: var(--muted); text-decoration: line-through; border-color: var(--line); }
   .step.failed, .step.compensation_failed { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
@@ -267,8 +278,8 @@
     <nav class="nav" aria-label="Main navigation">
       <a href="#overview"><span>01</span>Overview</a>
       <a href="#mainnet"><span>02</span>Live on mainnet</a>
-      <a href="#payouts"><span>03</span>Payouts</a>
-      <a href="#network"><span>04</span>Network</a>
+      <a href="#network"><span>03</span>Network</a>
+      <a href="#payouts"><span>04</span>Payouts</a>
       <a href="#reconciliation"><span>05</span>Reconciliation</a>
       <a href="#exceptions"><span>06</span>Exceptions</a>
       <a href="#venues-card"><span>07</span>Venues</a>
@@ -305,6 +316,11 @@
         <div id="mainnet-body"></div>
       </section>
 
+      <section class="card s12" aria-labelledby="network-h">
+        <header><div><h2 id="network-h"><a id="network"></a>Settlement network</h2><p>Tempo is the hub, every region is a spoke, and no flow can bypass the hub</p></div></header>
+        <div class="map" id="map"></div>
+      </section>
+
       <section class="card s8" aria-labelledby="payouts-h">
         <header><div><h2 id="payouts-h"><a id="payouts"></a>Settlement timeline</h2><p>Each payout is a saga: every step is recorded, and failures before money leaves unwind in reverse</p></div></header>
         <div id="sagas"></div>
@@ -329,10 +345,6 @@
         </div>
       </section>
 
-      <section class="card s12" aria-labelledby="network-h">
-        <header><div><h2 id="network-h"><a id="network"></a>Settlement network</h2><p>Tempo is the hub, every region is a spoke, and no flow can bypass the hub</p></div></header>
-        <div class="map" id="map"></div>
-      </section>
 
       <section class="card s5" aria-labelledby="recon-h">
         <header><div><h2 id="recon-h"><a id="reconciliation"></a>Reconciliation</h2><p>Chain and partner observations against the ledger</p></div></header>
@@ -418,8 +430,8 @@ async function refreshOverview() {
   $("hero").innerHTML = `<div><div class="label">Books reconciled</div>
       <div class="value" style="margin-top:12px">${esc(window.__matchRate ?? "—")}</div>
       <div class="sub" style="margin-top:8px">${r ? `${r.matched} of ${r.total} movements matched to the ledger` : "Reading the chains…"}</div></div>
-    <div class="checks">${vaults.map((v) => `<span class="st ${v.status === "balanced" ? "" : "drift"}"><i></i>${esc(v.vault[0].toUpperCase() + v.vault.slice(1))} vault ${v.status === "balanced" ? "balanced on-chain" : "drift"}</span>`).join("")}
-      ${r ? `<span class="st"><i></i>${balanced} of ${vaults.length} vaults equal the chain to the unit</span>` : ""}</div>`;
+    <div class="checks">${vaults.map((v) => `<span class="st ${v.status === "balanced" ? "balanced" : "drift"}"><i></i>${esc(v.vault[0].toUpperCase() + v.vault.slice(1))} vault ${v.status === "balanced" ? "balanced on-chain" : "drift"}</span>`).join("")}
+      ${r ? `<span class="st ${balanced === vaults.length ? "balanced" : ""}"><i></i>${balanced} of ${vaults.length} vaults equal the chain to the unit</span>` : ""}</div>`;
 
   const s = o.kpis.sagas;
   $("kpis").innerHTML = [
@@ -515,11 +527,11 @@ async function refreshMainnet() {
       { name: "Tempo", note: `${esc(p.input.amount)} ${esc(p.input.asset)} out`, links: [link(L[0], "deposit")] },
       { name: "Base", note: "Across hop 1 → hop 2", links: [link(L[1], "fill"), link(L[2], "deposit")] },
       { name: "Solana", note: `${esc(p.usdcToPartner)} USDC to Paj`, links: [link(L[3], "fill"), link(L[4], "Paj funded")] },
-      { name: "Paj", note: `${esc(p.partnerStatus.toLowerCase())}${p.partnerStatusLive ? " · live" : ""}`, links: [`<span class="faint">₦${esc(p.quotedFiat)} at ${esc(Number(p.rate).toFixed(2))}</span>`] },
-      { name: p.bankCredit ? esc(p.bankCredit.bank) : "Bank", note: `${delivered} credited`, links: [p.bankCredit ? `<span class="faint">narration “${esc(p.bankCredit.narration)}”</span>` : ""], end: true },
+      { name: "Paj", note: `<span class="${p.partnerStatus === "COMPLETED" ? "ok-text" : ""}">${esc(p.partnerStatus.toLowerCase())}</span>${p.partnerStatusLive ? " · live" : ""}`, links: [`<span class="faint">₦${esc(p.quotedFiat)} at ${esc(Number(p.rate).toFixed(2))}</span>`] },
+      { name: p.bankCredit ? esc(p.bankCredit.bank) : "Bank", note: `<span class="ok-text">${delivered} credited</span>`, links: [p.bankCredit ? `<span class="faint">narration “${esc(p.bankCredit.narration)}”</span>` : ""], end: true },
     ];
     return `<div class="trace-head"><div><div class="label">${esc(p.decoded.corridor)} payout · ${esc(when)}</div>
-        <div class="big" style="margin-top:8px">${delivered}</div>
+        <div class="big ok-text" style="margin-top:8px">${delivered}</div>
         <div class="muted" style="margin-top:4px">${esc(p.input.amount)} ${esc(p.input.asset)} on Tempo → credited at ${p.bankCredit ? esc(p.bankCredit.bank) : "the bank"}</div></div>
       ${p.seconds != null ? `<div class="side-stat"><div class="big">${p.seconds} s</div><div class="muted">end to end</div></div>` : ""}</div>
       <ol class="hops">${hops.map((h) => `<li class="hop${h.end ? " end" : ""}"><b>${h.name}</b><span class="muted" style="font-size:11.5px">${h.note}</span>${h.links.filter(Boolean).join(" ")}</li>`).join("")}</ol>
@@ -538,7 +550,7 @@ async function refreshShielded() {
        <div>Group key (ak)</div><div>${esc(short(z.vault.groupKey, 12))}</div></div>`
     : `<div class="empty">No FROST vault yet (run pnpm zcash:frost)</div>`;
   $("batches").innerHTML = `<tr><th>Batch</th><th>Pool</th><th class="num">Recipients</th><th>Invoices (encrypted memos)</th><th>Approval</th></tr>` +
-    ((z.batches || []).map((b) => `<tr><td><a href="${esc(b.explorer)}" target="_blank" rel="noopener">${esc(short(b.txid, 8))} ↗</a><div class="muted" style="font-size:11px">${esc(b.total)}</div></td><td>${esc(b.pool)}</td><td class="num">${b.recipients}</td><td style="font-size:11.5px">${b.invoices.map(esc).join("<br>")}</td><td>${b.control === "frost" ? `<span class="st"><i></i>FROST · signers ${b.approval ? b.approval.signers.join(" + ") : "2 of 3"}</span>` : `<span class="st unreferenced"><i></i>single key</span>`}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No shielded batches yet</td></tr>`);
+    ((z.batches || []).map((b) => `<tr><td><a href="${esc(b.explorer)}" target="_blank" rel="noopener">${esc(short(b.txid, 8))} ↗</a><div class="muted" style="font-size:11px">${esc(b.total)}</div></td><td>${esc(b.pool)}</td><td class="num">${b.recipients}</td><td style="font-size:11.5px">${b.invoices.map(esc).join("<br>")}</td><td>${b.control === "frost" ? `<span class="st completed"><i></i>FROST · signers ${b.approval ? b.approval.signers.join(" + ") : "2 of 3"}</span>` : `<span class="st unreferenced"><i></i>single key</span>`}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No shielded batches yet</td></tr>`);
 }
 
 async function refreshApprovals() {

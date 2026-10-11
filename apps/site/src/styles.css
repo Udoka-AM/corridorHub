@@ -298,13 +298,13 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .product .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 32px; flex-wrap: wrap; }
 .screen { position: relative; margin-top: clamp(48px, 6vw, 88px); perspective: 1800px; }
 .screen .frame { transform-origin: 50% 0%; border-radius: var(--r-lg); overflow: hidden; border: 1px solid var(--line-strong); box-shadow: 0 50px 120px -40px rgb(0 0 0 / 0.9); }
-.screen .frame img { width: 100%; filter: grayscale(1) contrast(1.05); }
+.screen .frame img { width: 100%; }
 .screen .float {
   position: absolute; right: -2%; bottom: -10%; width: min(36%, 460px);
   border-radius: var(--r-md); overflow: hidden; border: 1px solid var(--line-strong);
   box-shadow: 0 30px 80px -20px rgb(0 0 0 / 0.95);
 }
-.screen .float img { filter: grayscale(1) contrast(1.05); }
+.screen .float img { display: block; }
 .proofcard {
   position: absolute; left: 4%; bottom: -7%; z-index: 2;
   padding: 18px 20px; border-radius: var(--r-md); background: var(--white); color: var(--black);
