@@ -6,7 +6,7 @@ description: "Corridor integrates the live Across bridge and uses a simulated ad
 
 ## Context
 
-Across supports Tempo mainnet but has no Tempo testnet deployment. A demo on Moderato cannot bridge Tempo value through Across.
+Across supports Tempo mainnet but has no Tempo testnet deployment. A deployment on Moderato cannot bridge Tempo value through Across.
 
 ## Decision
 
@@ -14,11 +14,12 @@ Across supports Tempo mainnet but has no Tempo testnet deployment. A demo on Mod
 
 ## Consequences
 
-- Mainnet needs no code change: the planner selects `across.bridge` edges in the mainnet environment.
-- The testnet demo shows real Tempo movements and real compensation refunds.
+- Mainnet needs no change to the planner: it selects `across.bridge` edges in the mainnet environment.
+- The live route paid out on mainnet on 11 Oct 2026: Tempo → Base → Solana → Paj → a Nigerian bank account in 74 seconds ([Evidence](/status/evidence#live-on-mainnet)).
+- Testnet runs show real Tempo movements and real compensation refunds.
 - A live Across testnet deposit (Base Sepolia → Solana devnet) completed CCTP attestation but stalled on Across's testnet relayer; this is recorded, not hidden.
 
 ## Alternatives rejected
 
 - **Simulate everything:** no evidence the integration works.
-- **Delay the demo for mainnet funds:** blocks every other lane on one dependency.
+- **Wait for mainnet funds before building other lanes:** blocks every lane on one dependency.

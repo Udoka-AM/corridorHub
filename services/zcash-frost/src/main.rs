@@ -5,7 +5,7 @@
 //! the ciphersuite Zcash spend authorization uses); any 2 of 3 signers can
 //! authorize a batch.
 //!
-//! Flow (see docs/ARCHITECTURE.md §6.6):
+//! Flow (see docs/ARCHITECTURE.md §8.7):
 //!   1. `keygen`  → 3 key shares + the vault's UFVK and address. The group
 //!                  verifying key *is* the Orchard/Ironwood `ak`.
 //!   2. zcash-devtool imports the UFVK (view-only), builds the batch as a
@@ -15,7 +15,7 @@
 //!                  under the action's `rk = ak + [alpha]G`.
 //!   4. zcash-devtool combines proofs + signatures and broadcasts.
 //!
-//! Hackathon scope: `keygen` uses a trusted dealer and `sign` runs both FROST
+//! Current scope: `keygen` uses a trusted dealer and `sign` runs both FROST
 //! rounds in one process over the selected signers' share files. Production
 //! replaces these with DKG and per-device signers relaying through `frostd`;
 //! the cryptography and the PCZT interface stay the same.

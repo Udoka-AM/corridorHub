@@ -4,7 +4,7 @@ import { fromZcashMemo, type Observation } from "@corridor/core";
 import { buildPaymentRequest, type ShieldedPayment } from "./zip321.ts";
 
 /**
- * Corridor's Zcash sidecar for the hackathon: a thin wrapper over
+ * Corridor's Zcash sidecar: a thin wrapper over
  * zcash-devtool (librustzcash, Ironwood-aware) for writes, plus read-only
  * access to its wallet database for observation. The account model is
  * ZIP-32: account 0 is the treasury; each (customer, period) gets its own

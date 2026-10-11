@@ -1,5 +1,5 @@
 /**
- * Mainnet wallets for the live bridge demo (D3). Creates keys on first run
+ * Mainnet vaults for live payouts. Creates keys on first run
  * (never overwrites) and prints addresses and balances. Private keys stay in
  * .env.local and .keys/, both gitignored and chmod 600.
  *

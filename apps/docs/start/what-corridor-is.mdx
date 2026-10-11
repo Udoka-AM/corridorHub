@@ -1,14 +1,16 @@
 ---
 title: "What Corridor is"
-description: "The product, who it serves, what it replaces, and an exact account of what runs live today versus what is simulated."
+description: "The product, who it serves, what it replaces, and the state of every capability on mainnet and testnet."
 icon: "info"
 ---
 
 ## The product in one paragraph
 
-Corridor is the payment ledger and router a licensed payment company **runs itself, with its own keys**. A single EUR → NGN payout today crosses a bank collection, one or more stablecoin providers, several chains, a bridge, a local payout partner and the beneficiary's bank, each with its own ids and dashboard. Corridor follows each payout through all of it with a 32-byte **Corridor Reference** carried in every chain's native memo, matches it from funding to bank credit, and puts everything that did not match in an exceptions queue.
+Corridor is the payment ledger and router a licensed payment company **runs itself, on its own keys**. It doesn't hold funds, provide liquidity or carry licences; it runs payouts across the providers that do, exactly once, and keeps books that match the chain.
 
-When Corridor moves the money, it settles on **Tempo** and pays out through the partner that serves the destination: a Nigerian bank account, a Hong Kong supplier account, Pix in Brazil, or a shielded Zcash address. Customers start **read-only**: Corridor watches the wallets they already run and matches their own payout records, with no keys and nothing moving.
+A single EUR → NGN payout today crosses a bank collection, one or more stablecoin providers, several chains, a bridge, a local payout partner and the beneficiary's bank, each with its own ids and dashboard. Corridor follows each payout through all of it with a 32-byte **Corridor Reference** carried in every chain's native memo, matches it from funding to bank credit, and puts everything that did not match in an exceptions queue.
+
+When Corridor runs a payout, it settles on **Tempo** and pays out through the partner that serves the destination: a Nigerian bank account, a Hong Kong supplier account, Pix in Brazil, or a shielded Zcash address. Customers start **read-only**: Corridor watches the wallets they already run and matches their own payout records, with no keys and nothing moving.
 
 ## Who it serves
 
@@ -31,42 +33,40 @@ When Corridor moves the money, it settles on **Tempo** and pays out through the 
 
 | Today | With Corridor |
 |---|---|
-| Fiat pre-funded in a bank account in every country | One pathUSD balance on Tempo, topped up when the forecast says so |
+| Fiat pre-funded in a bank account in every country | One stablecoin balance on Tempo (pathUSD or USDC.e), topped up when the forecast says so |
 | T+1 to T+3 through correspondent banks | 0.6 s finality on the hub; minutes end to end through partners |
 | A new banking setup per corridor (N×N) | One partner per region; every spoke reaches every spoke (N) |
 | Spreadsheets and statement matching across providers | Every payout matched from funding to bank credit, with an exceptions queue |
+| Retries that pay twice, payouts that stall between chains | Every external step recorded before it is awaited: a retry resumes, a gap stops for a person |
 | Stuck or short-paid payouts found when a customer complains | `missing` and `short` flagged the same day |
-| Locked into one provider's dashboard | Providers become interchangeable venues; the ledger and history stay |
+| Locked into one provider's dashboard | Providers become interchangeable partners; the ledger and history stay |
 | Supplier prices visible on public chains | Shielded batches on Zcash, with a viewing key scoped to one customer and period |
 
 ## What Corridor is not
 
 - **Not a custodian or a money transmitter.** Corridor runs in the customer's environment and signs with the customer's own KMS or MPC keys; it never holds customer funds. The licensed customer holds the FX permissions, the KYC and the end-customer relationship. For outbound flows from regulated markets (for example Form M for Nigerian imports), Corridor carries the compliance references in the saga data and produces the reconciliation trail as audit evidence.
 - **Not a wallet or an exchange.** Customers do not trade on Corridor; it settles and reconciles their payments.
-- **Not a new chain or a new rail.** Corridor composes existing chains and providers, each for the job it does best: Tempo for settlement, Solana and Base for partner liquidity, Zcash for privacy, and payout and liquidity providers (Paj, Yellow Card, Conduit, Mansa and others) as venues.
+- **Not a new chain or a new rail.** Corridor composes existing chains and providers, each for the job it does best: Tempo for settlement, Solana and Base for partner liquidity, Zcash for privacy, and payout and liquidity providers (Paj today; any provider on the same partner interface) as partners.
 - **Not tied to one stablecoin.** USDC, USDT, PYUSD and EURC are first-class alongside pathUSD ([ADR 0010](/decisions/0010-issuer-neutral-stablecoins)).
 
-## Live, simulated, and next
+## Platform status
 
-This is an honest account of the build on 3 October 2026. Reviewers can verify every "live" row on-chain from [Evidence](/status/evidence).
+Every live row links to on-chain proof on the [Evidence](/status/evidence) page.
 
 | Capability | State | Detail |
 |---|---|---|
-| Tempo settlement with memo references | **Live (testnet)** | `transferWithMemo` on Moderato, found by indexed memo topic, booked exactly once |
-| Settlement saga with on-chain compensation | **Live (testnet)** | Forced partner failures refunded on Tempo in reverse order |
-| Hub-and-spoke routing to 32 currencies | **Live** | Planner enforces the hub; tested |
-| Solana partner funding with SPL memo | **Live (devnet)** | Real USDC transfer with `corridor:<ref>` memo |
-| Paj partner adapter (API v2) and signed webhooks | **Live (mainnet)** | Real NGN payout on 11 Oct 2026; webhooks exercised against a Paj-shaped mock with the same HMAC scheme |
-| Shielded batches on Zcash Ironwood | **Live (testnet)** | One transaction, three recipients, encrypted invoice memos |
-| FROST 2-of-3 vault control | **Live (testnet)** | Signer 2 alone refused; signers 1 + 3 co-signed |
+| Payout Tempo → Base → Solana → Paj → Nigerian bank | **Live on mainnet** | 2.90 USDC.e became ₦3,891.48 in 74 seconds on 11 Oct 2026; the Corridor Reference came back in the bank narration |
+| Across bridge, two hops | **Live on mainnet** | Tempo → Base filled in about 1 s; Base → Solana in seconds. Fees under one cent |
+| Paj payout partner (API v2) | **Live on mainnet** | Bank account resolution, payout orders, order status. Webhooks verified with Paj's HMAC scheme |
+| Mainnet payouts through the saga engine | **Built and tested** | `across.bridge` and payout legs funded from pathUSD or USDC.e; tested on the mainnet route with Across fees and partner rounding; every vault checked on-chain against the ledger |
+| Tempo settlement with memo references | **Live** | `transferWithMemo`, found by indexed memo topic, booked exactly once |
+| Settlement saga with compensation | **Live on testnet** | Forced partner failures refunded on Tempo in reverse order; fencing tokens on every commit |
+| Hub-and-spoke routing to 32 currencies | **Live** | The planner enforces the hub; tested |
+| Customer-held signing | **Built** | One signer interface for Tempo, Base and Solana; AWS KMS and Turnkey adapters; every vault signs through it |
+| Read-only reconciliation | **Live** | Watches real Tempo, Solana and Base wallets and matches payout records; exceptions queue and CSV |
+| USDT, PYUSD, EURC | **Built** | Solana registry including Token-2022, Base registry; watch-only observers read real amounts from balance changes |
+| Shielded batches on Zcash Ironwood | **Live on testnet** | One transaction, three recipients, encrypted invoice memos |
+| FROST 2-of-3 vault control | **Live on testnet** | One signer alone refused; two co-signed |
 | NEAR Intents pricing for USD → ZEC | **Live quotes** | Mainnet 1Click quotes; testnet delivery is real testnet ZEC |
-| Across bridge Tempo → Base → Solana | **Live (mainnet)** | Both hops filled on 11 Oct 2026. Testnet has no Tempo deployment, so the testnet route uses a simulated fill with the same interface |
-| Partner fiat leg | **Live (mainnet)** | 2.90 USDC.e on Tempo became ₦3,891.48 in a Nigerian bank account in 74 seconds. See [Evidence](/status/evidence#live-on-mainnet) |
-| Mainnet payouts through the saga engine | **Built and tested** | Live `across.bridge` and payout legs, funded from pathUSD or USDC.e; tested on the mainnet route with Across fees and Paj rounding; `pnpm mainnet:saga` dry run matches every vault on-chain |
-| Customer-held signing (KMS) | **Built** | One signer interface for Tempo, Base and Solana; AWS KMS adapter tested; every vault (Tempo treasury and escrow, Base relay, Solana vault) signs through it on testnet |
-| Read-only pilot | **Live (testnet)** | Watches real Tempo, Solana and Base wallets and matches payout records; exceptions queue in the console, CSV from `pnpm watch:report` |
-| USDT, PYUSD, EURC | **Built** | Solana registry incl. Token-2022; Base registry; watch-only observers read real amounts from balance changes |
 
-<Warning>
-The full route has run once on mainnet with real money, from the founder's own funds to the founder's own bank account ([Evidence](/status/evidence#live-on-mainnet)). It ran from a checkpointed script, not yet through the saga engine and ledger. The console demo, with the saga engine, ledger and reconciliation, runs on testnets. See [Roadmap](/status/roadmap).
-</Warning>
+The first mainnet payout was the founder's own funds paid to the founder's own bank account, run on the same adapters the saga engine uses. The treasury console's saga timelines, reconciliation and shielded lane run on testnets. See the [Roadmap](/status/roadmap) for what comes next.

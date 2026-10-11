@@ -10,7 +10,7 @@ Base plays three roles in Corridor.
 
 ## 1. The bridge midpoint
 
-Across has no direct Tempo ↔ Solana route, so every hub ↔ Solana movement is two hops through Base USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`). Between hops, the funds sit in a Corridor-owned **relay wallet** on Base, so they are never in an unowned address and the ledger always knows where they are.
+Across has no direct Tempo ↔ Solana route, so every hub ↔ Solana movement is two hops through Base USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`). Between hops, the funds sit in the customer's own **relay wallet** on Base, signed through the customer's signer, so they are never in an unowned address and the ledger always knows where they are.
 
 ## 2. Ready for Base-settling partners
 

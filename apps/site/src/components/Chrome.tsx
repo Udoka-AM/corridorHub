@@ -124,8 +124,7 @@ export function Footer() {
         <a href="./console/">Live console</a>
         <a href="https://corridor.udokaam.dev" target="_blank" rel="noreferrer">Docs</a>
         <a href="https://tempo-solana-swap.pages.dev" target="_blank" rel="noreferrer">Tempo ⇌ Solana swap</a>
-        <span>Source available to reviewers on request</span>
-        <span className="end">Colosseum Crypto World's Fair 2026</span>
+        <span className="end">© 2026 Corridor</span>
       </div>
     </footer>
   );

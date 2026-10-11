@@ -1,150 +1,138 @@
 # Corridor
 
-**The payment ledger and router licensed payment companies run themselves, with their own keys, for cross-border stablecoin payouts. Starting with Africa's trade corridors.**
+**Never lose a cross-border payout.**
 
-A single EUR → NGN payout crosses a bank collection, stablecoin providers, several chains, a bridge, a local payout partner and the beneficiary's bank, each with its own ids. Corridor follows every payout through all of it and matches it from funding to bank credit. When it moves the money, it settles on [Tempo](https://tempo.xyz) with a 32-byte reference in every memo and pays out through partners on Solana (Paj today), signing with the customer's own KMS or MPC keys. Customers start **read-only**: Corridor watches the wallets they already run and matches their own payout records, with no keys and nothing moving. USDC, USDT, PYUSD and EURC are all first-class.
+Corridor is the payment ledger and router that licensed payment companies run in their own environment, on their own keys. It runs stablecoin payouts across the providers a company already uses, exactly once, and keeps one set of books that matches the chain.
 
-**Documentation:** [corridor.udokaam.dev](https://corridor.udokaam.dev) (source in [`apps/docs`](apps/docs), Mintlify): architecture, every chain and partner integration, end-to-end flows with testnet evidence, and decision records.
-
-**Live demo:** [corridorapp.udokaam.dev/console](https://corridorapp.udokaam.dev/console/): a replay of the treasury console recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet. Every ↗ link opens the real transaction.
-
-> Corridor is software for licensed players, not a custodian or a money transmitter. It runs in the customer's environment and signs with the customer's keys. Customers keep their licences, their funds and their end-customer relationships.
-
-**Try the read-only pilot:** `pnpm watch:report examples/watch/eu-payco-demo.json` watches the demo's real testnet wallets on Tempo, Solana and Base and matches them against sample payout records.
+[Documentation](https://corridor.udokaam.dev) · [Live console](https://corridorapp.udokaam.dev/console/) · [Evidence](https://corridor.udokaam.dev/status/evidence) · [Website](https://corridorapp.udokaam.dev)
 
 ---
 
+## Live on mainnet
+
+On 11 October 2026, Corridor paid **₦3,891.48 into a Nigerian bank account 74 seconds after 2.90 USDC.e left a Tempo vault**. The payout went Tempo → Base → Solana through Across, then out through Paj, Corridor's naira payout partner. The Corridor Reference rode the Solana memo and came back in the bank narration, so the bank credit traces to the payment that caused it. Every leg is linked on the [evidence page](https://corridor.udokaam.dev/status/evidence#live-on-mainnet).
+
 ## The problem
 
-A remittance operator or payout company serving Europe → Nigeria today:
+A single EUR → NGN payout crosses a bank collection, a stablecoin provider, at least two chains, a bridge, a local payout partner and the beneficiary's bank. Each system has its own identifier, and none of them holds the whole record.
 
-1. **Locks up capital.** It pre-funds NGN and KES accounts at local banks days ahead of demand, so millions sit idle in nostro accounts.
-2. **Waits on correspondent banks.** Top-ups take T+1 to T+3, go through several intermediary banks, and settlement times are hard to predict.
-3. **Pays some of the most expensive rails in the world** for sending money into Sub-Saharan Africa.
-4. **Reconciles by hand, across providers.** A payout crosses several providers and chains with no shared reference; ops teams match them in spreadsheets, and a stuck or short-paid payout is usually found when the customer complains.
+Payment companies that use more than one provider run this today with provider dashboards, in-house scripts and month-end spreadsheets. It breaks in predictable ways:
+
+- A payout bridges but never reaches the partner, and nobody notices until the customer calls.
+- A retry sends the same payout twice.
+- Gas, bridge fees and rounding pile up as differences nobody can explain.
+- An auditor asks which on-chain payment a bank credit belongs to, and there is no answer.
 
 ## What Corridor does
 
-| Capability | What it means for the operator |
-|---|---|
-| **Read-only reconciliation** | Watch existing wallets on Tempo, Solana and Base; match the company's own payout records; exceptions queue and CSV. No keys needed |
-| **Customer-held keys** | One signer interface for Tempo, Base and Solana; AWS KMS adapter built. Corridor never holds funds or keys |
-| **Issuer-neutral stablecoins** | USDC, USDT, PYUSD (Token-2022) and EURC alongside pathUSD, each booked in its own asset |
-| **Stablecoin working balances** | One balance in the customer's own Tempo vault replaces idle fiat pre-funding in every corridor |
-| **FX quote and execute** | Firm quotes (USD/EUR → NGN/KES) with TTL, executed against a pool of liquidity partners |
-| **Settlement on Tempo** | Sub-second deterministic finality, gas paid in USD stablecoins, and a 32-byte memo on every transfer that maps it to an invoice or payout batch |
-| **Liquidity and routing on Solana** | Access to the deepest stablecoin on/off-ramp liquidity for African corridors, with smart routing across ramp partners |
-| **Treasury console** | Balances per corridor, pre-funding forecasts, low-balance alerts and a sweep/rebalance planner |
-| **Auto-reconciliation** | A double-entry ledger ties every collection, FX leg, on-chain transfer and fiat payout to one journal entry |
-| **Shielded B2B lane** *(optional module)* | Private supplier settlement through Zcash's shielded pool, with viewing keys for auditors. See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#9-optional-module-shielded-b2b-settlement-lane) |
+Corridor doesn't hold money, provide liquidity or carry licences. Payment providers such as Paj, Yellow Card and Bridge do that, and Corridor runs payouts across them.
 
-## How a payment flows
+| Capability | What it gives the operator |
+|---|---|
+| **Exactly-once payouts** | Each payout is a durable saga across Tempo, Across, Solana and the payout partner. Every external step is recorded before Corridor waits on it, so a retry never pays twice; failures before money leaves unwind in reverse, failures after it stop for a person. |
+| **Books that match the chain** | A double-entry ledger books every movement, gas cost, bridge fee, account rent and rounding difference from the transaction that caused it, and checks every vault on-chain against the ledger. |
+| **One reference end to end** | A 32-byte Corridor Reference rides the Tempo memo, the Solana memo, the payout partner's order and the bank narration. |
+| **Customer-held keys** | Every vault signs through the customer's own signer. AWS KMS and Turnkey adapters are built. |
+| **Read-only start** | Corridor watches the wallets a company already runs on Tempo, Solana and Base and matches them against its payout records. Exceptions queue and CSV export; no keys, nothing moves. |
+| **Issuer-neutral stablecoins** | Payouts fund from pathUSD or USDC.e on Tempo. USDC, USDT, PYUSD and EURC are watched and reconciled on Solana and Base, each booked in its own asset. |
+| **Global hub and spokes** | Tempo is the settlement hub; every region is a spoke. One partner integration opens a region to every other spoke: 32 currencies across Africa, Asia, the Americas and Europe. |
+| **Private supplier payments** | An optional shielded lane on Zcash: one Ironwood transaction pays a batch of suppliers, approved by FROST 2-of-3, disclosed to auditors through a scoped viewing key. |
+
+## How a payout moves
 
 ```
-Sender (EUR, SEPA)                                     Recipient (NGN, bank / mobile money)
-      │                                                               ▲
-      ▼                                                               │
- Customer PSP ──API──▶ Corridor Quote ──▶ Settlement Saga ──────────▶ Off-ramp partner (Solana)
-                           │                   │  ▲                           │
-                           │                   ▼  │                           │
-                           │            Tempo transfer (TIP-20, memo=payout_id)
-                           │                   │                              │
-                           ▼                   ▼                              ▼
-                    Double-entry ledger ◀── Reconciliation engine ◀── Partner webhooks / bank statements
-                           │
-                           ▼
-                    Treasury console (balances · pre-funding · recon status)
+Customer balance on Tempo (pathUSD or USDC.e)
+   │  ledger.reserve
+   ▼
+Tempo treasury ──Across──▶ Base relay ──Across──▶ Solana egress ──▶ Payout partner ──▶ Beneficiary's bank
+   │ memo: reference                               │ memo: reference      │ order: reference      │ narration: reference
+   ▼                                               ▼                      ▼                       ▼
+Double-entry ledger ◀──────────── observers (chain logs · partner webhooks · bank narration) ────────────▶ Reconciliation
+   │
+   ▼
+Treasury console: balances · payouts in flight · exceptions · vault checks · disclosures
 ```
 
-## Business model
+Architecture in depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and the [documentation site](https://corridor.udokaam.dev).
 
-| Stream | Indicative pricing |
+## Try it
+
+**In the browser (five minutes).** Open the [console replay](https://corridorapp.udokaam.dev/console/). The Live on mainnet panel is at the top, and every ↗ link opens the real transaction on the Tempo explorer, Basescan, Solscan or the Zcash explorer.
+
+**Locally (ten minutes).** Requires Node 22+ and pnpm 9. No keys or accounts needed: test keys are generated on first run and funded from the Tempo testnet faucet.
+
+```bash
+pnpm install
+pnpm typecheck && pnpm test   # 107 tests, embedded Postgres, no setup
+pnpm console                  # treasury console at http://localhost:4400
+```
+
+In the console, **Payout €→₦** runs a payout saga on Tempo testnet, **Payout with partner failure** shows compensation with a real on-chain refund, and **Importer pays a supplier in China** runs a collection followed by a payout. The reconciliation panel shows every movement matched and every vault balanced.
+
+**Read-only mode on real wallets.**
+
+```bash
+pnpm watch:report examples/watch/eu-payco-demo.json
+```
+
+Scans the sample customer's wallets on Tempo, Solana and Base and matches them against its payout records. Point it at any wallet set by writing a config in the same shape.
+
+## Commands
+
+| Command | What it does |
 |---|---|
-| Ledger and reconciliation subscription | Monthly per customer, from the read-only pilot onwards |
-| Routing fee | 0.10–0.30% on volume Corridor moves on the customer's signer |
-| FX spread share | Revenue share with liquidity partners on executed FX |
+| `pnpm test` / `pnpm typecheck` | Test suite and type checks |
+| `pnpm console` | Treasury console (owns the local ledger, so stop other flows first) |
+| `pnpm tempo:smoke` | Memo transfer on Tempo testnet, observed and booked exactly once |
+| `pnpm payout:demo` | EUR → NGN payout saga, including a forced partner failure that compensates on-chain |
+| `pnpm importer:demo` | Naira collected into the hub, then a supplier paid in CNY, reconciled both ways |
+| `pnpm watch:report <config>` | Read-only reconciliation of existing wallets against payout records |
+| `pnpm zcash:batch` | Shielded batch on Zcash testnet with encrypted invoice memos and an auditor view |
+| `pnpm zcash:frost` | The same batch from a FROST 2-of-3 vault: one signer refused, two co-sign |
+| `pnpm mainnet:wallets` | Create or inspect the mainnet vaults and their balances |
+| `pnpm mainnet:saga` | Mainnet payouts through the saga engine, with an on-chain vs ledger check of every vault |
+| `pnpm console:snapshot` | Record the running console as the static replay published with the website |
 
-## Who it's for
+The shielded lane needs [`zcash-devtool`](https://github.com/zcash/zcash-devtool) built locally (`ZCASH_DEVTOOL` points at the binary) and the Rust FROST signer in `services/zcash-frost`.
 
-Licensed payment service providers, remittance operators, payout companies and cross-border B2B platforms, in both directions: diaspora and B2B payouts **into** Africa (EU/UK/US → NGN, KES, GHS), and import payments **out of** Africa to suppliers in China, Hong Kong, India, the UAE and the Americas. Tempo is the settlement hub and every region is a spoke (see [ARCHITECTURE §2.1](docs/ARCHITECTURE.md#21-a-global-network-hub-and-spokes)). Nigeria and Kenya come first.
-
-## Tech stack (planned)
-
-- **Core API and saga orchestrator:** TypeScript (Node 22), Fastify, PostgreSQL, a Temporal-style durable workflow engine
-- **Ledger:** Postgres double-entry ledger (immutable journal, balance projections)
-- **Tempo:** viem + Tempo SDK, TIP-20 transfers with memos, Fee AMM for stablecoin gas
-- **Solana:** @solana/kit, SPL Token / Token-2022, ramp-partner APIs
-- **Console:** Next.js, Tailwind, server actions
-- **Infra:** Docker Compose for local, Fly.io/Render for demo
-
-## Repository layout (target)
+## Repository
 
 ```
 corridor/
 ├── apps/
-│   ├── api/            # REST API: quotes, payouts, webhooks
-│   └── console/        # Treasury dashboard (Next.js)
+│   ├── console/         Treasury console and its API
+│   ├── docs/            Documentation site (Mintlify)
+│   └── site/            Website (Vite, React)
 ├── packages/
-│   ├── ledger/         # Double-entry ledger + projections
-│   ├── saga/           # Settlement saga (durable workflow + compensations)
-│   ├── fx/             # Quote engine, liquidity-partner adapters
-│   ├── chain-tempo/    # TIP-20 transfers, memo encoding, finality watcher
-│   ├── chain-solana/   # Ramp routing, SPL transfers
-│   └── recon/          # Matching engine
-├── docs/
-│   └── ARCHITECTURE.md
-└── README.md
+│   ├── core/            Venue and asset model, the Corridor Reference codec
+│   ├── ledger/          Double-entry ledger on Postgres (PGlite locally)
+│   ├── routing/         Route planner over (venue, asset); hub enforcement
+│   ├── saga/            Durable settlement sagas: retries, compensation, fencing
+│   ├── legs/            Executable legs: reserve, Across bridge, partner payout and collection, shielded batch
+│   ├── signer/          Signer interface; local, AWS KMS and Turnkey adapters
+│   ├── chain-tempo/     TIP-20 memo transfers, vault observer
+│   ├── chain-solana/    Stablecoin registry, memo transfers, watcher
+│   ├── chain-evm/       Base stablecoins and watcher
+│   ├── chain-zcash/     Ironwood batches (ZIP-321), viewing-key observer
+│   ├── bridge-across/   Across Swap API: quotes, deposits, fill tracking
+│   ├── partners/        Payout partner interface, Paj adapter, registry
+│   ├── webhooks/        Verified partner webhooks into reconciliation
+│   ├── recon/           Matching, vault accounting, read-only reconciliation
+│   └── swap-near/       NEAR Intents quotes for the shielded lane
+├── services/
+│   └── zcash-frost/     FROST 2-of-3 signer for Ironwood vaults (Rust)
+├── scripts/             Flows, mainnet runners and tooling
+├── examples/            Read-only configs and the public mainnet payout record
+└── docs/
+    └── ARCHITECTURE.md
 ```
 
-## Status
+## Security and compliance
 
-🚧 **In active build** for the [Colosseum Crypto World's Fair](https://colosseum.com/worldsfair) (submissions close 12 Oct 2026), in the Tempo, Solana and Zcash tracks. The architecture, decisions and day-by-day build log are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
-
-| Package | What it does |
-|---|---|
-| `@corridor/core` | Venue/asset model (privacy is the `zcash_ironwood` venue) and the 32-byte Corridor Reference, with Tempo, Solana and Zcash encodings |
-| `@corridor/ledger` | Append-only double-entry ledger on Postgres (PGlite locally) |
-| `@corridor/routing` | Route graph over (venue, asset); public and shielded payouts use the same planner |
-| `@corridor/saga` | Durable settlement saga: retries, reverse-order compensation, idempotent booking, leases |
-| `@corridor/chain-tempo` | TIP-20 `transferWithMemo`, pathUSD gas, memo-topic lookups, vault observer |
-| `@corridor/chain-zcash` | Ironwood shielded batches (ZIP-321, one tx / N recipients), ZIP-32 period accounts, viewing-key observer |
-| `services/zcash-frost` | Rust `corridor-frost`: FROST 2-of-3 (RedPallas, rerandomized) keygen and PCZT signing for Ironwood vaults |
-| `apps/console` | Treasury console: network map, live flows, settlement timeline, forecast, venue balances, cross-chain reconciliation, shielded lane, auditor disclosure |
-| `@corridor/bridge-across` | Across Swap API: quotes, approvals + deposit, fill tracking (testnet and mainnet) |
-| `@corridor/legs` | Executable legs: reserve, bridge (both directions), partner payout (exactly-once funding), partner collection, ledger credit |
-| `@corridor/partners` | Ramp partner interface, Paj adapter (OpenAPI v2), Paj-shaped mock, partner registry, webhook signatures |
-| `@corridor/webhooks` | `POST /webhooks/:partner`: verified, stored once, turned into reconciliation observations |
-| `@corridor/chain-solana` | USDC transfers with the Corridor Reference as SPL memo; memo observer |
-| `@corridor/recon` | Matches chain observations against the ledger |
-
-## Getting started
-
-Requires Node 22+ and pnpm 9.
-
-```bash
-pnpm install
-pnpm test               # unit tests (embedded Postgres, no setup)
-pnpm tempo:smoke        # live: memo-tagged transfer on Tempo Moderato, booked once
-pnpm payout:demo        # live: EUR→NGN payout (partner order, signed webhooks) + forced failure + compensation + recon
-pnpm importer:demo      # live: importer pays ₦ → hub balance credited → supplier paid in CNY, reconciled both ways
-pnpm mainnet:wallets    # create/inspect mainnet demo wallets (keys stay in .env.local / .keys/)
-pnpm across:testnet     # live Across testnet hop: Base Sepolia USDC → Solana devnet USDC
-pnpm zcash:spike        # shielded lane: one Ironwood tx pays a batch; auditor reconciles via viewing key
-pnpm zcash:frost        # same batch from a FROST 2-of-3 vault: one signer refused, two co-sign
-pnpm console            # treasury console at http://localhost:4400 (owns the local ledger; stop CLI demos first)
-pnpm console:snapshot   # record the running console as the static replay in apps/site/public/console/
-pnpm --filter @corridor/site dev   # landing page (Vite + React, three.js hub scene, GSAP)
-```
-
-The shielded lane uses [`zcash-devtool`](https://github.com/zcash/zcash-devtool) (librustzcash, Ironwood-aware). Build it with `cargo build --release` and point `ZCASH_DEVTOOL` at the binary.
-
-Testnet keys are generated into `.env.local` on first run, and the faucet funds them. Nothing secret is committed.
-
-## Compliance posture
-
-- Corridor serves **licensed** PSPs and MTOs, which own KYC/KYB of their end customers.
-- Corridor runs KYB on its customers and screens counterparties and wallets (sanctions/Travel Rule data passed through the memo and off-chain payload).
-- Fiat touchpoints go through regulated ramp partners in each corridor.
+- Corridor serves licensed payment companies, which own the KYC and KYB of their end customers and the licences for each corridor.
+- Corridor runs in the customer's environment and signs only through the customer's signer. It is software, not a custodian or a money transmitter.
+- Fiat touchpoints go through regulated payout partners in each corridor.
+- Secrets stay in `.env.local` and `.keys/`, both gitignored. The console replay refuses to publish if any secret value appears in its data.
 
 ## License
 

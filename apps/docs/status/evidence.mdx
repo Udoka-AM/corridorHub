@@ -4,11 +4,11 @@ description: "Every transaction behind Corridor's claims, starting with a live m
 icon: "file-check"
 ---
 
-Every claim on this site can be checked on-chain, including the mainnet payout below. The [console replay](https://corridorapp.udokaam.dev/console/) shows the same runs with live links; this page lists them in one place.
+Every claim in this documentation can be checked on-chain. The [console replay](https://corridorapp.udokaam.dev/console/) shows the same runs with live links; this page lists them in one place.
 
 ## Live on mainnet
 
-On 11 October 2026, Corridor moved real money end to end: **2.90 USDC.e on Tempo became ₦3,891.48 in a Nigerian bank account in 74 seconds**. It went Tempo to Base and Base to Solana through Across, then Paj paid out in naira. The money was the founder's own, and the bank account was theirs too.
+On 11 October 2026, Corridor moved real money end to end: **2.90 USDC.e on Tempo became ₦3,891.48 in a Nigerian bank account in 74 seconds**. It went Tempo to Base and Base to Solana through Across, then Paj paid out in naira. The payout was funded by the founder and paid into the founder's own account.
 
 <CardGroup cols={3}>
   <Card title="74 seconds" icon="timer">
@@ -31,19 +31,19 @@ On 11 October 2026, Corridor moved real money end to end: **2.90 USDC.e on Tempo
 
 The bank narration starts with the Corridor Reference: Paj echoes the order description into the transfer. So a line on a bank statement leads back to the same reference that's on the Solana transfer, `0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb84995221`. That reference decodes to a payout from EUR to NGN on the public lane, with payment id `01a129e6-df26-764e-ac2e-71fbadc2fb0d`.
 
-What this run did not do: it ran from `pnpm mainnet:run` (each step is checkpointed, so a rerun never sends twice), not through the saga engine and ledger. The engine's mainnet legs are built and tested against the same route, with Across fees and Paj's rounding. `pnpm mainnet:saga` runs them on a mainnet ledger whose dry run matches every vault on-chain. The testnet results below show the engine and ledger moving real testnet funds. The public record is in `examples/mainnet/payouts.json`, and the [console replay](https://corridorapp.udokaam.dev/console/) shows it in the **Live on mainnet** panel.
+How it ran: through `pnpm mainnet:run`, which checkpoints each step so a rerun never sends twice. The saga engine's mainnet legs run on the same adapters and are tested against this route, Across fees and Paj's rounding included; `pnpm mainnet:saga` runs them on a mainnet ledger whose vaults match the chain. The testnet results below show the engine and ledger moving real testnet funds. The public record is in `examples/mainnet/payouts.json`, and the [console replay](https://corridorapp.udokaam.dev/console/) shows it in the **Live on mainnet** panel.
 
 ## Testnet results
 
 <CardGroup cols={3}>
-  <Card title="45 / 45 reconciled" icon="check-check">
-    Tempo 30, partner webhooks 5, Zcash viewing-key scan 10. Zero unbooked, zero unreferenced.
+  <Card title="59 / 59 reconciled" icon="check-check">
+    Every movement across Tempo, Solana, partner webhooks and the Zcash viewing-key scan matched to the ledger. Zero unbooked, zero unreferenced.
   </Card>
-  <Card title="Vault balanced" icon="scale">
-    Treasury on-chain **1,000,051.994555 pathUSD** = ledger **1,000,051.994555 pathUSD**.
+  <Card title="Every vault balanced" icon="scale">
+    Treasury on-chain **1,000,077.994471 pathUSD** = ledger; Solana vault on-chain **0.99402624 SOL** = ledger.
   </Card>
-  <Card title="Gas booked" icon="fuel">
-    10 Tempo fees, **0.005445 pathUSD**, booked to `expense:gas` from the chain.
+  <Card title="Costs booked from the chain" icon="fuel">
+    Tempo gas, Solana network fees and account rent, each booked to `expense` from the transaction that paid it.
   </Card>
 </CardGroup>
 
@@ -84,19 +84,19 @@ The auditor disclosure in the console replay exports the FROST vault's unified f
 | Live mainnet run, Tempo → Base → Solana (11 Oct 2026) | Both hops filled; see [Live on mainnet](#live-on-mainnet) | [0x730f513c…](https://explore.tempo.xyz/tx/0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7) |
 | Live testnet deposit, Base Sepolia → Solana devnet | USDC burned and attested by Circle CCTP v2; final mint restricted to Across's testnet relayer, which had not executed | [0x782d8b52…](https://sepolia.basescan.org/tx/0x782d8b52d1278892e5215a7a72bf731fa0e205a9274f38f99e0bcb9992c76e02) |
 
-## Customer-held keys and read-only pilot
+## Customer-held keys and read-only reconciliation
 
 | Run | Result | Transaction |
 |---|---|---|
 | Tempo transfer signed through `@corridor/signer` (3 Oct 2026) | The account built by `tempoAccount(localSecp256k1Signer(...))` signs a real Moderato transfer; the KMS adapter produces the same address in tests | [0x0c2b2a85…](https://explore.testnet.tempo.xyz/tx/0x0c2b2a85dc748b99afbbae03bba018184207075fae89e8a4643fd7bd0ec2e117) |
-| Payout demo with every vault on the signer interface (9 Oct 2026) | Tempo treasury and escrow, and Solana devnet funding, all signed through `@corridor/signer`; reconciliation 52/52; treasury on-chain = ledger exactly | [Solana 2CnGSGDg…](https://explorer.solana.com/tx/2CnGSGDg7hppHZJBu88TvMdtFiKKzTX6BugXQoPqDqoKtwbRBtsFj8pSZTZ47FYTJ3h5tvwcm9bJPoKXkePADKCJ?cluster=devnet) |
+| Payout with every vault on the signer interface (9 Oct 2026) | Tempo treasury and escrow, and Solana devnet funding, all signed through `@corridor/signer`; reconciliation 52/52; treasury on-chain = ledger exactly | [Solana 2CnGSGDg…](https://explorer.solana.com/tx/2CnGSGDg7hppHZJBu88TvMdtFiKKzTX6BugXQoPqDqoKtwbRBtsFj8pSZTZ47FYTJ3h5tvwcm9bJPoKXkePADKCJ?cluster=devnet) |
 | Solana vault accounting from the chain (9 Oct 2026) | 1 SOL faucet funding, 4 network fees (0.00002 SOL) and 4 account-rent payments (0.00595376 SOL) booked; Solana vault on-chain 0.99402624 SOL = ledger; Tempo treasury still balanced | Replay console, reconciliation panel |
-| `pnpm watch:report` on the demo wallets (3 Oct 2026) | 22 stablecoin movements observed on Tempo, Solana and Base; 8 sample records: 6 matched, 1 short, 1 missing, 15 unrecorded | Read-only, nothing moved |
+| `pnpm watch:report` on the sample customer's wallets (3 Oct 2026) | 22 stablecoin movements observed on Tempo, Solana and Base; 8 sample records: 6 matched, 1 short, 1 missing, 15 unrecorded | Read-only, nothing moved |
 
 ## Code
 
 | Measure | Value |
 |---|---|
-| TypeScript tests | 102 passing |
+| TypeScript tests | 107 passing |
 | Rust tests (`corridor-frost`) | 3 passing: any 2 of 3 verify under `rk`, 1 of 3 fails, keygen yields a valid Ironwood viewing key and address |
 | License | MIT |

@@ -65,7 +65,7 @@ const vault = tempoClient({
 });
 ```
 
-The demo runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` with `<KEY_NAME>_KMS_KEY_ID` switches a vault to KMS; `CORRIDOR_SIGNER=turnkey` with `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PRIVATE_KEY` and `<KEY_NAME>_TURNKEY_SIGN_WITH` (or `SOLANA_VAULT_TURNKEY_ADDRESS`) switches to Turnkey; the default is a local key from `.env.local`.
+The runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` with `<KEY_NAME>_KMS_KEY_ID` switches a vault to KMS; `CORRIDOR_SIGNER=turnkey` with `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PRIVATE_KEY` and `<KEY_NAME>_TURNKEY_SIGN_WITH` (or `SOLANA_VAULT_TURNKEY_ADDRESS`) switches to Turnkey; the default is a local key from `.env.local`.
 
 ## Evidence
 

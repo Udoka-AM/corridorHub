@@ -1,70 +1,80 @@
 ---
 title: "Roadmap"
-description: "From testnet to production: the mainnet run, design partners, hardening, and the production custody and signing model."
+description: "What has shipped, what comes next, and how Corridor moves from its first live payouts to production deployments with design partners."
 icon: "milestone"
 ---
 
-## Now: testnet complete, customer-held keys, read-only pilots
+## Shipped
 
-Every lane runs end to end on testnets through one ledger, one saga engine and one reconciliation engine. See [Evidence](/status/evidence).
+<CardGroup cols={2}>
+  <Card title="Live mainnet payout" icon="landmark" href="/status/evidence#live-on-mainnet">
+    Tempo → Base → Solana through Across, paid out by Paj: ₦3,891.48 into a Nigerian bank account 74 seconds after leaving a Tempo vault, with the Corridor Reference in the bank narration.
+  </Card>
+  <Card title="Mainnet payouts through the saga engine" icon="workflow" href="/flows/payout-eur-ngn">
+    Live `across.bridge` and payout legs, funded from pathUSD or USDC.e, on a mainnet ledger whose opening float is read from the chain and whose vaults are checked on-chain after every run.
+  </Card>
+  <Card title="Customer-held signing" icon="key-square" href="/architecture/keys-and-signers">
+    One signer interface for Tempo, Base and Solana, with AWS KMS and Turnkey adapters. Every vault signs through it.
+  </Card>
+  <Card title="Read-only reconciliation" icon="eye" href="/flows/read-only-pilot">
+    Watch-only observers for Tempo, Solana and Base, matched against the customer's payout records, with an exceptions queue and CSV export.
+  </Card>
+  <Card title="Books from the chain" icon="scale" href="/architecture/reconciliation">
+    Tempo gas, Base gas, Solana fees and account rent, Across fees and partner rounding, each booked from the transaction that caused it.
+  </Card>
+  <Card title="Saga fencing" icon="lock" href="/architecture/saga">
+    Every commit checks a fencing token, so a worker whose lease lapsed mid-leg can never book or mark a step done.
+  </Card>
+  <Card title="Issuer-neutral stablecoins" icon="coins" href="/decisions/0010-issuer-neutral-stablecoins">
+    USDC, USDT, PYUSD (Token-2022), EURC, USDC.e and pathUSD, each booked in its own asset.
+  </Card>
+  <Card title="Shielded supplier payments" icon="shield" href="/flows/shielded-supplier-batch">
+    Ironwood batches on Zcash testnet, approved by FROST 2-of-3 and disclosed through a scoped viewing key.
+  </Card>
+</CardGroup>
 
-Done on 3 October 2026:
-
-- **Customer-held signing.** One signer interface for Tempo, Base and Solana; AWS KMS adapter built and tested; every vault in the runtime signs through it. See [Keys and signers](/architecture/keys-and-signers).
-- **Issuer-neutral stablecoins.** USDT, PYUSD (Token-2022) and EURC alongside USDC and pathUSD.
-- **Turnkey adapter.** Keys held in the customer's Turnkey organisation sign Tempo, Base and Solana transactions through raw-payload signing, with policy approvals respected.
-- **Lease fencing.** Every saga commit checks a fencing token, so a worker whose lease expired mid-leg can never book or mark a step done.
-- **Gas and rent booking beyond Tempo.** Solana network fees and account rent are booked from each transaction and the Solana vault's SOL balance is checked against the ledger; Base gas is booked from Across deposit receipts.
-- **Read-only pilot.** Watch-only observers for Tempo, Solana and Base, matching against the customer's payout records; an exceptions queue in the console and a CSV export. See [Read-only pilot](/flows/read-only-pilot).
-
-## Done on mainnet (11 Oct 2026)
-
-- **Live route, real money.** 2.90 USDC.e on Tempo went to Base and on to Solana through Across, and Paj paid ₦3,891.48 into a Nigerian bank account 74 seconds after the Tempo deposit. The Corridor Reference rode the Solana memo and came back in the bank narration. See [Evidence](/status/evidence#live-on-mainnet).
-
-## Next: mainnet
+## Next
 
 <Steps>
-  <Step title="Mainnet payouts through the saga engine">
-    Built and tested: the live `across.bridge` leg, a payout leg that pays out what actually arrived, and `pnpm mainnet:saga`. That runner keeps a mainnet ledger whose opening float is read from the chain, books customer deposits in pathUSD or USDC.e, and checks every vault on-chain against the ledger. Its dry run on the live wallets balances on all six vault lines. The first live payout used `pnpm mainnet:run` on the same adapters; the next one runs through the engine.
+  <Step title="Design-partner pilots">
+    Read-only first: 60 days on the wallets a licensed payout company already runs, matched against its own payout records. Then routing on the company's own signer.
+  </Step>
+  <Step title="Corridors">
+    EUR → NGN with licensed payout companies first, then KES and GHS, then NGN → CNY and HKD for importers on the same integration.
+  </Step>
+  <Step title="Payout partners per region">
+    Additional partners in Africa, Asia and the Americas on the same partner interface, so each new region is reachable from every existing one.
   </Step>
   <Step title="Mainnet shielded funding">
     `near.swap` from Base USDC to ZEC through NEAR Intents, delivered straight to the vault's unified address (NEAR Intents has no Tempo market).
   </Step>
 </Steps>
 
-## Then: design partners
-
-- Read-only pilots first: 60 days on the wallets a licensed payout company already runs, then routing on its own signer.
-- EUR → NGN with licensed payout companies first, then KES and GHS.
-- NGN → CNY / HKD for importers on the same integration.
-- Additional spokes per region: candidates include Yellow Card, Kotani Pay, Bitnob, HoneyCoin and Busha in Africa; licensed Hong Kong payment institutions, Nium and Conduit for Asia; Bridge, Bitso Business and Pix partners for the Americas.
-
 ## Production hardening
 
 | Area | Today | Production |
 |---|---|---|
 | Ledger | PGlite (embedded Postgres) | Managed Postgres, same schema and triggers |
-| Custody | Signer interface on every vault; local keys for testnet; AWS KMS and Turnkey adapters built | The customer's KMS or MPC for every vault; a Fireblocks adapter (needs raw signing enabled) |
+| Custody | Signer interface on every vault; AWS KMS and Turnkey adapters | The customer's KMS or MPC for every vault; a Fireblocks adapter (raw signing enabled) |
 | Routing | The planner enforces the Tempo hub | Tempo-first, not Tempo-only: direct Solana routes when the sender already holds Solana stablecoins, with measured cost per hop |
-| Stablecoins | USDC, USDT, PYUSD, EURC on Solana; USDC, EURC on Base | USDT on Tron for African payout liquidity |
-| Liquidity | Customer float in its own vault | Liquidity providers (for example Mansa) plugged in as venues |
+| Stablecoins | Payouts fund from pathUSD or USDC.e; USDC, USDT, PYUSD and EURC watched and reconciled | Swap legs so USDT, PYUSD and EURC fund payouts directly; USDT on Tron for African payout liquidity |
+| Liquidity | Customer float in its own vault | Liquidity providers plugged in as venues |
 | Compliance | Viewing keys for the shielded lane | Address screening (Chainalysis or TRM), a Travel Rule provider hook, audit exports |
-| FROST | Trusted-dealer keygen; both rounds in one process | Distributed key generation; each signer on their own device relaying through `frostd` |
-| Console | Local, unauthenticated actions | Authenticated, role-based, with the disclosure and action endpoints behind auth |
-| Saga leases | Leases with fencing tokens: an expired worker can never commit a booking or a step result | Same, on managed Postgres |
-| Gas accounting | Tempo gas and Solana fees and account rent booked from the chain; Base gas from deposit receipts | Gas paid in stablecoins on every chain (a USDC paymaster on Base, a fee relayer on Solana), batched bridging per partner |
+| FROST | Trusted-dealer keygen; both rounds in one process | Distributed key generation; each signer on its own device relaying through `frostd` |
+| Console | Local, without authentication | Authenticated and role-based, with approval and disclosure endpoints behind access control |
+| Gas | Booked from the chain on every venue | Gas paid in stablecoins on every chain (a USDC paymaster on Base, a fee relayer on Solana) and batched bridging per partner |
 | Zcash stack | `zcash-devtool` | Z3 node stack and Zallet |
 
-## Known gaps
+## Known limitations
 
 <AccordionGroup>
-  <Accordion title="Base gas is booked from receipts, not yet from a watcher">
-    Every Across deposit returns its exact cost from the transaction receipts (execution gas plus Base's L1 data fee), and vault accounting books it to `expense:gas` in ETH. The Base relay's ETH top-ups are native transfers that log no event, so a full on-chain vs ledger check for the relay's ETH balance waits for the live mainnet bridge leg.
-  </Accordion>
   <Accordion title="Solana account rent on every Paj payout">
-    Paj issues a one-off deposit address per order, so each payout creates a new token account and costs about 0.0015 SOL in rent, more than the network fee. It is booked as `expense:account-rent`. Fixes: ask Paj for a reusable deposit address with a memo, or have the bridge deliver straight to the partner.
+    Paj issues a one-off deposit address per order, so each payout creates a new token account and costs about 0.002 SOL in rent, more than the network fee. It is booked as `expense:account-rent`. The fix is a reusable deposit address with a memo, or delivery straight from the bridge to the partner.
   </Accordion>
-  <Accordion title="Across testnet">
-    Across has no Tempo testnet deployment, and its testnet CCTP relayer did not complete a Base Sepolia → Solana devnet mint. Testnet uses a simulated fill with the same interface; mainnet uses the live bridge.
+  <Accordion title="No Across deployment on Tempo testnet">
+    Across has no Tempo testnet, and its testnet CCTP relayer did not complete a Base Sepolia → Solana devnet mint. Testnet routes use `bridge.simulated`, which has the same interface and bookings; mainnet uses the live bridge.
+  </Accordion>
+  <Accordion title="Non-USD gas on Tempo">
+    Tempo accepts USD stablecoins as fee tokens today. Vaults pay gas in pathUSD from the owner's float, so customer balances never fund gas.
   </Accordion>
 </AccordionGroup>

@@ -436,7 +436,7 @@ async function body(req: IncomingMessage): Promise<Row> {
 }
 
 /**
- * Read-only pilot for the demo customer: its wallets on Tempo, Solana and Base
+ * Read-only pilot for the sample customer: its wallets on Tempo, Solana and Base
  * matched against its payout records (examples/watch). Public RPC scans are
  * slow, so the result is cached for five minutes.
  */

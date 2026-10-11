@@ -1,73 +1,79 @@
 ---
 title: "Corridor"
 sidebarTitle: "Introduction"
-description: "Cross-border stablecoin payouts for licensed payment companies: moved over Tempo, matched from funding to bank credit, on the company's own keys. Starting with Africa's trade corridors."
+description: "The payment ledger and router licensed payment companies run on their own keys: cross-border stablecoin payouts across every provider, exactly once, with books that match the chain."
 icon: "sparkles"
 ---
 
-<Frame caption="The treasury console, recorded from live runs on Tempo Moderato, Solana devnet and Zcash testnet.">
-  <img src="/images/product/console-overview.jpg" alt="Corridor treasury console: hub balances, settlement network and recorded testnet flows" />
+<Frame caption="The treasury console. The Live on mainnet panel is a real payout; the rest is recorded from Tempo, Solana and Zcash testnets.">
+  <img src="/images/product/console-overview.jpg" alt="Corridor treasury console: hub balances, settlement network and payout flows" />
 </Frame>
 
-Corridor is the payment ledger and router that **licensed payment companies** (PSPs, remittance operators, payout companies and the banks behind importers) run themselves for cross-border payments, starting with the trade corridors into and out of Africa. It moves stablecoin payouts over **Tempo** and the partners that pay out locally, and matches **every payout from customer funding to beneficiary bank credit**, whichever provider and chain carried it. Suppliers can be paid privately on Zcash, with a viewing key for the auditor.
+Corridor is the payment ledger and router that **licensed payment companies** run in their own environment, on their own keys. It runs cross-border stablecoin payouts across the providers a company already uses, **exactly once**, and keeps **one set of books that matches the chain**, from the customer's funding to the beneficiary's bank credit.
+
+Corridor doesn't hold money, provide liquidity or carry licences. Payout partners such as Paj do that. Corridor is the system that makes a payout across several of them reliable, traceable and auditable.
 
 <Note>
-Corridor is software, not a custodian or a money transmitter. It runs in the customer's environment and signs with the customer's own keys ([Keys and signers](/architecture/keys-and-signers)). Customers keep their licences, their KYC, their funds and their end-customer relationships. They start [read-only](/flows/read-only-pilot): no keys, nothing moves.
+Corridor is software, not a custodian or a money transmitter. It runs in the customer's environment and signs through the customer's own KMS or MPC ([Keys and signers](/architecture/keys-and-signers)). Customers keep their licences, their KYC, their funds and their end-customer relationships, and they start [read-only](/flows/read-only-pilot): no keys, nothing moves.
 </Note>
 
-## What is built and running
-
-Everything on this site describes code in the Corridor repository (source available to reviewers on request), and every number below is reproducible from the [live console replay](https://corridorapp.udokaam.dev/console/), where each figure links to the transaction behind it.
+## In production
 
 <CardGroup cols={4}>
-  <Card title="0.6 s" icon="timer">
-    Settlement finality on the Tempo hub.
+  <Card title="74 s" icon="timer" href="/status/evidence#live-on-mainnet">
+    From a Tempo vault to a Nigerian bank account, live on mainnet.
   </Card>
-  <Card title="45 / 45" icon="check-check">
-    Movements reconciled across Tempo, partner webhooks and Zcash.
+  <Card title="1 reference" icon="link" href="/architecture/corridor-reference">
+    Tempo memo, Solana memo, partner order and bank narration.
   </Card>
-  <Card title="Δ 0.000000" icon="scale">
-    Treasury vault on-chain vs ledger, gas included.
+  <Card title="Δ 0" icon="scale" href="/architecture/reconciliation">
+    Every vault on-chain against the ledger, fees and gas included.
   </Card>
-  <Card title="2 of 3" icon="key-round">
+  <Card title="2 of 3" icon="key-round" href="/integrations/frost">
     FROST signers required to move a shielded vault.
   </Card>
 </CardGroup>
 
-## How the pieces fit
+## Who it's for
 
-<Frame caption="Fig. 02 · Every flow is a collection into the Tempo hub or a payout out of it.">
+Licensed remittance operators, payout companies, PSPs and business-FX firms that send stablecoin payouts through **two or more providers or chains**. That is where payouts stall halfway, retries pay twice and fees go unexplained. A company with one provider on one chain is well served by that provider's dashboard; Corridor is for the companies that have outgrown it.
+
+## How it works
+
+<Frame caption="Every flow is a collection into the Tempo hub or a payout out of it.">
   <img className="block dark:hidden" src="/images/diagrams/hub-and-spoke-light.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
   <img className="hidden dark:block" src="/images/diagrams/hub-and-spoke-dark.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
 </Frame>
 
-Every flow is either a **collection** into the Tempo hub or a **payout** out of it. A Nigerian importer paying a supplier in Shenzhen is a naira collection followed by a yuan payout; a diaspora transfer into Lagos is a euro collection followed by a naira payout. Adding a region means adding one partner, and it can immediately reach every other region: **N integrations instead of N×N corridors**.
+Every flow is either a **collection** into the Tempo hub or a **payout** out of it. A diaspora transfer into Lagos is a euro collection followed by a naira payout; a Nigerian importer paying a supplier in Shenzhen is a naira collection followed by a yuan payout. Adding a region means adding one payout partner, and every other region can reach it: **N integrations instead of N×N corridors**.
 
-## Where to go next
+Each payout is a durable saga. Every external step (a bridge deposit, a partner order, a funding transfer) is recorded before Corridor waits on it, every movement is booked from the transaction that caused it, and the same 32-byte reference rides every leg.
+
+## Explore
 
 <CardGroup cols={2}>
+  <Card title="What Corridor is" icon="info" href="/start/what-corridor-is">
+    The product, who it serves, and what is live on mainnet and on testnet.
+  </Card>
   <Card title="Read-only pilot" icon="eye" href="/flows/read-only-pilot">
     How a payment company starts: watch the wallets it already runs and match its own payout records.
   </Card>
-  <Card title="Keys and signers" icon="key-square" href="/architecture/keys-and-signers">
-    One signing interface for Tempo, Base and Solana; AWS KMS today, MPC next.
-  </Card>
-  <Card title="What Corridor is" icon="info" href="/start/what-corridor-is">
-    The product, who it serves, and exactly what is live versus simulated.
-  </Card>
-  <Card title="Reading paths" icon="map" href="/start/reading-paths">
-    Curated routes for investors, CTOs, chain teams and partners.
-  </Card>
   <Card title="Architecture" icon="layers" href="/architecture/overview">
-    Ledger, route planner, saga engine and reconciliation, one engine for every lane.
+    Ledger, route planner, saga engine and reconciliation: one engine for every lane.
   </Card>
-  <Card title="Chains & partners" icon="network" href="/integrations/overview">
+  <Card title="Keys and signers" icon="key-square" href="/architecture/keys-and-signers">
+    One signing interface for Tempo, Base and Solana, with AWS KMS and Turnkey adapters.
+  </Card>
+  <Card title="Chains and partners" icon="network" href="/integrations/overview">
     Tempo, Across, Base, Solana, Paj, Zcash, FROST and NEAR Intents, each doing the job it is best at.
   </Card>
   <Card title="The opportunity" icon="globe" href="/market/global-opportunity">
     $31.6T of cross-border B2B payments, under 1% on stablecoins so far, and how Corridor earns on it.
   </Card>
   <Card title="Evidence" icon="file-check" href="/status/evidence">
-    Every testnet transaction, linked to its explorer.
+    Every transaction behind these claims, linked to its block explorer.
+  </Card>
+  <Card title="Reading paths" icon="map" href="/start/reading-paths">
+    Routes through the documentation for investors, engineering leads, chain teams and partners.
   </Card>
 </CardGroup>

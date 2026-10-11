@@ -1,6 +1,6 @@
 ---
 title: "Treasury console"
-description: "The operator's view of the network: hub balances, venues, sagas with explorer links, pre-funding forecast, reconciliation, shielded batches with FROST approvals, and auditor disclosures."
+description: "The operator's view of the network: live mainnet payouts, hub balances, venues, sagas with explorer links, pre-funding forecast, reconciliation, the exceptions queue, shielded batches with FROST approvals, and auditor disclosures."
 icon: "layout-dashboard"
 ---
 
@@ -14,13 +14,14 @@ The console (`apps/console`) is one Node process that owns the ledger and the ru
 pnpm console    # http://localhost:4400
 ```
 
-A public, read-only replay recorded from live testnet runs is at [corridorapp.udokaam.dev/console](https://corridorapp.udokaam.dev/console/).
+A public, read-only replay is at [corridorapp.udokaam.dev/console](https://corridorapp.udokaam.dev/console/): its Live on mainnet panel is a real payout, and every other panel is recorded from testnet runs.
 
 ## Panels
 
 | Panel | What it shows | API |
 |---|---|---|
 | KPIs | Hub balances, in flight, settled via partners, saga outcomes, reconciliation rate | `GET /api/overview` |
+| Live on mainnet | Real payouts: amount in and naira credited, end-to-end time, partner status (re-read live), bank narration, explorer links per leg and, for saga runs, the per-vault check | `GET /api/mainnet` |
 | Settlement network | The hub-and-spoke map with live planned routes per corridor and environment | `GET /api/network` |
 | Run a flow | One-click live flows: EUR→NGN payout, payout with forced partner failure, importer ₦→¥, three suppliers paid privately | `POST /api/actions/*` |
 | Settlement timeline | Every saga: steps, status, attempts, FX, and explorer links for each on-chain step | `GET /api/sagas` |
@@ -29,6 +30,7 @@ A public, read-only replay recorded from live testnet runs is at [corridorapp.ud
 | Venue balances | Vaults and clearing accounts per venue, with clearing pairs netting to zero | `GET /api/overview` |
 | Reconciliation | Matched / mismatch / unbooked / unreferenced, the vault check and booked gas | `GET /api/reconciliation` |
 | Shielded lane | FROST vault, Ironwood batches with encrypted invoice memos, approval requests | `GET /api/shielded`, `GET/POST /api/approvals` |
+| Exceptions queue | Read-only pilot: the customer's own wallets against its payout records, with short, missing and unexpected movements | `GET /api/readonly` |
 | Disclosures | Export a vault's viewing key with its scope, what it reveals and how to verify | `POST /api/disclosures` |
 
 ## FROST approvals
@@ -45,5 +47,5 @@ A shielded batch does not broadcast until enough signers approve. The console sh
 - **The snapshot refuses to publish** if any value from `.env.local` or any secret file under `.keys/` appears in the recorded data.
 
 <Warning>
-The local console is unauthenticated by design for the demo. Its action, approval and disclosure endpoints must sit behind authentication and role checks before any hosted deployment.
+The local console runs without authentication for development. Its action, approval and disclosure endpoints sit behind authentication and role checks in any hosted deployment.
 </Warning>

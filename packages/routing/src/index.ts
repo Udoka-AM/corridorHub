@@ -87,7 +87,7 @@ export const HUB: Position = { venue: "tempo", asset: "pathUSD" };
 /**
  * Where ramp partners can collect local currency (on-ramp) and pay it out
  * (off-ramp). Partner selection per currency happens in the partner registry;
- * see docs/ARCHITECTURE.md §2.1 for candidate partners per region.
+ * see docs/ARCHITECTURE.md §3 for the flows and regions.
  */
 export const COLLECTION_CURRENCIES: readonly Fiat[] = [
   // Africa: importers and businesses paying abroad

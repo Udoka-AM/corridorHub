@@ -1,10 +1,10 @@
 ---
 title: "Quickstart"
-description: "Clone the repository, run the test suite, and drive live flows on Tempo Moderato, Solana devnet and Zcash testnet from the treasury console."
+description: "Install Corridor, run the test suite, and drive payout flows on Tempo, Solana and Zcash testnets from the treasury console. No keys or accounts needed."
 icon: "terminal"
 ---
 
-Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FROST signing. The ledger runs on embedded Postgres (PGlite) locally, so there is no database to install.
+Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FROST signing. The ledger runs on embedded Postgres (PGlite) locally, so there is no database to install, and test keys are generated and funded from the Tempo testnet faucet on first run.
 
 ## Prerequisites
 
@@ -17,7 +17,6 @@ Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FR
 <Steps>
   <Step title="Clone and install">
     ```bash
-    # The repository is private: source is available to reviewers on request.
     cd corridor
     pnpm install
     ```
@@ -27,7 +26,7 @@ Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FR
     pnpm typecheck
     pnpm test
     ```
-    The suite covers the ledger invariants, the reference codec, routing and hub enforcement, the saga engine (including forced failures and compensation order), partner adapters, webhooks, the Solana memo leg, ZIP-321 batches, NEAR quotes and vault accounting.
+    107 tests cover the ledger invariants, the reference codec, routing and hub enforcement, the saga engine (forced failures, compensation order, lease fencing), the mainnet Across and payout legs (fees, partner rounding, slow fills, crash recovery), signers, partner adapters, webhooks, the Solana memo leg, ZIP-321 batches, NEAR quotes and vault accounting.
   </Step>
   <Step title="A first memo transfer on Tempo">
     ```bash
@@ -46,7 +45,7 @@ Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FR
     ```bash
     pnpm console        # http://localhost:4400
     ```
-    The console owns the local ledger. Stop CLI demos before starting it, because the embedded Postgres has a single owner.
+    Run a payout, a payout with a forced partner failure, and an importer flow from the console, then watch every movement reconcile. The console owns the local ledger, so stop other flows before starting it: the embedded Postgres has a single owner.
   </Step>
 </Steps>
 
@@ -57,10 +56,12 @@ Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FR
 | `pnpm tempo:smoke` | Memo transfer on Moderato, observed and booked once |
 | `pnpm payout:demo` | Public payout saga with compensation |
 | `pnpm importer:demo` | Collection then supplier payout across the hub |
-| `pnpm zcash:spike` | Single-key shielded batch with encrypted memos |
+| `pnpm zcash:batch` | Single-key shielded batch with encrypted memos |
 | `pnpm zcash:frost` | Threshold-controlled shielded batch |
 | `pnpm across:testnet` | Live Across deposit on testnet (Base Sepolia → Solana devnet) |
-| `pnpm mainnet:wallets` | Generate mainnet demo wallets (keys stay local) |
+| `pnpm watch:report <config>` | Read-only reconciliation of existing wallets against payout records |
+| `pnpm mainnet:wallets` | Create or inspect the mainnet vaults (keys stay local) |
+| `pnpm mainnet:saga` | Mainnet payouts through the saga engine, with an on-chain vs ledger check of every vault |
 | `pnpm console` | Treasury console and JSON API |
 | `pnpm console:snapshot` | Record the running console as the static public replay |
 
@@ -75,10 +76,12 @@ packages/
   core/            Venues, currencies, money, the Corridor Reference codec
   ledger/          Double-entry ledger with invariants (PGlite / Postgres)
   routing/         Route graph and planner, hub enforcement
-  saga/            Durable saga engine with leases and compensation
-  legs/            Leg implementations (bridge, partner, credit, shielded)
+  saga/            Durable saga engine with leases, fencing and compensation
+  signer/          Signer interface: local, AWS KMS and Turnkey adapters
+  legs/            Leg implementations (Across bridge, partner payout and collection, credit, shielded)
   chain-tempo/     Tempo client, memo transfers, observer
-  chain-solana/    USDC + SPL Memo transfers, observer
+  chain-solana/    Stablecoin registry, memo transfers, watcher
+  chain-evm/       Base stablecoins and watcher
   chain-zcash/     zcash-devtool wallet, ZIP-321, FROST orchestration
   bridge-across/   Across Swap API: quote, execute, fill tracking
   swap-near/       NEAR Intents 1Click quotes and status

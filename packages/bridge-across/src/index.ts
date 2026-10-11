@@ -5,7 +5,7 @@ import type { Address, Hex } from "viem";
  * a firm quote plus the approval and deposit transactions to sign; the deposit
  * status API tracks the relayer's fill on the destination chain.
  *
- * Mainnet route (ARCHITECTURE §6.4): Tempo pathUSD → Base USDC → Solana USDC,
+ * Mainnet route (docs/ARCHITECTURE.md §8.5): Tempo pathUSD → Base USDC → Solana USDC,
  * two hops, since Across has no direct Tempo↔Solana route.
  * Testnet route: Base Sepolia USDC → Solana devnet USDC (Across has no Tempo testnet).
  */

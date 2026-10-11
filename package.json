@@ -12,7 +12,7 @@
     "mainnet:run": "tsx scripts/mainnet-run.ts",
     "mainnet:saga": "tsx scripts/mainnet-saga.ts",
     "across:testnet": "tsx scripts/across-testnet.ts",
-    "zcash:spike": "tsx scripts/zcash-spike.ts",
+    "zcash:batch": "tsx scripts/zcash-batch.ts",
     "zcash:frost": "tsx scripts/zcash-frost.ts",
     "importer:demo": "tsx scripts/importer-demo.ts",
     "console": "tsx apps/console/src/server.ts",

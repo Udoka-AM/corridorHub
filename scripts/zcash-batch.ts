@@ -1,7 +1,7 @@
 /**
- * Zcash spike (D5–D6): Corridor's shielded lane on Zcash testnet, Ironwood pool.
+ * Shielded supplier batch on Zcash testnet (Ironwood pool), single-key vault.
  *
- *   pnpm zcash:spike
+ *   pnpm zcash:batch
  *
  * 1. A customer's period account (ZIP-32 account "acme-2026-10") pays three
  *    suppliers in ONE shielded transaction, each output carrying a Corridor

@@ -4,7 +4,7 @@ import { FIAT, corridor, fiatFromIndex, parseCorridor, type CorridorCode } from 
 /**
  * Corridor Reference: one 32-byte identifier that follows a payout across
  * Tempo (TIP-20 memo, an indexed event topic), Solana (SPL Memo) and Zcash
- * (encrypted output memo). Layout v2 (docs/ARCHITECTURE.md §5):
+ * (encrypted output memo). Layout v2 (docs/ARCHITECTURE.md §7):
  *
  *   0      version (0x02)
  *   1      kind

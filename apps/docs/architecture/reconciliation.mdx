@@ -61,15 +61,15 @@ const checks = await checkVaults(accounts, ledger, [{ name: "treasury", address,
 // { vault: "treasury", onchain, ledger, diff, status: "balanced" | "drift" }
 ```
 
-To make the check meaningful, the console replays each vault's **whole history** from its first funded block, which it finds by bisecting historical balances (`firstFundedBlock`). On Moderato:
+To make the check meaningful, the console replays each vault's **whole history** from its first funded block, which it finds by bisecting historical balances (`firstFundedBlock`). The latest recorded run:
 
-| Treasury vault | Value |
+| Check | Result |
 |---|---|
-| On-chain | 1,000,051.994555 pathUSD |
-| Ledger | 1,000,051.994555 pathUSD |
-| Difference | **0** |
-| Gas booked | 10 transactions, 0.005445 pathUSD |
-| Reconciliation | **45 / 45 matched** (Tempo 30, partners 5, Zcash 10) |
+| Tempo treasury | On-chain 1,000,077.994471 pathUSD = ledger, difference **0** |
+| Solana vault | On-chain 0.99402624 SOL = ledger, difference **0**, network fees and account rent booked |
+| Reconciliation | **59 / 59 matched** across Tempo, Solana, partner webhooks and Zcash |
+
+On mainnet, `pnpm mainnet:saga` opens a dedicated ledger with each vault's on-chain balance as the owner's float, then checks every vault (Tempo pathUSD and USDC.e, Base USDC and ETH, Solana USDC and SOL) against the ledger after each payout.
 
 ## The auditor's view
 

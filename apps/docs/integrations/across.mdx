@@ -7,12 +7,12 @@ icon: "arrow-left-right"
 Across moves value between the hub and the spokes. Corridor uses its **Swap API**, which returns ready-to-sign calldata, and tracks each deposit until a relayer fills it on the destination chain.
 
 <Info>
-**Status.** The Across adapter (`@corridor/bridge-across`: quote, execute, deposit status, wait for fill) is built and has moved real money: on 11 Oct 2026 it bridged Tempo → Base → Solana on mainnet for a live naira payout ([Evidence](/status/evidence#live-on-mainnet)). Running it as the `across.bridge` saga leg is next on the [roadmap](/status/roadmap); testnet flows use `bridge.simulated`, which has the same interface.
+**Live on mainnet.** On 11 Oct 2026 the Across adapter bridged Tempo → Base → Solana for a live naira payout ([Evidence](/status/evidence#live-on-mainnet)). The `across.bridge` saga leg wraps it: it takes pathUSD or USDC.e on Tempo, records each deposit before waiting on its fill, and books the amount that arrived, Across's fee and the origin gas from the chains. Testnet flows use `bridge.simulated`, which has the same interface.
 </Info>
 
 ## Route shape
 
-Across has no direct Tempo ↔ Solana route, so the hub reaches Solana in **two hops through Base**. Each hop is its own saga leg with its own compensation, and between hops the funds sit in a Corridor-owned address on Base.
+Across has no direct Tempo ↔ Solana route, so the hub reaches Solana in **two hops through Base**. Each hop is its own saga leg, and between hops the funds sit in the customer's own relay address on Base. A failure after a deposit stops the payout for a person rather than guessing, because the value has already crossed chains.
 
 <Frame caption="Fig. 03 · Mainnet topology: Tempo to Base through Across, then partners on Base and Solana, and NEAR Intents into Zcash.">
   <img className="block dark:hidden" src="/images/diagrams/chain-topology-light.svg" alt="Chain topology from Tempo through Across to Base, Solana, partners and Zcash" />
@@ -58,4 +58,4 @@ Each hop is its own leg, so if the second hop fails after the first has filled, 
 
 ## Testnet findings
 
-Across has no Tempo testnet deployment, so the Moderato demo uses `bridge.simulated`, which has the same interface: the Tempo side is real (pathUSD moves to an escrow with the reference as memo) and the far side is simulated. A live Across testnet deposit from Base Sepolia to Solana devnet ([0x782d8b52…](https://sepolia.basescan.org/tx/0x782d8b52d1278892e5215a7a72bf731fa0e205a9274f38f99e0bcb9992c76e02)) burned the USDC and completed Circle's CCTP v2 attestation, but the final Solana mint is restricted to Across's designated `destinationCaller` (its testnet relayer), which did not execute it. The mainnet run uses the same adapter. See [ADR 0007](/decisions/0007-live-bridge-first).
+Across has no Tempo testnet deployment, so Moderato runs use `bridge.simulated`, which has the same interface: the Tempo side is real (pathUSD moves to an escrow with the reference as memo) and the far side is simulated. A live Across testnet deposit from Base Sepolia to Solana devnet ([0x782d8b52…](https://sepolia.basescan.org/tx/0x782d8b52d1278892e5215a7a72bf731fa0e205a9274f38f99e0bcb9992c76e02)) burned the USDC and completed Circle's CCTP v2 attestation, but the final Solana mint is restricted to Across's designated `destinationCaller` (its testnet relayer), which did not execute it. The mainnet run uses the same adapter. See [ADR 0007](/decisions/0007-live-bridge-first).

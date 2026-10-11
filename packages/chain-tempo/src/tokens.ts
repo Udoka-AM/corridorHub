@@ -2,7 +2,7 @@ import type { Address } from "viem";
 import { Addresses } from "viem/tempo";
 import type { Asset } from "@corridor/core";
 
-/** USD TIP-20s Corridor handles. pathUSD is the canonical settlement unit (ARCHITECTURE §0.1). */
+/** USD TIP-20s Corridor handles. pathUSD is the canonical settlement unit (docs/ARCHITECTURE.md §4). */
 export const TEMPO_TOKENS: Partial<Record<Asset, Address>> = {
   pathUSD: Addresses.pathUsd,
   "USDC.e": "0x20C000000000000000000000b9537d11c60E8b50",
