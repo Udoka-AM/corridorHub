@@ -3,7 +3,7 @@ import type { Accounts, Db, EntryInput, Ledger, Sql } from "@corridor/ledger";
 import type { LegKind, PlannedStep, RoutePlan } from "@corridor/routing";
 
 /**
- * Durable settlement saga (carried over from Arc). Each planned step runs
+ * Durable settlement saga. Each planned step runs
  * `forward()` with retries; its ledger bookings are posted idempotently; its
  * output is persisted. If a step exhausts its retries, completed steps are
  * compensated in reverse order. A saga can be re-run after a crash and
