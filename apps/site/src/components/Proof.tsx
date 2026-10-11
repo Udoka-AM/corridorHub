@@ -25,7 +25,7 @@ function Roll({ value }: { value: string }) {
 
 const STATS = [
   { value: "74", unit: "s", note: "From Tempo to a Nigerian bank account, live on mainnet" },
-  { value: "45/45", unit: "", note: "Testnet movements reconciled across three chains" },
+  { value: "59/59", unit: "", note: "Movements matched to the ledger across Tempo, Solana, partners and Zcash" },
   { value: "0", unit: "", note: "Customer keys Corridor holds. Your KMS or MPC signs." },
   { value: "2/3", unit: "", note: "Signers to move a shielded vault. One alone is refused." },
 ];

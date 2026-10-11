@@ -4,8 +4,9 @@ import { ChainMark } from "./Chains";
 
 const HubScene = lazy(() => import("./HubScene"));
 
-// Real movements from the testnet runs, as the console recorded them.
+// Real payouts: the first is the live mainnet payout of 11 Oct 2026; the rest are runs the console recorded.
 const FEED = [
+  { pair: "EUR → NGN", amt: "₦3,891.48", state: "credited · 74 s" },
   { pair: "NGN → CNY", amt: "₦1,560,000", state: "collected" },
   { pair: "NGN → CNY", amt: "¥7,140", state: "paid out" },
   { pair: "EUR → NGN", amt: "₦10,710", state: "paid out" },
@@ -72,9 +73,9 @@ export default function Hero({ ready }: { ready: boolean }) {
       </div>
       <div className="shade" />
       <div className="wrap copy">
-        <Words as="h1" className="display" text={"Every payout.\nOne ledger."} />
+        <Words as="h1" className="display" text={"Never lose a\ncross-border payout."} />
         <p className="lede">
-          Cross-border stablecoin payouts over Tempo, matched from funding to bank credit, on your own keys. Starting with Africa.
+          Corridor runs your stablecoin payouts across every provider, exactly once, on your own keys, and keeps books that match the chain.
         </p>
         <div className="ctas">
           <a className="btn primary" href="#access" data-hot>
@@ -93,8 +94,8 @@ export default function Hero({ ready }: { ready: boolean }) {
       </div>
       <div className="hud" aria-live="off">
         <div className="row">
-          <span className="live label"><i /> testnet feed</span>
-          <span className="label">0.6 s finality</span>
+          <span className="live label"><i /> payout feed</span>
+          <span className="label">74 s to a bank account</span>
         </div>
         <div className="row tnum" key={tick}>
           <span>{now.pair}</span>

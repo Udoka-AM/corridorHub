@@ -42,7 +42,7 @@ export default function Product() {
           <div className="frame">
             <img
               src="./media/console-overview.jpg"
-              alt="Corridor treasury console: hub balances, settlement network and recorded testnet flows"
+              alt="Corridor treasury console: live payouts, hub balances, settlement network and reconciliation"
               width={2200}
               height={1161}
               loading="lazy"
@@ -53,9 +53,9 @@ export default function Product() {
             <img src="./media/console-timeline.jpg" alt="" width={1600} height={1238} loading="lazy" decoding="async" />
           </div>
           <div className="proofcard">
-            <span className="label" style={{ color: "#5d5d5a" }}>Treasury vault</span>
+            <span className="label" style={{ color: "#5d5d5a" }}>Every vault</span>
             <div className="big tnum">Δ 0.000000</div>
-            <span>On-chain balance vs ledger, gas included</span>
+            <span>On-chain balance vs ledger, fees and gas included</span>
           </div>
         </div>
       </div>
