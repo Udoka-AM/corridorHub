@@ -1,12 +1,39 @@
 ---
 title: "Evidence"
-description: "Every testnet transaction behind Corridor's claims, linked to its block explorer, with the reconciliation and vault results they produced."
+description: "Every transaction behind Corridor's claims, starting with a live mainnet payout into a Nigerian bank account, linked to its block explorer."
 icon: "file-check"
 ---
 
-Every claim on this site can be checked on-chain. The [console replay](https://corridorapp.udokaam.dev/console/) shows the same runs with live links; this page lists them in one place.
+Every claim on this site can be checked on-chain, including the mainnet payout below. The [console replay](https://corridorapp.udokaam.dev/console/) shows the same runs with live links; this page lists them in one place.
 
-## Headline results
+## Live on mainnet
+
+On 11 October 2026, Corridor moved real money end to end: **2.90 USDC.e on Tempo became ₦3,891.48 in a Nigerian bank account in 74 seconds**. It went Tempo to Base and Base to Solana through Across, then Paj paid out in naira. The money was the founder's own, and the bank account was theirs too.
+
+<CardGroup cols={3}>
+  <Card title="74 seconds" icon="timer">
+    From the Tempo deposit (07:39:22 UTC) to the OPay credit (07:40:36 UTC).
+  </Card>
+  <Card title="₦3,891.48 credited" icon="landmark">
+    Paj quoted ₦3,911.64 for 2.89 USDC at 1,350.74; ₦20.16 (0.5%) was deducted before delivery.
+  </Card>
+  <Card title="Under 1¢ in gas" icon="fuel">
+    0.000362 pathUSD on Tempo and 0.000000996 ETH on Base. Across fees were under 1¢ across both hops.
+  </Card>
+</CardGroup>
+
+| Leg | Result | Transaction |
+|---|---|---|
+| Tempo USDC.e → Base USDC (Across) | 2.90 in, filled in about 1 s | [0x730f513c…](https://explore.tempo.xyz/tx/0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7) → fill [0xb399654d…](https://basescan.org/tx/0xb399654d2790dd247f1d4d4ae5f8e1d87a7e31dc564ca1ecb39e90486211dd34) |
+| Base USDC → Solana USDC (Across, CCTP) | Filled in the vault's own USDC account | [0xa2d52268…](https://basescan.org/tx/0xa2d52268288e288bdf13a253e51c72852b44001a8fa3561d40bb502e6e7e38ff) → fill [s6YKpCJ9…](https://solscan.io/tx/s6YKpCJ9rjTBcjfZRDw6WSttiq6cX4z8m8A3n7uk6HPyPKQ4NvfQLrMmV4UxcEnm1pnBB4Rqh48hkrxBmuAg6mx) |
+| Solana USDC → Paj order | 2.89 USDC to the order's deposit address, with the Corridor Reference in the Memo program | [4sWxGHfG…](https://solscan.io/tx/4sWxGHfGRoi18oHxRsrwyWevMQSeRtGkdD8ZDjfsoJKuWcBsr7Mv4P2PYTMHs36wgvk1KhAh3ZQNKZvx6UPYgUPw) |
+| Paj payout | Order `6acb3d5488922b136a79182a` COMPLETED | Bank credit: ₦3,891.48, narration `JIT corridor0201` |
+
+The bank narration starts with the Corridor Reference: Paj echoes the order description into the transfer. So a line on a bank statement leads back to the same reference that's on the Solana transfer, `0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb84995221`. That reference decodes to a payout from EUR to NGN on the public lane, with payment id `01a129e6-df26-764e-ac2e-71fbadc2fb0d`.
+
+What this run did not do: it ran from `pnpm mainnet:run` (each step is checkpointed, so a rerun never sends twice), not through the saga engine and ledger. The testnet results below cover those. The public record is in `examples/mainnet/payouts.json`, and the [console replay](https://corridorapp.udokaam.dev/console/) shows it in the **Live on mainnet** panel.
+
+## Testnet results
 
 <CardGroup cols={3}>
   <Card title="45 / 45 reconciled" icon="check-check">
@@ -54,8 +81,7 @@ The auditor disclosure in the console replay exports the FROST vault's unified f
 
 | Run | Result | Transaction |
 |---|---|---|
-| Live quote, Tempo USDC.e → Base USDC (mainnet) | 5 USDC in, fill ~1 s, fee ≈ $0.004 | Quote only (29 Sep 2026) |
-| Live quote, Base USDC → Solana USDC (mainnet) | Fill ~8 s, fee ≈ $0.0006 | Quote only (29 Sep 2026) |
+| Live mainnet run, Tempo → Base → Solana (11 Oct 2026) | Both hops filled; see [Live on mainnet](#live-on-mainnet) | [0x730f513c…](https://explore.tempo.xyz/tx/0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7) |
 | Live testnet deposit, Base Sepolia → Solana devnet | USDC burned and attested by Circle CCTP v2; final mint restricted to Across's testnet relayer, which had not executed | [0x782d8b52…](https://sepolia.basescan.org/tx/0x782d8b52d1278892e5215a7a72bf731fa0e205a9274f38f99e0bcb9992c76e02) |
 
 ## Customer-held keys and read-only pilot

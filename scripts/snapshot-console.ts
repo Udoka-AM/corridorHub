@@ -14,7 +14,7 @@ import { join } from "node:path";
 
 const BASE = process.env.CONSOLE_URL ?? "http://localhost:4400";
 const OUT = "apps/site/public/console";
-const GETS = ["overview", "sagas", "reconciliation", "shielded", "forecast", "network", "approvals", "readonly"];
+const GETS = ["overview", "sagas", "reconciliation", "shielded", "forecast", "network", "approvals", "readonly", "mainnet"];
 const POSTS = ["disclosures"]; // read-only on the server: builds the auditor package
 
 // The console calls public testnet RPCs, which time out now and then: retry each endpoint.

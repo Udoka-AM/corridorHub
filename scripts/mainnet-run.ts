@@ -2,16 +2,18 @@
  * The live route on mainnet, end to end: Tempo USDC.e → Base USDC (Across),
  * Base USDC → Solana USDC (Across), Solana USDC → NGN in a bank account (Paj).
  *
- * Each step is checkpointed to .keys/mainnet-run.json before and after it
+ * Each step is checkpointed to .data/mainnet-run.json before and after it
  * moves money, so a crash or a rerun resumes where it stopped and never sends
- * twice. Payout details come from .env.local (PAJ_PAYOUT_BANK_CODE,
+ * twice. A finished run is appended to examples/mainnet/payouts.json (public:
+ * hashes, amounts and the reference, no bank details) and the next --go starts
+ * a new payout. Payout details come from .env.local (PAJ_PAYOUT_BANK_CODE,
  * PAJ_PAYOUT_ACCOUNT_NUMBER); account numbers are masked in output.
  *
  *   pnpm mainnet:run            # show the plan and balances
  *   pnpm mainnet:run --go       # run (or resume) the route
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { createPublicClient, createWalletClient, formatUnits, http, parseAbi, type Hex } from "viem";
 import { base } from "viem/chains";
 import { CHAINS, TOKENS, executeEvm, quote, waitForFill, type AcrossQuote } from "@corridor/bridge-across";
@@ -21,7 +23,8 @@ import { PajPartner } from "@corridor/partners";
 import { testnetKey } from "./env.ts";
 import { evmAccountFor, tempoAccountFor } from "./signers.ts";
 
-const STATE_FILE = ".keys/mainnet-run.json";
+const STATE_FILE = ".data/mainnet-run.json";
+const RECORD_FILE = "examples/mainnet/payouts.json";
 const SOLANA_KEYPAIR = process.env.SOLANA_MAINNET_VAULT_KEYPAIR ?? ".keys/solana-mainnet-vault.json";
 const SOLANA_RPC = process.env.SOLANA_MAINNET_RPC ?? "https://api.mainnet-beta.solana.com";
 
@@ -229,3 +232,14 @@ while (true) {
   await new Promise((r) => setTimeout(r, 10_000));
 }
 console.log(`\n${JSON.stringify(state, null, 2)}`);
+
+if (state.pajStatus === "COMPLETED") {
+  const records = existsSync(RECORD_FILE) ? (JSON.parse(readFileSync(RECORD_FILE, "utf8")) as { reference: string }[]) : [];
+  if (!records.some((r) => r.reference === state.reference)) {
+    const { pajOrder, ...rest } = state;
+    records.push({ ...rest, completedAt: new Date().toISOString(), corridor: "EUR-NGN", payout: { partner: "paj", currency: "NGN", ...pajOrder, fundingAddress: undefined } } as never);
+    writeFileSync(RECORD_FILE, JSON.stringify(records, null, 2) + "\n");
+    console.log(`recorded in ${RECORD_FILE}`);
+  }
+  renameSync(STATE_FILE, STATE_FILE.replace(".json", `-${state.reference.slice(2, 14)}.json`));
+}

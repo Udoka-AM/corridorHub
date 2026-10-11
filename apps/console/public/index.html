@@ -99,6 +99,11 @@
 <main>
   <section class="span-12 kpis" id="kpis"></section>
 
+  <section class="card span-12">
+    <h2>Live on mainnet <small>real money · Tempo → Base → Solana via Across → Paj → a Nigerian bank account · one reference end to end</small></h2>
+    <div id="mainnet"></div>
+  </section>
+
   <section class="card span-8">
     <h2>Settlement network <small>Tempo is the hub · every region is a spoke · no flow can bypass the hub</small></h2>
     <div id="map"></div>
@@ -254,6 +259,20 @@ async function refreshReadOnly() {
   }
 }
 
+async function refreshMainnet() {
+  const m = await get("/api/mainnet");
+  $("mainnet").innerHTML = (m.payouts || []).slice().reverse().map((p) => {
+    const delivered = p.bankCredit ? `₦${Number(p.bankCredit.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—";
+    const links = p.legs.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("");
+    return `<div class="saga"><div class="top">${chip(p.partnerStatus === "COMPLETED" ? "completed" : "pending")}<strong>payout</strong><span class="mono">${esc(p.decoded.corridor)}</span>` +
+      `<span>${esc(p.input.amount)} ${esc(p.input.asset)} on Tempo → ${delivered} credited${p.bankCredit ? ` · ${esc(p.bankCredit.bank)}` : ""}</span>${p.seconds != null ? `<span class="meta">${p.seconds} s end to end</span>` : ""}</div>` +
+      `<div class="meta">Paj ${esc(p.partnerStatus)}${p.partnerStatusLive ? " (live)" : ""} · ${esc(p.usdcToPartner)} USDC at ${esc(p.rate)} = ₦${esc(p.quotedFiat)} quoted · gas ${esc(p.gas.tempo)} + ${esc(p.gas.base)}` +
+      `${p.bankCredit ? ` · bank narration <span class="mono">${esc(p.bankCredit.narration)}</span>` : ""}</div>` +
+      `<div class="meta">reference <span class="mono">${esc(short(p.reference, 12))}</span> · payment id <span class="mono">${esc(p.decoded.paymentId)}</span></div>` +
+      `<div class="links">${links}</div></div>`;
+  }).join("") || `<div class="empty">No mainnet payouts recorded yet (pnpm mainnet:run --go)</div>`;
+}
+
 async function refreshShielded() {
   const z = await get("/api/shielded");
   $("vault").innerHTML = z.vault
@@ -383,7 +402,7 @@ if (REPLAY) {
   $("replayBanner").innerHTML = `<strong>Replay of live testnet runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. Every balance, saga and reconciliation figure below came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../" style="color:#F2A65A">About Corridor</a> · Source available to reviewers on request`;
   $("actionStatus").textContent = "Replay: each button opens the recorded run of that flow.";
 }
-drawMap(); loop(); slow(); refreshReadOnly();
+drawMap(); loop(); slow(); refreshReadOnly(); refreshMainnet();
 if (!REPLAY) setInterval(refreshReadOnly, 5 * 60_000);
 if (!REPLAY) {
   setInterval(loop, 4000);

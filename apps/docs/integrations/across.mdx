@@ -7,7 +7,7 @@ icon: "arrow-left-right"
 Across moves value between the hub and the spokes. Corridor uses its **Swap API**, which returns ready-to-sign calldata, and tracks each deposit until a relayer fills it on the destination chain.
 
 <Info>
-**Status.** The Across adapter (`@corridor/bridge-across`: quote, execute, deposit status, wait for fill) is built and has run against the live API. The mainnet `across.bridge` saga leg that wraps it is next on the [roadmap](/status/roadmap); testnet flows use `bridge.simulated`, which has the same interface.
+**Status.** The Across adapter (`@corridor/bridge-across`: quote, execute, deposit status, wait for fill) is built and has moved real money: on 11 Oct 2026 it bridged Tempo → Base → Solana on mainnet for a live naira payout ([Evidence](/status/evidence#live-on-mainnet)). Running it as the `across.bridge` saga leg is next on the [roadmap](/status/roadmap); testnet flows use `bridge.simulated`, which has the same interface.
 </Info>
 
 ## Route shape

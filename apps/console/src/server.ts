@@ -13,13 +13,13 @@ import { DatabaseSync } from "node:sqlite";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { formatMoney, fromZcashMemo, parseCorridor, type Asset, type CorridorCode, type Fiat, type Observation } from "@corridor/core";
+import { decodeRef, formatMoney, fromZcashMemo, parseCorridor, type Asset, type CorridorCode, type Fiat, type Observation } from "@corridor/core";
 import { EXPLORER, FEE_MANAGER, TempoObserver, balanceOf, firstFundedBlock } from "@corridor/chain-tempo";
 import { ZcashWallet, formatZec, shieldedObservations } from "@corridor/chain-zcash";
 import { SOLANA_ACCOUNT_RENT, SOLANA_FEES, SolanaWatcher } from "@corridor/chain-solana";
 import { bookVaultMovements, checkVaults, reconcile, summarize, type VaultCheck, type VaultRef } from "@corridor/recon";
 import { COLLECTION_CURRENCIES, PAYOUT_CURRENCIES, planRoute } from "@corridor/routing";
-import type { PartnerOrder } from "@corridor/partners";
+import { PajPartner, type PartnerOrder } from "@corridor/partners";
 import { PgCursorStore } from "@corridor/recon";
 import { partnerObservation } from "@corridor/webhooks";
 import { startRuntime } from "../../../scripts/runtime.ts";
@@ -379,6 +379,45 @@ function network() {
   };
 }
 
+/**
+ * Live mainnet payouts run by scripts/mainnet-run.ts: real money from Tempo
+ * through Base and Solana to a bank account. The record is public (hashes,
+ * amounts, reference); Paj's order status is re-read live when a key is set.
+ */
+const MAINNET_RECORDS = "examples/mainnet/payouts.json";
+async function mainnet() {
+  if (!existsSync(MAINNET_RECORDS)) return { payouts: [] };
+  const records = JSON.parse(readFileSync(MAINNET_RECORDS, "utf8")) as Row[];
+  const paj = process.env.PAJ_API_KEY ? new PajPartner({ apiKey: process.env.PAJ_API_KEY }) : undefined;
+  const payouts = await Promise.all(records.map(async (r) => {
+    const ref = decodeRef(r.reference);
+    const live = paj ? await paj.getOrder(r.payout.id).then((o) => o.partnerStatus, () => null) : null;
+    const seconds = r.startedAt && r.bankCredit?.creditedAt ? (Date.parse(r.bankCredit.creditedAt) - Date.parse(r.startedAt)) / 1000 : null;
+    const sum = (chain: string) => r.gas.filter((g: Row) => g.chain === chain).reduce((a: bigint, g: Row) => a + BigInt(g.amount), 0n);
+    return {
+      reference: r.reference,
+      decoded: { kind: "payout", corridor: r.corridor, paymentId: ref.id, shielded: ref.shielded },
+      input: r.input,
+      usdcToPartner: (Number(r.payout.usdcAmount) / 1e6).toFixed(2),
+      quotedFiat: (Number(r.payout.fiatAmount) / 100).toFixed(2),
+      rate: r.payout.rate,
+      bankCredit: r.bankCredit ?? null,
+      seconds,
+      partnerStatus: live ?? r.pajStatus,
+      partnerStatusLive: live !== null,
+      gas: { tempo: `${(Number(sum("tempo")) / 1e18).toFixed(6)} pathUSD`, base: `${(Number(sum("base")) / 1e18).toFixed(9)} ETH` },
+      legs: [
+        { label: "Tempo → Base deposit", url: `${EXPLORER.mainnet}/tx/${r.tempoDeposit}` },
+        { label: "Base fill", url: `https://basescan.org/tx/${r.tempoFill}` },
+        { label: "Base → Solana deposit", url: `https://basescan.org/tx/${r.baseDeposit}` },
+        { label: "Solana fill", url: `https://solscan.io/tx/${r.baseFill}` },
+        { label: "Paj order funded (memo)", url: `https://solscan.io/tx/${r.solanaTransfer}` },
+      ],
+    };
+  }));
+  return { payouts };
+}
+
 // ---------------------------------------------------------------------------
 // HTTP
 // ---------------------------------------------------------------------------
@@ -458,6 +497,7 @@ const server = createServer(async (req, res) => {
         case "/api/network": return send(res, 200, network());
         case "/api/approvals": return send(res, 200, await rt.approvals.list());
         case "/api/readonly": return send(res, 200, await readOnly());
+        case "/api/mainnet": return send(res, 200, await mainnet());
       }
     }
     if (req.method === "POST") {

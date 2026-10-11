@@ -17,17 +17,15 @@ Done on 3 October 2026:
 - **Gas and rent booking beyond Tempo.** Solana network fees and account rent are booked from each transaction and the Solana vault's SOL balance is checked against the ledger; Base gas is booked from Across deposit receipts.
 - **Read-only pilot.** Watch-only observers for Tempo, Solana and Base, matching against the customer's payout records; an exceptions queue in the console and a CSV export. See [Read-only pilot](/flows/read-only-pilot).
 
+## Done on mainnet (11 Oct 2026)
+
+- **Live route, real money.** 2.90 USDC.e on Tempo went to Base and on to Solana through Across, and Paj paid ₦3,891.48 into a Nigerian bank account 74 seconds after the Tempo deposit. The Corridor Reference rode the Solana memo and came back in the bank narration. See [Evidence](/status/evidence#live-on-mainnet).
+
 ## Next: mainnet
 
 <Steps>
-  <Step title="Mainnet float">
-    Fund the generated mainnet wallets (Tempo vault, Base relay, Solana vault) with a small USDC float. Keys are generated locally by `pnpm mainnet:wallets` and never leave the machine.
-  </Step>
-  <Step title="Live bridge leg">
-    Run `across.bridge` Tempo → Base on mainnet with micro-amounts. Quotes are already verified live; the adapter is the same code on testnet and mainnet.
-  </Step>
-  <Step title="Live partner leg">
-    A Paj business API key turns the Paj adapter on; the key is in place and verified read-only against live NGN rates (`pnpm paj:check`). Paj settles on Solana, so a naira payout is two Across hops: Tempo → Base → Solana → Paj → Nigerian bank.
+  <Step title="Mainnet run through the saga engine">
+    The live run used `pnpm mainnet:run`, a checkpointed script built on the same adapters. Next, run it as `across.bridge` and `partner.payout` saga legs so the ledger books it and reconciliation checks it against the chain, the way testnet payouts are.
   </Step>
   <Step title="Mainnet shielded funding">
     `near.swap` from Base USDC to ZEC through NEAR Intents, delivered straight to the vault's unified address (NEAR Intents has no Tempo market).

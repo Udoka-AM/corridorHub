@@ -1,0 +1,58 @@
+{
+ "payouts": [
+  {
+   "reference": "0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb84995221",
+   "decoded": {
+    "kind": "payout",
+    "corridor": "EUR-NGN",
+    "paymentId": "01a129e6-df26-764e-ac2e-71fbadc2fb0d",
+    "shielded": false
+   },
+   "input": {
+    "chain": "tempo",
+    "asset": "USDC.e",
+    "amount": "2.90"
+   },
+   "usdcToPartner": "2.89",
+   "quotedFiat": "3911.64",
+   "rate": 1350.742662,
+   "bankCredit": {
+    "bank": "OPay (Nigeria)",
+    "amount": "3891.48",
+    "currency": "NGN",
+    "creditedAt": "2026-10-11T07:40:36Z",
+    "narration": "JIT corridor0201",
+    "note": "Credited to the founder's own account. The narration carries the first bytes of the Corridor Reference, echoed by Paj from the order description."
+   },
+   "seconds": 74,
+   "partnerStatus": "COMPLETED",
+   "partnerStatusLive": true,
+   "gas": {
+    "tempo": "0.000362 pathUSD",
+    "base": "0.000000996 ETH"
+   },
+   "legs": [
+    {
+     "label": "Tempo → Base deposit",
+     "url": "https://explore.tempo.xyz/tx/0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7"
+    },
+    {
+     "label": "Base fill",
+     "url": "https://basescan.org/tx/0xb399654d2790dd247f1d4d4ae5f8e1d87a7e31dc564ca1ecb39e90486211dd34"
+    },
+    {
+     "label": "Base → Solana deposit",
+     "url": "https://basescan.org/tx/0xa2d52268288e288bdf13a253e51c72852b44001a8fa3561d40bb502e6e7e38ff"
+    },
+    {
+     "label": "Solana fill",
+     "url": "https://solscan.io/tx/s6YKpCJ9rjTBcjfZRDw6WSttiq6cX4z8m8A3n7uk6HPyPKQ4NvfQLrMmV4UxcEnm1pnBB4Rqh48hkrxBmuAg6mx"
+    },
+    {
+     "label": "Paj order funded (memo)",
+     "url": "https://solscan.io/tx/4sWxGHfGRoi18oHxRsrwyWevMQSeRtGkdD8ZDjfsoJKuWcBsr7Mv4P2PYTMHs36wgvk1KhAh3ZQNKZvx6UPYgUPw"
+    }
+   ]
+  }
+ ]
+}

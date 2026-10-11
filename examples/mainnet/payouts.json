@@ -1,0 +1,37 @@
+[
+  {
+    "reference": "0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb84995221",
+    "corridor": "EUR-NGN",
+    "startedAt": "2026-10-11T07:39:22Z",
+    "completedAt": "2026-10-11T07:40:36Z",
+    "input": { "chain": "tempo", "asset": "USDC.e", "amount": "2.90" },
+    "tempoDeposit": "0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7",
+    "tempoFill": "0xb399654d2790dd247f1d4d4ae5f8e1d87a7e31dc564ca1ecb39e90486211dd34",
+    "baseDeposit": "0xa2d52268288e288bdf13a253e51c72852b44001a8fa3561d40bb502e6e7e38ff",
+    "baseFill": "s6YKpCJ9rjTBcjfZRDw6WSttiq6cX4z8m8A3n7uk6HPyPKQ4NvfQLrMmV4UxcEnm1pnBB4Rqh48hkrxBmuAg6mx",
+    "solanaTransfer": "4sWxGHfGRoi18oHxRsrwyWevMQSeRtGkdD8ZDjfsoJKuWcBsr7Mv4P2PYTMHs36wgvk1KhAh3ZQNKZvx6UPYgUPw",
+    "pajStatus": "COMPLETED",
+    "payout": {
+      "partner": "paj",
+      "currency": "NGN",
+      "id": "6acb3d5488922b136a79182a",
+      "usdcAmount": "2890000",
+      "fiatAmount": "391164",
+      "rate": 1350.742662
+    },
+    "bankCredit": {
+      "bank": "OPay (Nigeria)",
+      "amount": "3891.48",
+      "currency": "NGN",
+      "creditedAt": "2026-10-11T07:40:36Z",
+      "narration": "JIT corridor0201",
+      "note": "Credited to the founder's own account. The narration carries the first bytes of the Corridor Reference, echoed by Paj from the order description."
+    },
+    "gas": [
+      { "chain": "tempo", "txHash": "0xae25cc8305f5eca8b85f02b181cb3fdc6a35887a1176606bd0a5b2e0db9e2092", "amount": "316974000000000", "unit": "pathUSD, 18 dp" },
+      { "chain": "tempo", "txHash": "0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7", "amount": "44562600000000", "unit": "pathUSD, 18 dp" },
+      { "chain": "base", "txHash": "0x114a8985b211cd56a699b3921622f388534a24bc63ca08e9540409f30e2ba255", "amount": "336743038479", "unit": "wei" },
+      { "chain": "base", "txHash": "0xa2d52268288e288bdf13a253e51c72852b44001a8fa3561d40bb502e6e7e38ff", "amount": "658770638521", "unit": "wei" }
+    ]
+  }
+]
