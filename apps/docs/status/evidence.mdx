@@ -31,7 +31,7 @@ On 11 October 2026, Corridor moved real money end to end: **2.90 USDC.e on Tempo
 
 The bank narration starts with the Corridor Reference: Paj echoes the order description into the transfer. So a line on a bank statement leads back to the same reference that's on the Solana transfer, `0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb84995221`. That reference decodes to a payout from EUR to NGN on the public lane, with payment id `01a129e6-df26-764e-ac2e-71fbadc2fb0d`.
 
-What this run did not do: it ran from `pnpm mainnet:run` (each step is checkpointed, so a rerun never sends twice), not through the saga engine and ledger. The testnet results below cover those. The public record is in `examples/mainnet/payouts.json`, and the [console replay](https://corridorapp.udokaam.dev/console/) shows it in the **Live on mainnet** panel.
+What this run did not do: it ran from `pnpm mainnet:run` (each step is checkpointed, so a rerun never sends twice), not through the saga engine and ledger. The engine's mainnet legs are built and tested against the same route, with Across fees and Paj's rounding. `pnpm mainnet:saga` runs them on a mainnet ledger whose dry run matches every vault on-chain. The testnet results below show the engine and ledger moving real testnet funds. The public record is in `examples/mainnet/payouts.json`, and the [console replay](https://corridorapp.udokaam.dev/console/) shows it in the **Live on mainnet** panel.
 
 ## Testnet results
 

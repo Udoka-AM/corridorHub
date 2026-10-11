@@ -24,8 +24,8 @@ Done on 3 October 2026:
 ## Next: mainnet
 
 <Steps>
-  <Step title="Mainnet run through the saga engine">
-    The live run used `pnpm mainnet:run`, a checkpointed script built on the same adapters. Next, run it as `across.bridge` and `partner.payout` saga legs so the ledger books it and reconciliation checks it against the chain, the way testnet payouts are.
+  <Step title="Mainnet payouts through the saga engine">
+    Built and tested: the live `across.bridge` leg, a payout leg that pays out what actually arrived, and `pnpm mainnet:saga`. That runner keeps a mainnet ledger whose opening float is read from the chain, books customer deposits in pathUSD or USDC.e, and checks every vault on-chain against the ledger. Its dry run on the live wallets balances on all six vault lines. The first live payout used `pnpm mainnet:run` on the same adapters; the next one runs through the engine.
   </Step>
   <Step title="Mainnet shielded funding">
     `near.swap` from Base USDC to ZEC through NEAR Intents, delivered straight to the vault's unified address (NEAR Intents has no Tempo market).
