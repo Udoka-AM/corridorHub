@@ -62,6 +62,7 @@ This is an honest account of the build on 3 October 2026. Reviewers can verify e
 | NEAR Intents pricing for USD → ZEC | **Live quotes** | Mainnet 1Click quotes; testnet delivery is real testnet ZEC |
 | Across bridge Tempo → Base → Solana | **Live (mainnet)** | Both hops filled on 11 Oct 2026. Testnet has no Tempo deployment, so the testnet route uses a simulated fill with the same interface |
 | Partner fiat leg | **Live (mainnet)** | 2.90 USDC.e on Tempo became ₦3,891.48 in a Nigerian bank account in 74 seconds. See [Evidence](/status/evidence#live-on-mainnet) |
+| Mainnet payouts through the saga engine | **Built and tested** | Live `across.bridge` and payout legs, funded from pathUSD or USDC.e; tested on the mainnet route with Across fees and Paj rounding; `pnpm mainnet:saga` dry run matches every vault on-chain |
 | Customer-held signing (KMS) | **Built** | One signer interface for Tempo, Base and Solana; AWS KMS adapter tested; every vault (Tempo treasury and escrow, Base relay, Solana vault) signs through it on testnet |
 | Read-only pilot | **Live (testnet)** | Watches real Tempo, Solana and Base wallets and matches payout records; exceptions queue in the console, CSV from `pnpm watch:report` |
 | USDT, PYUSD, EURC | **Built** | Solana registry incl. Token-2022; Base registry; watch-only observers read real amounts from balance changes |
