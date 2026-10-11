@@ -5,161 +5,365 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Corridor · Treasury console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet" />
+<script>
+// Theme before first paint: the stored choice, else the system's.
+(function () {
+  let t = new URLSearchParams(location.search).get("theme");
+  if (t !== "light" && t !== "dark") { try { t = localStorage.getItem("corridor-theme"); } catch {} }
+  if (t !== "light" && t !== "dark") t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  document.documentElement.dataset.theme = t;
+})();
+</script>
 <style>
+  /* Corridor tokens, shared with the website: black and white, Space Mono, hairlines. */
+  :root, :root[data-theme="dark"] {
+    --bg: #050505;
+    --side: #0b0b0b;
+    --surface: #0e0e0e;
+    --surface-2: #161616;
+    --fg: #f4f4f0;
+    --muted: #8d8d8d;
+    --faint: #5a5a57;
+    --line: rgb(244 244 240 / 0.09);
+    --line-strong: rgb(244 244 240 / 0.24);
+    --bad: #ff6a5c;
+    --shadow: 0 1px 0 rgb(255 255 255 / 0.03) inset;
+    color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --bg: #f4f4f0;
+    --side: #ebebe6;
+    --surface: #fbfbf8;
+    --surface-2: #efefea;
+    --fg: #050505;
+    --muted: #5d5d5a;
+    --faint: #9a9a95;
+    --line: rgb(5 5 5 / 0.09);
+    --line-strong: rgb(5 5 5 / 0.26);
+    --bad: #c8321f;
+    --shadow: 0 1px 2px rgb(5 5 5 / 0.04), 0 8px 24px -16px rgb(5 5 5 / 0.12);
+    color-scheme: light;
+  }
   :root {
-    --navy: #0E1A2B; --navy-2: #16263C; --navy-3: #22375A; --line: #2C4060;
-    --cream: #F5F1E8; --muted: #9FB0C6; --amber: #E8913A; --amber-2: #F2A65A;
-    --ok: #4FC48A; --warn: #F2C14E; --bad: #F07167; --info: #7CB7FF;
-    --radius: 14px;
+    --font: "Space Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    --r-sm: 4px; --r-md: 8px; --r-lg: 12px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --side-w: 232px;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--navy); color: var(--cream); font: 15px/1.45 "IBM Plex Sans", system-ui, sans-serif; }
-  a { color: var(--amber-2); text-decoration: none; }
+  html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 72px; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 400 13px/1.55 var(--font); -webkit-font-smoothing: antialiased; transition: background-color 240ms var(--ease), color 240ms var(--ease); }
+  a { color: inherit; text-underline-offset: 3px; }
   a:hover { text-decoration: underline; }
-  .mono { font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 13px; }
-  header { display: flex; align-items: center; gap: 20px; padding: 18px 28px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(14,26,43,.94); backdrop-filter: blur(8px); z-index: 5; flex-wrap: wrap; }
-  .brand { font: 700 22px "Space Grotesk", sans-serif; letter-spacing: -.2px; }
-  .brand span { color: var(--muted); font-weight: 500; font-size: 15px; margin-left: 8px; }
-  .pills { display: flex; gap: 8px; flex-wrap: wrap; margin-left: auto; }
-  .pill { border: 1px solid var(--line); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-  .pill.ok { color: var(--ok); border-color: rgba(79,196,138,.4); }
-  .pill.bad { color: var(--bad); border-color: rgba(240,113,103,.5); }
-  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--ok); margin-right: 6px; box-shadow: 0 0 0 3px rgba(79,196,138,.2); }
-  main { padding: 24px 28px 48px; display: grid; gap: 20px; grid-template-columns: repeat(12, 1fr); max-width: 1560px; margin: 0 auto; }
-  .card { background: var(--navy-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; min-width: 0; }
-  .card h2 { font: 600 15px "Space Grotesk", sans-serif; margin: 0 0 14px; display: flex; align-items: center; gap: 10px; letter-spacing: .2px; }
-  .card h2 small { color: var(--muted); font: 400 12.5px "IBM Plex Sans"; }
-  .span-12 { grid-column: span 12; } .span-8 { grid-column: span 8; } .span-7 { grid-column: span 7; } .span-6 { grid-column: span 6; } .span-5 { grid-column: span 5; } .span-4 { grid-column: span 4; }
-  @media (max-width: 1100px) { .span-8, .span-7, .span-6, .span-5, .span-4 { grid-column: span 12; } }
-  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
-  @media (max-width: 900px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
-  .kpi { background: var(--navy-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
-  .kpi .label { color: var(--muted); font-size: 12.5px; text-transform: uppercase; letter-spacing: .8px; }
-  .kpi .value { font: 700 26px "Space Grotesk", sans-serif; margin-top: 6px; }
-  .kpi .sub { color: var(--muted); font-size: 12.5px; margin-top: 2px; }
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
-  td { padding: 8px; border-bottom: 1px solid rgba(44,64,96,.55); vertical-align: top; }
-  tr:last-child td { border-bottom: none; }
-  .num { text-align: right; font-variant-numeric: tabular-nums; }
-  .chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 6px; padding: 2px 8px; font-size: 12px; font-weight: 500; border: 1px solid transparent; }
-  .s-completed, .s-done, .s-matched, .s-balanced { background: rgba(79,196,138,.12); color: var(--ok); border-color: rgba(79,196,138,.35); }
-  .s-compensated { background: rgba(124,183,255,.12); color: var(--info); border-color: rgba(124,183,255,.35); }
-  .s-running, .s-pending, .s-compensating { background: rgba(242,193,78,.12); color: var(--warn); border-color: rgba(242,193,78,.35); }
-  .s-failed, .s-manual_review, .s-unbooked, .s-drift, .s-amount_mismatch, .s-compensation_failed { background: rgba(240,113,103,.12); color: var(--bad); border-color: rgba(240,113,103,.4); }
-  .s-short, .s-over, .s-missing { background: rgba(240,113,103,.12); color: var(--bad); border-color: rgba(240,113,103,.4); }
-  .s-unexpected { background: rgba(242,193,78,.12); color: var(--warn); border-color: rgba(242,193,78,.35); }
-  .s-unreferenced { background: rgba(159,176,198,.12); color: var(--muted); border-color: var(--line); }
-  .route { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
-  .step { font-size: 12px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
-  .step.done { color: var(--ok); border-color: rgba(79,196,138,.35); }
-  .step.failed { color: var(--bad); border-color: rgba(240,113,103,.45); }
-  .step.compensated { color: var(--info); border-color: rgba(124,183,255,.35); text-decoration: line-through; }
-  .arrow { color: var(--line); }
-  .saga { padding: 12px 0; border-bottom: 1px solid rgba(44,64,96,.55); }
-  .saga:last-child { border-bottom: none; }
-  .saga .top { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-  .saga .meta { color: var(--muted); font-size: 12.5px; }
-  .links { margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; font-size: 12.5px; }
-  .actions { display: grid; gap: 10px; }
-  button { font: 600 14px "IBM Plex Sans", sans-serif; border-radius: 10px; border: 1px solid var(--line); background: var(--navy-3); color: var(--cream); padding: 11px 14px; cursor: pointer; text-align: left; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
-  button:hover:not(:disabled) { border-color: var(--amber); }
-  button.primary { background: var(--amber); color: var(--navy); border-color: var(--amber); }
-  button:disabled { opacity: .55; cursor: progress; }
-  button .hint { font-weight: 400; font-size: 12.5px; opacity: .8; }
-  .venues { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-  @media (max-width: 900px) { .venues { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 600px) { .venues { grid-template-columns: 1fr; } .card { overflow-x: auto; } header { flex-wrap: wrap; gap: 10px; } #replayBanner { margin: 0 12px !important; } }
-  .venue { background: var(--navy); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-  .venue h3 { margin: 0 0 8px; font: 600 13px "Space Grotesk"; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; display: flex; justify-content: space-between; }
-  .venue .row { display: flex; justify-content: space-between; font-size: 13.5px; padding: 3px 0; gap: 8px; }
-  .venue .row span:first-child { color: var(--muted); }
-  .shield { color: var(--amber-2); font-size: 11.5px; text-transform: none; letter-spacing: 0; }
-  svg text { font-family: "IBM Plex Sans", sans-serif; }
-  .empty { color: var(--muted); font-size: 13.5px; padding: 8px 0; }
-  .modal { position: fixed; inset: 0; background: rgba(4,10,18,.7); display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px; }
-  .modal.open { display: flex; }
-  .modal .box { background: var(--navy-2); border: 1px solid var(--line); border-radius: 16px; padding: 22px; max-width: 720px; width: 100%; }
-  .key { word-break: break-all; background: var(--navy); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 8px 0 14px; }
-  .kv { display: grid; grid-template-columns: 150px 1fr; gap: 6px 14px; font-size: 13.5px; }
-  .kv div:nth-child(odd) { color: var(--muted); }
-  .spin { width: 14px; height: 14px; border: 2px solid rgba(14,26,43,.25); border-top-color: currentColor; border-radius: 50%; animation: s .8s linear infinite; display: inline-block; }
+  :focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; border-radius: 2px; }
+  ::selection { background: var(--fg); color: var(--bg); }
+  .mono, .tnum, .num { font-variant-numeric: tabular-nums; }
+  .label { font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .faint { color: var(--faint); }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } *, *::before, *::after { transition: none !important; animation: none !important; } }
+
+  /* ---------- shell ---------- */
+  .app { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); min-height: 100vh; }
+  .side { position: sticky; top: 0; height: 100vh; background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 20px 14px; gap: 22px; overscroll-behavior: contain; overflow-y: auto; }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 2px 8px; font-weight: 700; font-size: 15px; letter-spacing: 0.02em; text-decoration: none; }
+  .brand svg { width: 22px; height: 22px; }
+  .brand small { display: block; font-weight: 400; font-size: 10.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted); margin-top: 1px; }
+  .nav { display: grid; gap: 2px; }
+  .nav a { display: flex; align-items: center; gap: 12px; padding: 8px 10px; border-radius: var(--r-sm); text-decoration: none; color: var(--muted); transition: color 160ms var(--ease), background-color 160ms var(--ease); }
+  .nav a span { font-size: 10.5px; color: var(--faint); width: 18px; }
+  .nav a:hover { color: var(--fg); background: var(--line); }
+  .nav a[aria-current="true"] { color: var(--fg); background: var(--line); box-shadow: inset 2px 0 0 var(--fg); }
+  .side .foot { margin-top: auto; display: grid; gap: 12px; padding: 0 8px; }
+  .env { display: grid; gap: 6px; }
+  .env .row { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11.5px; }
+  .theme { display: inline-flex; border: 1px solid var(--line-strong); border-radius: var(--r-sm); overflow: hidden; width: max-content; }
+  .theme button { font: inherit; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; padding: 7px 10px; background: transparent; color: var(--muted); border: 0; cursor: pointer; }
+  .theme button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+
+  .main { min-width: 0; display: flex; flex-direction: column; }
+  .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 16px; padding: 14px 28px; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  .top h1 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+  .top .crumb { color: var(--muted); font-size: 12px; }
+  .pills { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
+  .pill { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 999px; padding: 3px 10px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .pill.strong { color: var(--fg); border-color: var(--line-strong); }
+  .pill.bad { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, transparent); }
+  .top .theme { display: none; }
+
+  #replayBanner { margin: 18px 28px 0; padding: 12px 16px; border: 1px solid var(--line); border-left: 2px solid var(--fg); border-radius: var(--r-sm); background: var(--surface); color: var(--muted); font-size: 12px; line-height: 1.6; }
+  #replayBanner strong { color: var(--fg); }
+
+  .content { padding: 22px 28px 64px; display: grid; gap: 16px; grid-template-columns: repeat(12, minmax(0, 1fr)); max-width: 1600px; width: 100%; }
+  .s12 { grid-column: span 12; } .s8 { grid-column: span 8; } .s7 { grid-column: span 7; } .s5 { grid-column: span 5; } .s4 { grid-column: span 4; }
+  @media (max-width: 1180px) { .s8, .s7, .s5, .s4 { grid-column: span 12; } }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px 20px; min-width: 0; box-shadow: var(--shadow); }
+  .card > header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+  .card h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: 0; }
+  .card h2 + p, .card header p { margin: 2px 0 0; color: var(--muted); font-size: 11.5px; }
+  .card h3 { margin: 0 0 10px; font-size: 12px; font-weight: 700; }
+  .scroll { overflow-x: auto; scrollbar-gutter: stable; }
+
+  /* ---------- status: shape carries meaning, colour only for failures ---------- */
+  .st { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; white-space: nowrap; color: var(--fg); }
+  .st i { width: 7px; height: 7px; border-radius: 50%; background: var(--fg); flex: none; }
+  .st.pending i, .st.running i, .st.compensating i, .st.open i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--fg); }
+  .st.compensated i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--muted); }
+  .st.compensated, .st.unreferenced, .st.unexpected { color: var(--muted); }
+  .st.unreferenced i, .st.unexpected i { background: var(--muted); }
+  .st.bad, .st.failed, .st.manual_review, .st.unbooked, .st.drift, .st.amount_mismatch, .st.compensation_failed, .st.short, .st.over, .st.missing { color: var(--bad); }
+  .st.bad i, .st.failed i, .st.manual_review i, .st.unbooked i, .st.drift i, .st.amount_mismatch i, .st.compensation_failed i, .st.short i, .st.over i, .st.missing i { background: var(--bad); }
+  .st.zero { color: var(--muted); }
+  .st.zero i { background: transparent; box-shadow: inset 0 0 0 1.5px var(--faint); }
+  .live i { animation: pulse 2.2s var(--ease) infinite; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--fg) 40%, transparent); } 50% { box-shadow: 0 0 0 4px transparent; } }
+
+  /* ---------- tier 1: hero and supports ---------- */
+  .tier1 { grid-column: span 12; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 2fr); gap: 16px; }
+  @media (max-width: 1180px) { .tier1 { grid-template-columns: 1fr; } }
+  .hero { background: var(--fg); color: var(--bg); border-radius: var(--r-lg); padding: 20px 22px; display: flex; flex-direction: column; justify-content: space-between; gap: 18px; min-height: 172px; }
+  .hero .label { color: color-mix(in srgb, var(--bg) 62%, transparent); }
+  .hero .value { font-size: 52px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .hero .sub { font-size: 12px; color: color-mix(in srgb, var(--bg) 70%, transparent); }
+  .hero .checks { display: grid; gap: 4px; font-size: 11.5px; }
+  .hero .checks .st { color: var(--bg); }
+  .hero .checks .st i { background: var(--bg); }
+  .hero .checks .st.drift i { background: var(--bad); }
+  .supports { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); box-shadow: var(--shadow); }
+  .kpi { padding: 16px 20px; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "label label" "value sub"; align-items: end; gap: 10px 16px; min-width: 0; }
+  .kpi:nth-child(even) { border-left: 1px solid var(--line); }
+  .kpi:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .kpi .label { grid-area: label; }
+  .kpi .value { grid-area: value; white-space: nowrap; }
+  .kpi .sub { grid-area: sub; text-align: right; justify-self: end; max-width: 24ch; }
+  @media (max-width: 560px) { .supports { grid-template-columns: 1fr; } .kpi:nth-child(even) { border-left: 0; } .kpi:nth-child(n+2) { border-top: 1px solid var(--line); } .kpi { grid-template-areas: "label label" "value value" "sub sub"; } .kpi .sub { text-align: left; } }
+  .kpi .value { font-size: 26px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+  .kpi .sub { color: var(--muted); font-size: 11.5px; }
+
+  /* ---------- live on mainnet: the reference trace ---------- */
+  .trace-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: end; margin-bottom: 18px; }
+  .trace-head .big { font-size: 34px; font-weight: 700; letter-spacing: -0.035em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .trace-head .side-stat { text-align: right; }
+  .hops { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); position: relative; }
+  .hops::before { content: ""; position: absolute; left: 6px; right: 6px; top: 6px; height: 1px; background: var(--line-strong); }
+  .hop { position: relative; padding: 22px 12px 0 0; display: grid; gap: 4px; align-content: start; min-width: 0; }
+  .hop::before { content: ""; position: absolute; top: 0; left: 0; width: 13px; height: 13px; border-radius: 50%; background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); }
+  .hop.end::before { background: var(--fg); }
+  .hop b { font-size: 12.5px; }
+  .hop .faint { font-size: 11px; }
+  .hop a { font-size: 11.5px; color: var(--muted); }
+  .hop a:hover { color: var(--fg); }
+  @media (max-width: 760px) { .hops { grid-template-columns: 1fr; gap: 14px; } .hops::before { left: 6px; right: auto; top: 6px; bottom: 6px; width: 1px; height: auto; } .hop { padding: 0 0 0 26px; } }
+  .refline { margin-top: 18px; padding-top: 14px; border-top: 1px dashed var(--line-strong); display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 11.5px; color: var(--muted); }
+  .refline b { color: var(--fg); font-weight: 400; }
+  .vchecks { margin-top: 10px; display: grid; gap: 4px; font-size: 11.5px; color: var(--muted); }
+
+  /* ---------- timeline ---------- */
+  .saga { padding: 14px 0; border-top: 1px solid var(--line); display: grid; gap: 6px; }
+  .saga:first-child { border-top: 0; padding-top: 2px; }
+  .saga .top-row { display: flex; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+  .saga .top-row b { font-size: 13px; }
+  .saga .meta { color: var(--muted); font-size: 11.5px; }
+  .route { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .step { font-size: 11px; padding: 2px 8px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); color: var(--fg); }
+  .step.pending { border-style: dashed; color: var(--muted); }
+  .step.compensated { color: var(--muted); text-decoration: line-through; border-color: var(--line); }
+  .step.failed, .step.compensation_failed { color: var(--bad); border-color: color-mix(in srgb, var(--bad) 50%, transparent); }
+  .arrow { color: var(--faint); font-size: 11px; }
+  .links { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; }
+  .links a { color: var(--muted); }
+  .links a:hover { color: var(--fg); }
+
+  /* ---------- actions ---------- */
+  .actions { display: grid; gap: 8px; }
+  .btn { font: inherit; font-size: 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 14px; border-radius: var(--r-sm); border: 1px solid var(--line-strong); background: transparent; color: var(--fg); cursor: pointer; transition: border-color 160ms var(--ease), background-color 160ms var(--ease), color 160ms var(--ease); }
+  .btn:hover:not(:disabled) { border-color: var(--fg); }
+  .btn .hint { color: var(--muted); font-size: 11px; white-space: nowrap; }
+  .btn.primary { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .btn.primary .hint { color: color-mix(in srgb, var(--bg) 65%, transparent); }
+  .btn.primary:hover:not(:disabled) { background: transparent; color: var(--fg); }
+  .btn.primary:hover:not(:disabled) .hint { color: var(--muted); }
+  .btn:disabled { opacity: 0.55; cursor: progress; }
+  .btn.sm { width: auto; display: inline-flex; padding: 6px 10px; font-size: 11px; }
+  .spin { width: 12px; height: 12px; border: 1.5px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: s 0.8s linear infinite; display: inline-block; }
   @keyframes s { to { transform: rotate(360deg); } }
+
+  /* ---------- tables ---------- */
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; color: var(--muted); font-weight: 400; font-size: 11px; padding: 0 10px 8px; border-bottom: 1px solid var(--line-strong); white-space: nowrap; }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th:first-child, td:first-child { padding-left: 0; } th:last-child, td:last-child { padding-right: 0; }
+  tbody tr:hover td, table tr:hover td { background: color-mix(in srgb, var(--fg) 3%, transparent); }
+  .num { text-align: right; white-space: nowrap; }
+  .empty { color: var(--muted); padding: 10px 0; }
+  .split { display: grid; gap: 22px; }
+
+  /* ---------- network map ---------- */
+  .map svg { display: block; width: 100%; height: auto; }
+  .m-line { stroke: var(--line-strong); stroke-width: 1; fill: none; }
+  .m-line.shielded { stroke: var(--fg); stroke-dasharray: 4 4; }
+  .m-chip { fill: var(--surface-2); stroke: var(--line-strong); }
+  .m-chip.shielded { fill: var(--fg); stroke: var(--fg); }
+  .m-text { fill: var(--fg); font: 400 11px var(--font); }
+  .m-text.inv { fill: var(--bg); font-weight: 700; }
+  .m-label { fill: var(--muted); font: 400 9.5px var(--font); letter-spacing: 0.18em; }
+  .m-hub { fill: var(--bg); stroke: var(--fg); stroke-width: 1.5; }
+  .m-hub-ring { fill: none; stroke: var(--line-strong); stroke-dasharray: 2 5; }
+  .m-hub-name { fill: var(--fg); font: 700 22px var(--font); letter-spacing: -0.02em; }
+  .routes { margin-top: 12px; display: grid; gap: 6px; }
+  .routes .r { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 11px; }
+  .routes .r .k { color: var(--muted); min-width: 150px; }
+
+  /* ---------- venues ---------- */
+  .venues { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; border: 1px solid var(--line); border-radius: var(--r-md); }
+  @media (max-width: 980px) { .venues { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 560px) { .venues { grid-template-columns: 1fr; } }
+  .venue { padding: 14px 16px; border-left: 1px solid var(--line); min-width: 0; }
+  .venue:first-child { border-left: 0; }
+  .venue h3 { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 10px; }
+  .venue .row { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0; font-size: 11.5px; border-top: 1px solid var(--line); }
+  .venue .row:first-of-type { border-top: 0; }
+  .venue .row span:first-child { color: var(--muted); overflow-wrap: anywhere; }
+  .venue .row span:last-child { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .shield { font-size: 10.5px; color: var(--muted); font-weight: 400; }
+
+  /* ---------- shielded ---------- */
+  .kv { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 6px 16px; font-size: 12px; }
+  .kv > div:nth-child(odd) { color: var(--muted); }
+  .approval { border: 1px solid var(--line); border-radius: var(--r-md); padding: 12px 14px; margin-bottom: 10px; display: grid; gap: 8px; }
+  .approval .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+  /* ---------- modal ---------- */
+  .modal { position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px; }
+  .modal.open { display: flex; }
+  .modal .box { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); padding: 24px; max-width: 720px; width: 100%; max-height: 90vh; overflow: auto; box-shadow: var(--shadow); }
+  .modal h2 { margin: 0 0 6px; font-size: 16px; }
+  .modal p { margin: 0 0 12px; color: var(--muted); }
+  .key { word-break: break-all; background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px; margin: 6px 0 14px; font-size: 11.5px; }
+
+  /* ---------- small screens ---------- */
+  @media (max-width: 1024px) {
+    .app { grid-template-columns: 1fr; }
+    .side { position: static; height: auto; flex-direction: row; align-items: center; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+    .side .nav, .side .foot { display: none; }
+    .top .theme { display: inline-flex; }
+    .top { padding: 12px 16px; position: static; }
+    .content { padding: 16px 16px 48px; }
+    #replayBanner { margin: 16px 16px 0; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">Corridor<span>Treasury console</span></div>
-  <div class="pills" id="pills"></div>
-</header>
-
-<div id="replayBanner" hidden style="margin:0 24px;padding:12px 16px;border:1px solid rgba(232,145,58,.45);border-radius:12px;background:rgba(232,145,58,.08);font-size:13.5px;line-height:1.5"></div>
-
-<main>
-  <section class="span-12 kpis" id="kpis"></section>
-
-  <section class="card span-12">
-    <h2>Live on mainnet <small>real money · Tempo → Base → Solana via Across → Paj → a Nigerian bank account · one reference end to end</small></h2>
-    <div id="mainnet"></div>
-  </section>
-
-  <section class="card span-8">
-    <h2>Settlement network <small>Tempo is the hub · every region is a spoke · no flow can bypass the hub</small></h2>
-    <div id="map"></div>
-  </section>
-
-  <section class="card span-4">
-    <h2>Run a flow <small>live on Tempo testnet</small></h2>
-    <div class="actions">
-      <button class="primary" data-action="payout" data-body='{"corridor":"EUR-NGN","amount":"5"}'>Payout €→₦ to Ada Obi <span class="hint">EUR-NGN · 5 USDC</span></button>
-      <button data-action="payout" data-body='{"corridor":"EUR-NGN","amount":"3","failAtPartner":true}'>Payout with partner failure <span class="hint">compensates on-chain</span></button>
-      <button data-action="importer" data-body='{"fiatAmount":"780000"}'>Importer pays a supplier in China <span class="hint">₦780,000 → hub → ¥</span></button>
-      <button data-action="shielded" data-body='{"usdEach":"5"}'>Pay 3 suppliers privately <span class="hint">Zcash · FROST 2-of-3</span></button>
-      <button id="disclose">Export auditor disclosure <span class="hint">vault viewing key</span></button>
+<div class="app">
+  <aside class="side" aria-label="Console">
+    <a class="brand" href="#overview" aria-label="Corridor treasury console">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/><path d="M1.5 6.5 L8.4 10.6 M1.5 17.5 L8.4 13.4 M22.5 6.5 L15.6 10.6 M22.5 17.5 L15.6 13.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <div>Corridor<small>Treasury</small></div>
+    </a>
+    <nav class="nav" aria-label="Main navigation">
+      <a href="#overview"><span>01</span>Overview</a>
+      <a href="#mainnet"><span>02</span>Live on mainnet</a>
+      <a href="#payouts"><span>03</span>Payouts</a>
+      <a href="#network"><span>04</span>Network</a>
+      <a href="#reconciliation"><span>05</span>Reconciliation</a>
+      <a href="#exceptions"><span>06</span>Exceptions</a>
+      <a href="#venues-card"><span>07</span>Venues</a>
+      <a href="#shielded"><span>08</span>Shielded lane</a>
+    </nav>
+    <div class="foot">
+      <div class="env" id="env"></div>
+      <div class="theme" role="group" aria-label="Theme">
+        <button type="button" data-theme-set="dark">Black</button><button type="button" data-theme-set="light">White</button>
+      </div>
     </div>
-    <p class="meta" id="actionStatus" aria-live="polite" style="color:var(--muted);font-size:12.5px;margin:12px 2px 0"></p>
-  </section>
+  </aside>
 
-  <section class="card span-7">
-    <h2>Settlement timeline <small>each payout is a saga: every step compensates</small></h2>
-    <div id="sagas"></div>
-  </section>
+  <div class="main">
+    <header class="top">
+      <h1>Treasury</h1>
+      <span class="crumb" id="crumb">Payouts, balances and reconciliation across every venue</span>
+      <div class="pills" id="pills"></div>
+      <div class="theme" role="group" aria-label="Theme">
+        <button type="button" data-theme-set="dark">Black</button><button type="button" data-theme-set="light">White</button>
+      </div>
+    </header>
 
-  <section class="card span-5">
-    <h2>Corridor board <small>customer balances held on the hub</small></h2>
-    <table id="customers"></table>
-    <h2 style="margin-top:22px">Pre-funding forecast <small>7-day runway from payout history</small></h2>
-    <table id="forecast"></table>
-  </section>
+    <div id="replayBanner" hidden></div>
 
-  <section class="card span-12">
-    <h2>Venue balances <small>where Corridor's value physically sits · clearing accounts net to zero</small></h2>
-    <div class="venues" id="venues"></div>
-  </section>
+    <main class="content">
+      <section class="tier1" id="overview" aria-label="Overview">
+        <div class="hero" id="hero"></div>
+        <div class="supports" id="kpis"></div>
+      </section>
 
-  <section class="card span-6">
-    <h2>Reconciliation <small>chain + partner observations vs. the ledger</small></h2>
-    <div id="reconSummary" style="margin-bottom:10px"></div>
-    <div id="vaultCheck" style="margin-bottom:12px;font-size:12.5px"></div>
-    <table id="recon"></table>
-  </section>
+      <section class="card s12" id="mainnet-card" aria-labelledby="mainnet-h">
+        <header><div><h2 id="mainnet-h"><a id="mainnet"></a>Live on mainnet</h2><p>Real money · Tempo → Base → Solana through Across → Paj → a Nigerian bank account · one reference end to end</p></div></header>
+        <div id="mainnet-body"></div>
+      </section>
 
-  <section class="card span-12">
-    <h2>Exceptions queue <small>read-only pilot · the customer's own wallets on Tempo, Solana and Base vs. its payout records · no keys, nothing moves</small></h2>
-    <div id="roSummary" style="margin-bottom:10px"></div>
-    <table id="roExceptions"></table>
-  </section>
+      <section class="card s8" aria-labelledby="payouts-h">
+        <header><div><h2 id="payouts-h"><a id="payouts"></a>Settlement timeline</h2><p>Each payout is a saga: every step is recorded, and failures before money leaves unwind in reverse</p></div></header>
+        <div id="sagas"></div>
+      </section>
 
-  <section class="card span-6">
-    <h2>Shielded lane <small>Zcash testnet · Ironwood pool · FROST 2-of-3</small></h2>
-    <div id="vault"></div>
-    <div id="approvals" style="margin-top:14px"></div>
-    <table id="batches" style="margin-top:12px"></table>
-  </section>
-</main>
+      <section class="card s4" aria-labelledby="flows-h" style="align-self:start">
+        <header><div><h2 id="flows-h">Run a flow</h2><p>Live on Tempo testnet</p></div></header>
+        <div class="actions">
+          <button class="btn primary" data-action="payout" data-body='{"corridor":"EUR-NGN","amount":"5"}'>Payout €→₦ to Ada Obi <span class="hint">EUR-NGN · 5 USDC</span></button>
+          <button class="btn" data-action="payout" data-body='{"corridor":"EUR-NGN","amount":"3","failAtPartner":true}'>Payout with partner failure <span class="hint">compensates on-chain</span></button>
+          <button class="btn" data-action="importer" data-body='{"fiatAmount":"780000"}'>Importer pays a supplier in China <span class="hint">₦780,000 → hub → ¥</span></button>
+          <button class="btn" data-action="shielded" data-body='{"usdEach":"5"}'>Pay 3 suppliers privately <span class="hint">Zcash · FROST 2-of-3</span></button>
+          <button class="btn" id="disclose">Export auditor disclosure <span class="hint">vault viewing key</span></button>
+        </div>
+        <p id="actionStatus" aria-live="polite" class="muted" style="font-size:11.5px;margin:12px 0 0"></p>
+      </section>
 
-<div class="modal" id="modal"><div class="box" id="modalBox"></div></div>
+      <section class="card s12" aria-labelledby="board-h">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:28px">
+          <div><header style="margin-bottom:12px"><h2 id="board-h">Corridor board</h2><p>Customer balances held on the hub</p></header><div class="scroll"><table id="customers"></table></div></div>
+          <div><header style="margin-bottom:12px"><h2>Pre-funding forecast</h2><p>Seven-day runway from payout history</p></header><div class="scroll"><table id="forecast"></table></div></div>
+        </div>
+      </section>
+
+      <section class="card s12" aria-labelledby="network-h">
+        <header><div><h2 id="network-h"><a id="network"></a>Settlement network</h2><p>Tempo is the hub, every region is a spoke, and no flow can bypass the hub</p></div></header>
+        <div class="map" id="map"></div>
+      </section>
+
+      <section class="card s5" aria-labelledby="recon-h">
+        <header><div><h2 id="recon-h"><a id="reconciliation"></a>Reconciliation</h2><p>Chain and partner observations against the ledger</p></div></header>
+        <div id="reconSummary" class="route" style="gap:14px;margin-bottom:12px"></div>
+        <div id="vaultCheck" style="margin-bottom:14px;display:grid;gap:6px;font-size:11.5px"></div>
+        <div class="scroll"><table id="recon"></table></div>
+      </section>
+
+      <section class="card s7" aria-labelledby="ex-h">
+        <header><div><h2 id="ex-h"><a id="exceptions"></a>Exceptions queue</h2><p>Read-only: the customer's own wallets on Tempo, Solana and Base against its payout records. No keys, nothing moves</p></div></header>
+        <div id="roSummary" style="margin-bottom:12px"></div>
+        <div class="scroll"><table id="roExceptions"></table></div>
+      </section>
+
+      <section class="card s12" id="venues-card" aria-labelledby="venues-h">
+        <header><div><h2 id="venues-h">Venue balances</h2><p>Where value sits on each venue. Clearing accounts net to zero</p></div></header>
+        <div class="venues" id="venues"></div>
+      </section>
+
+      <section class="card s12" aria-labelledby="shielded-h">
+        <header><div><h2 id="shielded-h"><a id="shielded"></a>Shielded lane</h2><p>Zcash testnet · Ironwood pool · FROST 2-of-3</p></div></header>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:22px">
+          <div><div id="vault"></div><div id="approvals" style="margin-top:16px"></div></div>
+          <div class="scroll"><table id="batches"></table></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="box" id="modalBox"></div></div>
 
 <script>window.CORRIDOR_REPLAY = {"snapshotDate":"11 Oct 2026","recordedAt":"2026-10-11T08:34:40.787Z"};</script>
 <script>
@@ -169,39 +373,75 @@ const REPLAY = window.CORRIDOR_REPLAY ?? null;
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const short = (s, n = 8) => (s && s.length > n * 2 + 1 ? `${s.slice(0, n)}…${s.slice(-6)}` : s || "");
-const chip = (s) => `<span class="chip s-${esc(s)}">${esc(String(s).replace("_", " "))}</span>`;
+const chip = (s) => `<span class="st ${esc(s)}"><i></i>${esc(String(s).replace(/_/g, " "))}</span>`;
+// A count of zero is not a finding: show it quietly, whatever its status.
+const countChip = (k, v) => `<span>${v === 0 ? `<span class="st zero"><i></i>${esc(String(k).replace(/_/g, " "))}</span>` : chip(k)} <span class="tnum" style="margin-left:4px">${v}</span></span>`;
 const get = (p) => fetch(REPLAY ? `data/${p.split("/").pop()}.json` : p).then((r) => r.json());
 const stepLabel = { "near.swap": "NEAR swap → vault", "zcash.shieldedBatch": "FROST-approved batch", "ledger.reserve": "reserve", "ledger.credit": "credit", "bridge.simulated": "bridge", "across.bridge": "Across", "partner.payout": "partner payout", "partner.collect": "partner collect", "tempo.dexSwap": "Tempo DEX" };
+
+// ---- theme ----
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("corridor-theme", t); } catch {}
+  document.querySelectorAll("[data-theme-set]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.themeSet === t)));
+}
+document.querySelectorAll("[data-theme-set]").forEach((b) => b.addEventListener("click", () => setTheme(b.dataset.themeSet)));
+setTheme(document.documentElement.dataset.theme);
+
+// ---- nav: mark the section in view ----
+const navLinks = [...document.querySelectorAll(".nav a")];
+const io = new IntersectionObserver((entries) => {
+  for (const e of entries) {
+    if (!e.isIntersecting) continue;
+    const id = e.target.dataset.nav;
+    navLinks.forEach((a) => a.setAttribute("aria-current", String(a.getAttribute("href") === `#${id}`)));
+  }
+}, { rootMargin: "-30% 0px -60% 0px" });
+for (const a of navLinks) {
+  const id = a.getAttribute("href").slice(1);
+  const target = document.getElementById(id);
+  const section = target?.closest("section") ?? target;
+  if (section) { section.dataset.nav = id; io.observe(section); }
+}
 
 async function refreshOverview() {
   const o = await get("/api/overview");
   const inv = o.invariants.length === 0;
   $("pills").innerHTML =
-    (REPLAY ? `<span class="pill ok"><span class="dot"></span>replay · ${esc(REPLAY.snapshotDate)}</span>` : `<span class="pill ok"><span class="dot"></span>live</span>`) +
-    Object.values(o.network).map((n) => `<span class="pill">${esc(n)}</span>`).join("") +
-    `<span class="pill ${inv ? "ok" : "bad"}">${inv ? "ledger invariants hold" : "invariant violation"}</span>`;
+    (REPLAY ? `<span class="pill strong"><span class="st live"><i></i></span>Replay · ${esc(REPLAY.snapshotDate)}</span>` : `<span class="pill strong"><span class="st live"><i></i></span>Live</span>`) +
+    `<span class="pill ${inv ? "" : "bad"}">${inv ? "Ledger invariants hold" : "Invariant violation"}</span>`;
+  $("env").innerHTML = `<span class="label">Networks</span>` + Object.values(o.network).map((n) => `<span class="row"><span class="st"><i></i></span>${esc(n)}</span>`).join("");
+
+  const r = window.__recon;
+  const vaults = r?.vaults ?? [];
+  const balanced = vaults.filter((v) => v.status === "balanced").length;
+  $("hero").innerHTML = `<div><div class="label">Books reconciled</div>
+      <div class="value" style="margin-top:12px">${esc(window.__matchRate ?? "—")}</div>
+      <div class="sub" style="margin-top:8px">${r ? `${r.matched} of ${r.total} movements matched to the ledger` : "Reading the chains…"}</div></div>
+    <div class="checks">${vaults.map((v) => `<span class="st ${v.status === "balanced" ? "" : "drift"}"><i></i>${esc(v.vault[0].toUpperCase() + v.vault.slice(1))} vault ${v.status === "balanced" ? "balanced on-chain" : "drift"}</span>`).join("")}
+      ${r ? `<span class="st"><i></i>${balanced} of ${vaults.length} vaults equal the chain to the unit</span>` : ""}</div>`;
+
   const s = o.kpis.sagas;
   $("kpis").innerHTML = [
-    ["Hub balances", o.kpis.hubBalance, "customer funds on Tempo"],
-    ["In flight", o.kpis.inFlight, "held for running payouts"],
-    ["Settled via partners", o.kpis.settled, "USDC paid out to local rails"],
-    ["Sagas", `${s.completed ?? 0} ✓`, `${s.compensated ?? 0} compensated · ${s.manual_review ?? 0} review · ${s.running ?? 0} running`],
-    ["Reconciliation", window.__matchRate ?? "—", "observations matched to ledger"],
+    ["Hub balances", o.kpis.hubBalance, "Customer funds on Tempo"],
+    ["In flight", o.kpis.inFlight, "Held for running payouts"],
+    ["Settled via partners", o.kpis.settled, "Paid out to local rails"],
+    ["Payout sagas", `${s.completed ?? 0} done`, `${s.compensated ?? 0} compensated · ${s.manual_review ?? 0} review · ${s.running ?? 0} running`],
   ].map(([l, v, sub]) => `<div class="kpi"><div class="label">${l}</div><div class="value">${esc(v)}</div><div class="sub">${esc(sub)}</div></div>`).join("");
 
   $("customers").innerHTML = `<tr><th>Customer</th><th>Corridor</th><th class="num">Available</th><th class="num">Held</th></tr>` +
-    (o.customers.filter((c) => c.venue === "tempo").map((c) => `<tr><td>${esc(c.customer)}</td><td><span class="mono">${esc(c.corridor)}</span></td><td class="num">${esc(c.available)}</td><td class="num">${esc(c.held)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">No customers yet</td></tr>`);
+    (o.customers.filter((c) => c.venue === "tempo").map((c) => `<tr><td>${esc(c.customer)}</td><td>${esc(c.corridor)}</td><td class="num">${esc(c.available)}</td><td class="num">${esc(c.held)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">No customers yet</td></tr>`);
 
-  const groups = { tempo: "Tempo hub", solana: "Solana", partner_fiat: "Partners", zcash_ironwood: "Zcash · Ironwood" };
+  const groups = { tempo: "Tempo hub", solana: "Solana", partner_fiat: "Partners", zcash_ironwood: "Zcash Ironwood" };
   $("venues").innerHTML = Object.entries(groups).map(([venue, label]) => {
     const vs = o.vaults.filter((v) => v.venue === venue);
     const cs = o.clearing.filter((c) => c.venue === venue);
-    const extra = venue === "zcash_ironwood" ? `<span class="shield">visible to customer + key holders only</span>` : "";
-    const rows = [...vs.map((v) => `<div class="row"><span>${esc(v.name)}</span><span class="mono">${esc(v.balance)}</span></div>`),
-      ...cs.map((c) => `<div class="row"><span>clearing · ${esc(c.name)}</span><span class="mono">${esc(c.balance)}</span></div>`)];
+    const extra = venue === "zcash_ironwood" ? `<span class="shield">customer and key holders only</span>` : "";
+    const rows = [...vs.map((v) => `<div class="row"><span>${esc(v.name)}</span><span>${esc(v.balance)}</span></div>`),
+      ...cs.map((c) => `<div class="row"><span>clearing · ${esc(c.name)}</span><span>${esc(c.balance)}</span></div>`)];
     return `<div class="venue"><h3>${label} ${extra}</h3>${rows.join("") || `<div class="empty">—</div>`}</div>`;
   }).join("");
-  if (!REPLAY) $("actionStatus").textContent = o.running.length ? `Running: ${o.running.join(", ")} (live on-chain, ~30–60 s)` : "";
+  if (!REPLAY) $("actionStatus").textContent = o.running.length ? `Running: ${o.running.join(", ")} (live on-chain, 30–60 s)` : "";
   document.querySelectorAll("[data-action]").forEach((b) => {
     const busy = o.running.includes(b.dataset.action);
     b.disabled = busy;
@@ -210,51 +450,55 @@ async function refreshOverview() {
   });
 }
 
+const SAGAS_SHOWN = 6;
 async function refreshSagas() {
   const list = await get("/api/sagas");
   window.__sagas = list;
-  $("sagas").innerHTML = list.map((s) => {
+  const shown = window.__allSagas ? list : list.slice(0, SAGAS_SHOWN);
+  $("sagas").innerHTML = shown.map((s) => {
     const steps = s.steps.map((st) => `<span class="step ${esc(st.status)}" title="${esc(st.error ?? "")}">${esc(stepLabel[st.kind] ?? st.kind)}</span>`).join(`<span class="arrow">→</span>`);
     const links = [...s.steps.flatMap((st) => st.links), ...s.refunds.map((u) => ({ label: "Tempo refund", url: u }))]
       .map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("");
     const partner = s.steps.find((st) => st.output?.orderId)?.output;
-    const fiat = partner?.fiatAmount ? ` · ${esc(partner.currency)} ${(Number(partner.fiatAmount) / 100).toLocaleString()} @ ${esc(partner.rate)}` : "";
+    const fiat = partner?.fiatAmount ? ` · ${esc(partner.currency)} ${(Number(partner.fiatAmount) / 100).toLocaleString()} at ${esc(partner.rate)}` : "";
     const err = s.steps.find((st) => st.error)?.error;
-    return `<div class="saga"><div class="top">${chip(s.status)}<strong>${esc(s.kind)}</strong><span class="mono">${esc(s.corridor ?? "")}</span><span>${esc(s.amount ?? "")}</span>${s.recipient ? `<span class="meta">→ ${esc(s.recipient)}</span>` : ""}</div>
+    return `<div class="saga"><div class="top-row">${chip(s.status)}<b>${esc(s.kind)}</b><span>${esc(s.corridor ?? "")}</span><span class="tnum">${esc(s.amount ?? "")}</span>${s.recipient ? `<span class="muted">→ ${esc(s.recipient)}</span>` : ""}</div>
       <div class="meta">${esc(s.customer ?? "")} · ${new Date(s.createdAt).toLocaleString()}${fiat}${err ? ` · <span style="color:var(--bad)">${esc(err)}</span>` : ""}</div>
       <div class="route">${steps}</div>${links ? `<div class="links">${links}</div>` : ""}</div>`;
-  }).join("") || `<div class="empty">No settlements yet. Run a flow →</div>`;
+  }).join("") + (list.length > SAGAS_SHOWN ? `<button class="btn sm" id="moreSagas" style="margin-top:12px">${window.__allSagas ? "Show the latest six" : `Show all ${list.length} runs`}</button>` : "") || `<div class="empty">No settlements yet. Run a flow →</div>`;
+  $("moreSagas")?.addEventListener("click", () => { window.__allSagas = !window.__allSagas; refreshSagas(); });
 }
 
 async function refreshRecon() {
   const r = await get("/api/reconciliation");
   const total = Object.values(r.summary).reduce((a, b) => a + b, 0);
   window.__matchRate = total ? `${Math.round((r.summary.matched / total) * 100)}%` : "—";
-  $("reconSummary").innerHTML = Object.entries(r.summary).map(([k, v]) => `${chip(k)} <span style="margin-right:12px">${v}</span>`).join("");
+  window.__recon = { matched: r.summary.matched, total, vaults: r.vaults || [] };
+  $("reconSummary").innerHTML = Object.entries(r.summary).map(([k, v]) => countChip(k, v)).join("");
   $("vaultCheck").innerHTML = (r.vaults || []).map((v) =>
-    `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${chip(v.status)}<strong>${esc(v.vault)} vault</strong>` +
-    `<span style="color:var(--muted)">on-chain ${esc(v.onchain)} · ledger ${esc(v.ledger)}${v.status === "drift" ? ` · <span style="color:var(--bad)">${v.short ? "missing" : "unbooked"} ${esc(v.diff)}</span>` : ""}</span></div>`).join("") +
-    (r.gas ? `<div style="color:var(--muted);margin-top:4px">Gas booked as expense: ${esc(r.gas.total)} across ${r.gas.transactions} Tempo transactions</div>` : "") +
-    (r.solanaGas ? `<div style="color:var(--muted);margin-top:2px">Solana: ${esc(r.solanaGas.fees)} network fees across ${r.solanaGas.transactions} transactions, ${esc(r.solanaGas.rent)} account rent for partner deposit accounts</div>` : "");
+    `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${chip(v.status)}<b>${esc(v.vault)} vault</b>` +
+    `<span class="muted tnum">on-chain ${esc(v.onchain)} · ledger ${esc(v.ledger)}${v.status === "drift" ? ` · <span style="color:var(--bad)">${v.short ? "missing" : "unbooked"} ${esc(v.diff)}</span>` : ""}</span></div>`).join("") +
+    (r.gas ? `<div class="muted">Gas booked as expense: ${esc(r.gas.total)} across ${r.gas.transactions} Tempo transactions</div>` : "") +
+    (r.solanaGas ? `<div class="muted">Solana: ${esc(r.solanaGas.fees)} network fees across ${r.solanaGas.transactions} transactions, ${esc(r.solanaGas.rent)} account rent for partner deposit accounts</div>` : "");
   $("recon").innerHTML = `<tr><th>Status</th><th>Venue</th><th>Movement</th><th class="num">Amount</th></tr>` +
-    (r.rows.slice().reverse().map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.venue)}</td><td class="mono">${esc(short(x.ref, 10))}</td><td class="num">${esc(x.amount)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">Nothing observed yet</td></tr>`);
+    (r.rows.slice().reverse().map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.venue)}</td><td>${esc(short(x.ref, 10))}</td><td class="num">${esc(x.amount)}</td></tr>`).join("") || `<tr><td colspan="4" class="empty">Nothing observed yet</td></tr>`);
 }
 
 async function refreshReadOnly() {
-  $("roSummary").innerHTML = `<span class="meta" style="color:var(--muted)">Scanning the customer's wallets…</span>`;
+  $("roSummary").innerHTML = `<span class="muted">Scanning the customer's wallets…</span>`;
   try {
     const r = await get("/api/readonly");
-    $("roSummary").innerHTML = Object.entries(r.summary).map(([k, v]) => `${chip(k)} <span style="margin-right:12px">${v}</span>`).join("") +
-      `<span class="meta" style="color:var(--muted);font-size:12.5px">${r.observed} stablecoin movements · ${r.records} payout records · ${esc(r.customer)} · scanned ${new Date(r.generatedAt).toLocaleString()}</span>` +
-      (r.errors || []).map((e) => `<div style="color:var(--warn);font-size:12.5px;margin-top:4px">${esc(e.chain)} not scanned this time (public RPC): ${esc(e.message)}</div>`).join("");
+    $("roSummary").innerHTML = `<div class="route" style="gap:14px">${Object.entries(r.summary).map(([k, v]) => countChip(k, v)).join("")}</div>` +
+      `<div class="muted" style="font-size:11.5px;margin-top:8px">${r.observed} stablecoin movements · ${r.records} payout records · ${esc(r.customer)} · scanned ${new Date(r.generatedAt).toLocaleString()}</div>` +
+      (r.errors || []).map((e) => `<div class="muted" style="font-size:11.5px;margin-top:4px">${esc(e.chain)} not scanned this time (public RPC): ${esc(e.message)}</div>`).join("");
     const SHOW_UNEXPECTED = 6;
     const unexpected = r.exceptions.filter((x) => x.status === "unexpected");
     const shown = [...r.exceptions.filter((x) => x.status !== "unexpected"), ...unexpected.slice(-SHOW_UNEXPECTED).reverse()];
     const more = unexpected.length - Math.min(unexpected.length, SHOW_UNEXPECTED);
-    const rows = shown.map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.record ?? "no record")}</td><td>${esc(x.venue)}</td><td>${esc(x.asset)}</td><td class="num">${esc(x.expected ?? "—")}</td><td class="num">${esc(x.observed ?? "—")}</td><td class="mono">${esc(short(x.ref ?? "", 10))}</td><td style="color:var(--muted);font-size:12.5px">${x.at ? new Date(x.at).toLocaleString() : ""}</td></tr>`);
+    const rows = shown.map((x) => `<tr><td>${chip(x.status)}</td><td>${esc(x.record ?? "no record")}</td><td>${esc(x.venue)}</td><td>${esc(x.asset)}</td><td class="num">${esc(x.expected ?? "—")}</td><td class="num">${esc(x.observed ?? "—")}</td><td>${esc(short(x.ref ?? "", 8))}</td><td class="muted" style="white-space:nowrap">${x.at ? new Date(x.at).toLocaleDateString() : ""}</td></tr>`);
     $("roExceptions").innerHTML = `<tr><th>Status</th><th>Payout record</th><th>Chain</th><th>Asset</th><th class="num">Expected</th><th class="num">Observed</th><th>Movement</th><th>When</th></tr>` +
       (rows.join("") || `<tr><td colspan="8" class="empty">No exceptions: every payout matched</td></tr>`) +
-      (more > 0 ? `<tr><td colspan="8" style="color:var(--muted);font-size:12.5px">+ ${more} more unrecorded movements (faucet mints and internal legs the sample records don't cover)</td></tr>` : "");
+      (more > 0 ? `<tr><td colspan="8" class="muted" style="font-size:11.5px">+ ${more} more unrecorded movements (faucet mints and internal legs the sample records don't cover)</td></tr>` : "");
   } catch (e) {
     $("roSummary").innerHTML = `<span style="color:var(--bad)">Couldn't scan the customer's wallets: ${esc(e.message ?? e)}. Retrying in five minutes.</span>`;
   }
@@ -262,28 +506,39 @@ async function refreshReadOnly() {
 
 async function refreshMainnet() {
   const m = await get("/api/mainnet");
-  $("mainnet").innerHTML = (m.payouts || []).slice().reverse().map((p) => {
+  $("mainnet-body").innerHTML = (m.payouts || []).slice().reverse().map((p) => {
     const delivered = p.bankCredit ? `₦${Number(p.bankCredit.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}` : "—";
-    const links = p.legs.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("");
-    return `<div class="saga"><div class="top">${chip(p.partnerStatus === "COMPLETED" ? "completed" : "pending")}<strong>payout</strong><span class="mono">${esc(p.decoded.corridor)}</span>` +
-      `<span>${esc(p.input.amount)} ${esc(p.input.asset)} on Tempo → ${delivered} credited${p.bankCredit ? ` · ${esc(p.bankCredit.bank)}` : ""}</span>${p.seconds != null ? `<span class="meta">${p.seconds} s end to end</span>` : ""}</div>` +
-      `<div class="meta">Paj ${esc(p.partnerStatus)}${p.partnerStatusLive ? " (live)" : ""} · ${esc(p.usdcToPartner)} USDC at ${esc(p.rate)} = ₦${esc(p.quotedFiat)} quoted · gas ${esc(p.gas.tempo)} + ${esc(p.gas.base)}` +
-      `${p.bankCredit ? ` · bank narration <span class="mono">${esc(p.bankCredit.narration)}</span>` : ""}</div>` +
-      `<div class="meta">reference <span class="mono">${esc(short(p.reference, 12))}</span> · payment id <span class="mono">${esc(p.decoded.paymentId)}</span></div>` +
-      `<div class="links">${links}</div></div>`;
-  }).join("") || `<div class="empty">No mainnet payouts recorded yet (pnpm mainnet:run --go)</div>`;
+    const when = p.bankCredit?.creditedAt ? new Date(p.bankCredit.creditedAt).toLocaleString(undefined, { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "";
+    const L = p.legs || [];
+    const link = (l, t) => (l ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">${t} ↗</a>` : "");
+    const hops = [
+      { name: "Tempo", note: `${esc(p.input.amount)} ${esc(p.input.asset)} out`, links: [link(L[0], "deposit")] },
+      { name: "Base", note: "Across hop 1 → hop 2", links: [link(L[1], "fill"), link(L[2], "deposit")] },
+      { name: "Solana", note: `${esc(p.usdcToPartner)} USDC to Paj`, links: [link(L[3], "fill"), link(L[4], "Paj funded")] },
+      { name: "Paj", note: `${esc(p.partnerStatus.toLowerCase())}${p.partnerStatusLive ? " · live" : ""}`, links: [`<span class="faint">₦${esc(p.quotedFiat)} at ${esc(Number(p.rate).toFixed(2))}</span>`] },
+      { name: p.bankCredit ? esc(p.bankCredit.bank) : "Bank", note: `${delivered} credited`, links: [p.bankCredit ? `<span class="faint">narration “${esc(p.bankCredit.narration)}”</span>` : ""], end: true },
+    ];
+    return `<div class="trace-head"><div><div class="label">${esc(p.decoded.corridor)} payout · ${esc(when)}</div>
+        <div class="big" style="margin-top:8px">${delivered}</div>
+        <div class="muted" style="margin-top:4px">${esc(p.input.amount)} ${esc(p.input.asset)} on Tempo → credited at ${p.bankCredit ? esc(p.bankCredit.bank) : "the bank"}</div></div>
+      ${p.seconds != null ? `<div class="side-stat"><div class="big">${p.seconds} s</div><div class="muted">end to end</div></div>` : ""}</div>
+      <ol class="hops">${hops.map((h) => `<li class="hop${h.end ? " end" : ""}"><b>${h.name}</b><span class="muted" style="font-size:11.5px">${h.note}</span>${h.links.filter(Boolean).join(" ")}</li>`).join("")}</ol>
+      <div class="refline"><span>reference <b>${esc(short(p.reference, 12))}</b></span><span>payment id <b>${esc(p.decoded.paymentId)}</b></span><span>gas <b>${esc(p.gas.tempo)}</b> + <b>${esc(p.gas.base)}</b></span>
+        <span>${p.engine === "saga" ? `saga engine <b>${esc(short(p.sagaId, 6))}</b>, booked in the mainnet ledger` : "run on the payout adapters by script"}</span></div>
+      ${p.vaultCheck ? `<div class="vchecks">${p.vaultCheck.map((v) => `<span>${chip(v.balanced ? "balanced" : "drift")} ${esc(v.vault)}: on-chain ${esc(v.onchain)} = ledger ${esc(v.ledger)}</span>`).join("")}</div>` : ""}`;
+  }).join(`<div style="height:1px;background:var(--line);margin:20px 0"></div>`) || `<div class="empty">No mainnet payouts recorded yet (pnpm mainnet:saga --go)</div>`;
 }
 
 async function refreshShielded() {
   const z = await get("/api/shielded");
   $("vault").innerHTML = z.vault
-    ? `<div class="kv"><div>Vault control</div><div><strong>FROST ${z.vault.threshold}-of-${z.vault.signers}</strong> · RedPallas · no full spending key exists</div>
+    ? `<div class="kv"><div>Vault control</div><div><b>FROST ${z.vault.threshold}-of-${z.vault.signers}</b> · RedPallas · no full spending key exists</div>
        <div>Signers</div><div>1 customer approver · 2 customer finance · 3 Corridor</div>
-       <div>Vault address</div><div class="mono">${esc(short(z.vault.address, 14))}</div>
-       <div>Group key (ak)</div><div class="mono">${esc(short(z.vault.groupKey, 12))}</div></div>`
+       <div>Vault address</div><div>${esc(short(z.vault.address, 14))}</div>
+       <div>Group key (ak)</div><div>${esc(short(z.vault.groupKey, 12))}</div></div>`
     : `<div class="empty">No FROST vault yet (run pnpm zcash:frost)</div>`;
-  $("batches").innerHTML = `<tr><th>Batch tx</th><th>Pool</th><th class="num">Recipients</th><th>Invoices (encrypted memos)</th><th>Approval</th></tr>` +
-    ((z.batches || []).map((b) => `<tr><td><a class="mono" href="${esc(b.explorer)}" target="_blank" rel="noopener">${esc(short(b.txid, 8))} ↗</a><div class="meta" style="color:var(--muted);font-size:12px">${esc(b.total)}</div></td><td>${esc(b.pool)}</td><td class="num">${b.recipients}</td><td style="font-size:12.5px">${b.invoices.map(esc).join("<br>")}</td><td>${b.control === "frost" ? `<span class="chip s-completed">FROST · signers ${b.approval ? b.approval.signers.join(" + ") : "2 of 3"}</span>` : `<span class="chip s-unreferenced">single key</span>`}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No shielded batches yet</td></tr>`);
+  $("batches").innerHTML = `<tr><th>Batch</th><th>Pool</th><th class="num">Recipients</th><th>Invoices (encrypted memos)</th><th>Approval</th></tr>` +
+    ((z.batches || []).map((b) => `<tr><td><a href="${esc(b.explorer)}" target="_blank" rel="noopener">${esc(short(b.txid, 8))} ↗</a><div class="muted" style="font-size:11px">${esc(b.total)}</div></td><td>${esc(b.pool)}</td><td class="num">${b.recipients}</td><td style="font-size:11.5px">${b.invoices.map(esc).join("<br>")}</td><td>${b.control === "frost" ? `<span class="st"><i></i>FROST · signers ${b.approval ? b.approval.signers.join(" + ") : "2 of 3"}</span>` : `<span class="st unreferenced"><i></i>single key</span>`}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">No shielded batches yet</td></tr>`);
 }
 
 async function refreshApprovals() {
@@ -293,12 +548,11 @@ async function refreshApprovals() {
     const btns = Array.from({ length: a.signers }, (_, i) => i + 1).map((n) => {
       const on = a.approvedBy.includes(n);
       const who = ["customer approver", "customer finance", "Corridor"][n - 1] ?? `signer ${n}`;
-      return `<button class="approve" data-subject="${esc(a.subject)}" data-signer="${n}" ${on || done || REPLAY ? "disabled" : ""} style="padding:7px 10px;font-size:12.5px;display:inline-flex">${on ? "✓ " : ""}Signer ${n} · ${who}</button>`;
+      return `<button class="btn sm approve${on ? " primary" : ""}" data-subject="${esc(a.subject)}" data-signer="${n}" ${on || done || REPLAY ? "disabled" : ""}>${on ? "✓ " : ""}Signer ${n} · ${who}</button>`;
     }).join(" ");
-    return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px">
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${chip(done ? "completed" : "pending")}<strong>Batch approval</strong><span class="meta" style="color:var(--muted);font-size:12.5px">${a.approvedBy.length} of ${a.threshold} required · ${esc(a.summary.recipients)} recipients · $${esc(a.summary.usd)} → ${esc(a.summary.zec)} ZEC</span></div>
-      <div style="font-size:12.5px;color:var(--muted);margin:6px 0 10px">${(a.summary.invoices || []).map(esc).join(" · ")}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${btns}</div></div>`;
+    return `<div class="approval"><div class="row">${chip(done ? "completed" : "pending")}<b>Batch approval</b><span class="muted" style="font-size:11.5px">${a.approvedBy.length} of ${a.threshold} required · ${esc(a.summary.recipients)} recipients · $${esc(a.summary.usd)} → ${esc(a.summary.zec)} ZEC</span></div>
+      <div class="muted" style="font-size:11.5px">${(a.summary.invoices || []).map(esc).join(" · ")}</div>
+      <div class="row" style="gap:8px">${btns}</div></div>`;
   }).join("");
   document.querySelectorAll("button.approve").forEach((b) => b.addEventListener("click", async () => {
     b.disabled = true;
@@ -310,7 +564,7 @@ async function refreshApprovals() {
 async function refreshForecast() {
   const f = await get("/api/forecast");
   $("forecast").innerHTML = `<tr><th>Customer</th><th>Corridor</th><th class="num">Daily out</th><th class="num">Runway</th><th class="num">Top up (7d)</th></tr>` +
-    (f.map((r) => `<tr><td>${esc(r.customer)}</td><td class="mono">${esc(r.corridor)}</td><td class="num">${esc(r.dailyOutflow)}</td><td class="num">${r.runwayDays == null ? "—" : `${r.runwayDays} d`}</td><td class="num">${esc(r.topUpFor7Days)}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">Forecast appears after the first payouts</td></tr>`);
+    (f.map((r) => `<tr><td>${esc(r.customer)}</td><td>${esc(r.corridor)}</td><td class="num">${esc(r.dailyOutflow)}</td><td class="num">${r.runwayDays == null ? "—" : `${r.runwayDays} d`}</td><td class="num">${esc(r.topUpFor7Days)}</td></tr>`).join("") || `<tr><td colspan="5" class="empty">Forecast appears after the first payouts</td></tr>`);
 }
 
 async function drawMap() {
@@ -321,33 +575,34 @@ async function drawMap() {
     ["Americas", ["USD", "BRL", "MXN", "COP", "CAD"]],
     ["Europe", ["EUR", "GBP", "CHF"]],
   ];
-  const W = 900, H = 330, hubX = 430, hubY = 165;
+  const W = 1100, H = 340, hubX = 470, hubY = 170;
   const left = n.collections.slice(0, 8);
-  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Hub and spoke network: collections on the left, the Tempo hub in the centre, payout regions and the shielded Zcash lane on the right">`;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Hub and spoke network: collections on the left, the Tempo hub in the centre, payout regions and the shielded Zcash lane on the right">`;
+  svg += `<text class="m-label" x="40" y="16">COLLECT</text>`;
   left.forEach((c, i) => {
-    const y = 30 + i * ((H - 60) / (left.length - 1));
-    svg += `<line x1="92" y1="${y}" x2="${hubX - 70}" y2="${hubY}" stroke="#2C4060" stroke-width="1.2"/>`;
-    svg += `<rect x="30" y="${y - 12}" width="62" height="24" rx="12" fill="#22375A" stroke="#2C4060"/><text x="61" y="${y + 4}" text-anchor="middle" fill="#F5F1E8" font-size="12">${c}</text>`;
+    const y = 40 + i * ((H - 70) / (left.length - 1));
+    svg += `<path class="m-line" d="M 104 ${y} C ${hubX - 160} ${y}, ${hubX - 150} ${hubY}, ${hubX - 78} ${hubY}"/>`;
+    svg += `<rect class="m-chip" x="40" y="${y - 12}" width="64" height="24" rx="4"/><text class="m-text" x="72" y="${y + 4}" text-anchor="middle">${c}</text>`;
   });
-  svg += `<text x="30" y="16" fill="#9FB0C6" font-size="11" letter-spacing="1">COLLECT</text>`;
-  const rightX = 640;
+  const rightX = 690;
   const rows = [...regions, ["Shielded", ["Zcash Ironwood"]]];
   rows.forEach(([name, cur], i) => {
-    const y = 38 + i * 62;
+    const y = 34 + i * 64;
     const shielded = name === "Shielded";
-    svg += `<line x1="${hubX + 70}" y1="${hubY}" x2="${rightX - 8}" y2="${y + 10}" stroke="${shielded ? "#E8913A" : "#2C4060"}" stroke-width="${shielded ? 1.8 : 1.2}" ${shielded ? 'stroke-dasharray="5 4"' : ""}/>`;
-    svg += `<text x="${rightX}" y="${y}" fill="#9FB0C6" font-size="11" letter-spacing="1">${name.toUpperCase()}</text>`;
+    svg += `<path class="m-line${shielded ? " shielded" : ""}" d="M ${hubX + 78} ${hubY} C ${hubX + 160} ${hubY}, ${rightX - 110} ${y + 20}, ${rightX - 10} ${y + 20}"/>`;
+    svg += `<text class="m-label" x="${rightX}" y="${y + 2}">${name.toUpperCase()}</text>`;
     cur.forEach((c, j) => {
-      const w = shielded ? 118 : 46, x = rightX + j * (w + 6);
-      svg += `<rect x="${x}" y="${y + 6}" width="${w}" height="22" rx="11" fill="${shielded ? "#E8913A" : "#22375A"}" stroke="${shielded ? "#E8913A" : "#2C4060"}"/><text x="${x + w / 2}" y="${y + 21}" text-anchor="middle" fill="${shielded ? "#0E1A2B" : "#F5F1E8"}" font-size="11.5" font-weight="${shielded ? 600 : 400}">${c}</text>`;
+      const w = shielded ? 130 : 50, x = rightX + j * (w + 6);
+      svg += `<rect class="m-chip${shielded ? " shielded" : ""}" x="${x}" y="${y + 9}" width="${w}" height="22" rx="4"/><text class="m-text${shielded ? " inv" : ""}" x="${x + w / 2}" y="${y + 24}" text-anchor="middle">${c}</text>`;
     });
   });
-  svg += `<circle cx="${hubX}" cy="${hubY}" r="72" fill="#0E1A2B" stroke="#E8913A" stroke-width="2"/>`;
-  svg += `<text x="${hubX}" y="${hubY - 14}" text-anchor="middle" fill="#F2A65A" font-size="11" letter-spacing="1.5">THE HUB</text>`;
-  svg += `<text x="${hubX}" y="${hubY + 10}" text-anchor="middle" fill="#F5F1E8" font-size="24" font-weight="700" font-family="Space Grotesk">Tempo</text>`;
-  svg += `<text x="${hubX}" y="${hubY + 30}" text-anchor="middle" fill="#9FB0C6" font-size="11">pathUSD · memo · 0.6 s</text></svg>`;
-  const ex = Object.entries(n.examples).map(([k, v]) => `<div style="font-size:12.5px;margin-top:6px"><span class="mono" style="color:var(--muted)">${esc(k)}</span> ${v.map((s) => `<span class="step">${esc(s.replace(":", " → "))}</span>`).join(" ")}</div>`).join("");
-  $("map").innerHTML = svg + ex;
+  svg += `<circle class="m-hub-ring" cx="${hubX}" cy="${hubY}" r="96"/>`;
+  svg += `<circle class="m-hub" cx="${hubX}" cy="${hubY}" r="78"/>`;
+  svg += `<text class="m-label" x="${hubX}" y="${hubY - 18}" text-anchor="middle">THE HUB</text>`;
+  svg += `<text class="m-hub-name" x="${hubX}" y="${hubY + 10}" text-anchor="middle">Tempo</text>`;
+  svg += `<text class="m-label" x="${hubX}" y="${hubY + 32}" text-anchor="middle">PATHUSD · USDC.E</text></svg>`;
+  const ex = Object.entries(n.examples).map(([k, v]) => `<div class="r"><span class="k">${esc(k)}</span>${v.map((s) => `<span class="step">${esc(s.replace(":", " → "))}</span>`).join(`<span class="arrow">→</span>`)}</div>`).join("");
+  $("map").innerHTML = svg + `<div class="routes">${ex}</div>`;
 }
 
 // In the replay, each flow button opens the recorded run of that flow instead of starting one.
@@ -357,16 +612,17 @@ const REPLAY_FLOWS = {
   importer: { title: "Importer pays a supplier in China", match: (s) => s.kind === "collection" || s.steps.some((st) => st.kind === "partner.collect") },
   shielded: { title: "Pay 3 suppliers privately", match: (s) => s.steps.some((st) => st.kind === "zcash.shieldedBatch") && s.status === "completed" },
 };
+const closeBtn = `<button class="btn primary" style="width:auto;display:inline-flex" onclick="document.getElementById('modal').classList.remove('open')">Close</button>`;
 function showRecordedFlow(key) {
   const flow = REPLAY_FLOWS[key];
   const saga = (window.__sagas || []).find(flow.match);
   const links = saga ? [...saga.steps.flatMap((st) => st.links), ...saga.refunds.map((u) => ({ label: "Tempo refund", url: u }))] : [];
-  $("modalBox").innerHTML = `<h2 style="font-family:Space Grotesk;margin:0 0 6px">${esc(flow.title)}</h2>
-    <p style="color:var(--muted);margin:0 0 12px">This is a replay of runs made live on testnet, so this button doesn't move funds. ${saga ? `The recorded run, ${new Date(saga.createdAt).toLocaleString()}:` : ""}</p>
-    ${saga ? `<div class="route" style="margin-bottom:12px">${saga.steps.map((st) => `<span class="step ${esc(st.status)}">${esc(stepLabel[st.kind] ?? st.kind)}</span>`).join(`<span class="arrow">→</span>`)}</div>
-    <div class="links" style="display:flex;flex-direction:column;gap:6px;margin-bottom:14px">${links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("") || `<span style="color:var(--muted)">Ledger-only steps: no chain transaction.</span>`}</div>` : ""}
-    <p style="color:var(--muted);font-size:12.5px;margin:0 0 14px">Run it yourself: clone the repo and <span class="mono">pnpm console</span> (Tempo Moderato, Solana devnet, Zcash testnet).</p>
-    <button class="primary" onclick="document.getElementById('modal').classList.remove('open')">Close</button>`;
+  $("modalBox").innerHTML = `<h2>${esc(flow.title)}</h2>
+    <p>This replay doesn't move funds. ${saga ? `The recorded run, ${new Date(saga.createdAt).toLocaleString()}:` : ""}</p>
+    ${saga ? `<div class="route" style="margin-bottom:14px">${saga.steps.map((st) => `<span class="step ${esc(st.status)}">${esc(stepLabel[st.kind] ?? st.kind)}</span>`).join(`<span class="arrow">→</span>`)}</div>
+    <div class="links" style="flex-direction:column;gap:6px;margin-bottom:16px">${links.map((l) => `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} ↗</a>`).join("") || `<span class="muted">Ledger-only steps: no chain transaction.</span>`}</div>` : ""}
+    <p style="font-size:11.5px">Run it yourself: <span>pnpm console</span> runs these flows on Tempo Moderato, Solana devnet and Zcash testnet.</p>
+    ${closeBtn}`;
   $("modal").classList.add("open");
 }
 
@@ -382,15 +638,16 @@ document.querySelectorAll("[data-action]").forEach((b) =>
 
 $("disclose").addEventListener("click", async () => {
   const d = REPLAY ? await get("/api/disclosures") : await (await fetch("/api/disclosures", { method: "POST" })).json();
-  $("modalBox").innerHTML = `<h2 style="font-family:Space Grotesk;margin:0 0 6px">Auditor disclosure package</h2>
-    <p style="color:var(--muted);margin:0 0 12px">Hand this viewing key to an auditor or tax authority. It is read-only: it reveals, it cannot spend.</p>
+  $("modalBox").innerHTML = `<h2>Auditor disclosure package</h2>
+    <p>Hand this viewing key to an auditor or tax authority. It is read-only: it reveals, it cannot spend.</p>
     <div class="kv"><div>Scope</div><div>${esc(d.scope)}</div><div>Reveals</div><div>${esc(d.reveals)}</div><div>Does not reveal</div><div>${esc(d.doesNotReveal)}</div></div>
-    <div style="color:var(--muted);font-size:12.5px;margin-top:14px">Unified full viewing key</div><div class="key mono">${esc(d.viewingKey)}</div>
-    <div style="color:var(--muted);font-size:12.5px">Verify independently</div><div class="key mono">${esc(d.howToVerify)}</div>
-    <button class="primary" onclick="document.getElementById('modal').classList.remove('open')">Close</button>`;
+    <div class="label" style="margin-top:16px">Unified full viewing key</div><div class="key">${esc(d.viewingKey)}</div>
+    <div class="label">Verify independently</div><div class="key">${esc(d.howToVerify)}</div>
+    ${closeBtn}`;
   $("modal").classList.add("open");
 });
 $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") $("modal").classList.remove("open"); });
+addEventListener("keydown", (e) => { if (e.key === "Escape") $("modal").classList.remove("open"); });
 
 async function loop() {
   try { await Promise.all([refreshOverview(), refreshSagas(), refreshApprovals()]); } catch (e) { console.error(e); }
@@ -400,7 +657,7 @@ async function slow() {
 }
 if (REPLAY) {
   $("replayBanner").hidden = false;
-  $("replayBanner").innerHTML = `<strong>Replay of live runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. The Live on mainnet panel is a real payout with real money. Every other balance, saga and reconciliation figure came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../" style="color:#F2A65A">About Corridor</a> · Source available to reviewers on request`;
+  $("replayBanner").innerHTML = `<strong>Replay of live runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. The Live on mainnet panel is a real payout with real money. Every other balance, saga and reconciliation figure came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../">About Corridor</a>`;
   $("actionStatus").textContent = "Replay: each button opens the recorded run of that flow.";
 }
 drawMap(); loop(); slow(); refreshReadOnly(); refreshMainnet();
