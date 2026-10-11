@@ -122,6 +122,8 @@ export const DEFAULT_EDGES: Edge[] = [
 
   // Hub ↔ Solana liquidity. Live Across has no direct Tempo↔Solana route: two hops via Base.
   { kind: "across.bridge", from: p("tempo", "pathUSD"), to: p("base", "USDC"), cost: 2, env: ["mainnet"] },
+  // Across also takes USDC.e on Tempo directly, so a USDC.e balance pays out without a DEX swap first.
+  { kind: "across.bridge", from: p("tempo", "USDC.e"), to: p("base", "USDC"), cost: 2, env: ["mainnet"] },
   { kind: "across.bridge", from: p("base", "USDC"), to: p("solana", "USDC"), cost: 2, env: ["mainnet"] },
   { kind: "across.bridge", from: p("solana", "USDC"), to: p("base", "USDC"), cost: 2, env: ["mainnet"] },
   { kind: "across.bridge", from: p("base", "USDC"), to: p("tempo", "pathUSD"), cost: 2, env: ["mainnet"] },

@@ -5,12 +5,14 @@
  *   ledger.reserve → across.bridge (Tempo → Base) → across.bridge (Base → Solana) → partner.payout (Paj, NGN)
  *
  * Its own ledger (.data/ledger-mainnet). On first run it books each vault's
- * on-chain balance as the owner's opening float; pathUSD that arrives at the
- * Tempo treasury after that is booked as the customer's deposit. After the
+ * on-chain balance as the owner's opening float; pathUSD or USDC.e that
+ * arrives at the Tempo treasury after that is booked as the customer's
+ * deposit, in its own asset, and a payout can be funded from either. After the
  * saga, every vault is checked on-chain against the ledger.
  *
  *   pnpm mainnet:saga                 # book opening float and deposits, show balances and the plan
- *   pnpm mainnet:saga --go [amount]   # run a payout (default: the customer's whole available balance)
+ *   pnpm mainnet:saga --go [amount] [--asset pathUSD|USDC.e]
+ *                                     # run a payout (default: the customer's larger balance, all of it)
  *   pnpm mainnet:saga --resume <id>   # resume a saga after a crash
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -87,6 +89,7 @@ async function onChain() {
   const sol = await solanaRpc<{ value: number }>("getBalance", [solana.address]);
   return {
     "treasury pathUSD (Tempo)": await balanceOf(tempo, "pathUSD", treasury),
+    "treasury USDC.e (Tempo)": await balanceOf(tempo, "USDC.e", treasury),
     "base-relay USDC (Base)": await baseRead.readContract({ address: TOKENS.baseUSDC, abi: erc20, functionName: "balanceOf", args: [relay] }),
     "base-relay ETH (Base)": await baseRead.getBalance({ address: relay }),
     "solana-egress USDC (Solana)": await solana.tokenBalance(),
@@ -95,6 +98,7 @@ async function onChain() {
 }
 const VAULTS: Record<string, [string, Asset, Venue]> = {
   "treasury pathUSD (Tempo)": ["treasury", "pathUSD", "tempo"],
+  "treasury USDC.e (Tempo)": ["treasury", "USDC.e", "tempo"],
   "base-relay USDC (Base)": ["base-relay", "USDC", "base"],
   "base-relay ETH (Base)": ["base-relay", "ETH", "base"],
   "solana-egress USDC (Solana)": ["solana-egress", "USDC", "solana"],
@@ -115,13 +119,9 @@ let opening = await artifacts.get<{ tempoBlock: string }>("mainnet:opening");
 if (!opening) {
   const tempoBlock = await tempo.getBlockNumber();
   const balances = await onChain();
-  balances["treasury pathUSD (Tempo)"] = (await tempo.readContract({
-    address: TOKENS.tempoPathUSD as Address,
-    abi: erc20,
-    functionName: "balanceOf",
-    args: [treasury],
-    blockNumber: tempoBlock,
-  })) as bigint;
+  for (const [label, token] of [["treasury pathUSD (Tempo)", TOKENS.tempoPathUSD], ["treasury USDC.e (Tempo)", TOKENS.tempoUSDCe]] as const) {
+    balances[label] = (await tempo.readContract({ address: token as Address, abi: erc20, functionName: "balanceOf", args: [treasury], blockNumber: tempoBlock })) as bigint;
+  }
   for (const [label, amount] of Object.entries(balances)) {
     if (amount === 0n) continue;
     const [name, asset, venue] = VAULTS[label]!;
@@ -139,13 +139,15 @@ if (!opening) {
   console.log(`opening float booked at Tempo block ${tempoBlock}`);
 }
 
-// Customer deposits: pathUSD into the treasury after the opening block (fee-manager refunds excluded).
-{
-  const scanned = BigInt((await artifacts.get<{ block: string }>("mainnet:deposits"))?.block ?? opening.tempoBlock);
+// Customer deposits: pathUSD or USDC.e into the treasury after the opening block, each in its own asset
+// (fee-manager refunds of pathUSD gas excluded).
+const HUB_ASSETS = [["pathUSD", TOKENS.tempoPathUSD, "mainnet:deposits"], ["USDC.e", TOKENS.tempoUSDCe, "mainnet:deposits:USDC.e"]] as const;
+for (const [asset, token, cursor] of HUB_ASSETS) {
+  const scanned = BigInt((await artifacts.get<{ block: string }>(cursor))?.block ?? opening.tempoBlock);
   const head = await tempo.getBlockNumber();
   for (let from = scanned + 1n; from <= head; from += 5_000n) {
     const to = from + 4_999n > head ? head : from + 4_999n;
-    const logs = await tempo.getLogs({ address: TOKENS.tempoPathUSD as Address, event: erc20[0], args: { to: treasury }, fromBlock: from, toBlock: to });
+    const logs = await tempo.getLogs({ address: token as Address, event: erc20[0], args: { to: treasury }, fromBlock: from, toBlock: to });
     for (const l of logs) {
       if (l.args.from!.toLowerCase() === FEE_MANAGER.toLowerCase()) continue;
       const r = await ledger.post({
@@ -153,13 +155,13 @@ if (!opening) {
         external: { venue: "tempo", ref: `${l.transactionHash}:${l.logIndex}` },
         metadata: { from: l.args.from },
         lines: [
-          { account: await accounts.vault("treasury", "pathUSD", "tempo"), direction: "D", money: money("pathUSD", l.args.amount!) },
-          { account: await accounts.customer(CUSTOMER, CORRIDOR, "pathUSD", "tempo"), direction: "C", money: money("pathUSD", l.args.amount!) },
+          { account: await accounts.vault("treasury", asset, "tempo"), direction: "D", money: money(asset, l.args.amount!) },
+          { account: await accounts.customer(CUSTOMER, CORRIDOR, asset, "tempo"), direction: "C", money: money(asset, l.args.amount!) },
         ],
       });
-      if (!r.duplicate) console.log(`deposit ${formatMoney(money("pathUSD", l.args.amount!))} from ${l.args.from} (${l.transactionHash})`);
+      if (!r.duplicate) console.log(`deposit ${formatMoney(money(asset, l.args.amount!))} from ${l.args.from} (${l.transactionHash})`);
     }
-    await artifacts.merge("mainnet:deposits", { block: to.toString() });
+    await artifacts.merge(cursor, { block: to.toString() });
   }
 }
 
@@ -250,11 +252,16 @@ async function vaultCheck() {
   }
   return rows;
 }
-const available = (await ledger.balance(await accounts.customer(CUSTOMER, CORRIDOR, "pathUSD", "tempo"))).amount;
-console.log(`customer ${CUSTOMER} available: ${fmt("pathUSD", available)}`);
+const balances: Record<string, bigint> = {};
+for (const [asset] of HUB_ASSETS) balances[asset] = (await ledger.balance(await accounts.customer(CUSTOMER, CORRIDOR, asset, "tempo"))).amount;
+console.log(`customer ${CUSTOMER} available: ${HUB_ASSETS.map(([a]) => fmt(a, balances[a]!)).join(" · ")}`);
 
-const plan = planRoute({ corridor: CORRIDOR, privacy: "public", source: { venue: "tempo", asset: "pathUSD" }, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" });
-console.log(`plan: ${plan.steps.map((s) => `${s.kind} ${s.from.venue}→${s.to.venue}`).join(" · ")}`);
+const assetIdx = process.argv.indexOf("--asset");
+const asset = (assetIdx > -1 ? process.argv[assetIdx + 1] : balances["USDC.e"]! > balances.pathUSD! ? "USDC.e" : "pathUSD") as "pathUSD" | "USDC.e";
+if (!HUB_ASSETS.some(([a]) => a === asset)) throw new Error(`payouts are funded in pathUSD or USDC.e, not ${asset}`);
+const available = balances[asset]!;
+const plan = planRoute({ corridor: CORRIDOR, privacy: "public", source: { venue: "tempo", asset }, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" });
+console.log(`plan (${asset}): ${plan.steps.map((s) => `${s.kind} ${s.from.venue}→${s.to.venue}`).join(" · ")}`);
 
 let sagaId: string | undefined;
 const resumeIdx = process.argv.indexOf("--resume");
@@ -262,14 +269,14 @@ if (resumeIdx > -1) sagaId = process.argv[resumeIdx + 1];
 const goIdx = process.argv.indexOf("--go");
 if (goIdx > -1 && !sagaId) {
   const arg = process.argv[goIdx + 1];
-  const amount = arg && !arg.startsWith("--") ? money("pathUSD", BigInt(Math.round(Number(arg) * 1e6))).amount : available;
-  if (amount <= 0n || amount > available) throw new Error(`payout of ${fmt("pathUSD", amount)} exceeds the customer's ${fmt("pathUSD", available)}`);
+  const amount = arg && !arg.startsWith("--") ? BigInt(Math.round(Number(arg) * 1e6)) : available;
+  if (amount <= 0n || amount > available) throw new Error(`payout of ${fmt(asset, amount)} exceeds the customer's ${fmt(asset, available)}`);
   const payoutId = uuidv7();
   const data: PayoutData = {
     payoutId,
     customerId: CUSTOMER,
     corridor: CORRIDOR,
-    asset: "pathUSD",
+    asset,
     venue: "tempo",
     amount: amount.toString(),
     reference: encodeRef({ kind: RefKind.Payout, corridor: CORRIDOR, shielded: false, id: payoutId, customerTag: customerTag(CUSTOMER, testnetKey("CORRIDOR_REF_SECRET")) }),
@@ -277,7 +284,7 @@ if (goIdx > -1 && !sagaId) {
     tempoStartBlock: (await tempo.getBlockNumber()).toString(),
   };
   sagaId = await engine.start({ kind: "payout", reference: data.reference, plan, data });
-  console.log(`saga ${sagaId} · payout ${fmt("pathUSD", amount)} · reference ${data.reference}`);
+  console.log(`saga ${sagaId} · payout ${fmt(asset, amount)} · reference ${data.reference}`);
 }
 
 if (sagaId) {
@@ -304,7 +311,7 @@ if (sagaId) {
         corridor: CORRIDOR,
         startedAt,
         completedAt: new Date().toISOString(),
-        input: { chain: "tempo", asset: "pathUSD", amount: (Number(input.data.amount) / 1e6).toFixed(6) },
+        input: { chain: "tempo", asset: input.data.asset, amount: (Number(input.data.amount) / 1e6).toFixed(6) },
         tempoDeposit: out[1]!.depositTx,
         tempoFill: out[1]!.fillTx,
         baseDeposit: out[2]!.depositTx,

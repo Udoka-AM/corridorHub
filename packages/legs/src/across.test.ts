@@ -50,7 +50,7 @@ afterEach(() => db.close());
 
 /** Across's Swap and deposit-status APIs: fills after `pendingPolls` status checks. */
 function fakeAcross(pendingPolls = 0) {
-  const quotes = new Map<string, { hop: Hop; out: bigint }>();
+  const quotes = new Map<string, { hop: Hop; out: bigint; inputToken: string }>();
   let polls = 0;
   const fetchImpl = (async (url: string) => {
     const u = new URL(url);
@@ -60,7 +60,7 @@ function fakeAcross(pendingPolls = 0) {
       const amount = BigInt(u.searchParams.get("amount")!);
       const out = amount - FEES[hop];
       const id = `q-${hop}`;
-      quotes.set(id, { hop, out });
+      quotes.set(id, { hop, out, inputToken: u.searchParams.get("inputToken")! });
       return json({
         id,
         inputAmount: amount.toString(),
@@ -114,7 +114,7 @@ function harness(pendingPolls = 0) {
       return txs.map((t, i) => ({ txHash: t.txHash, asset, venue, vault, amount: i === 0 ? total - total / 2n : total / 2n }));
     },
   });
-  return { leg, sent };
+  return { leg, sent, quotes: across.quotes };
 }
 
 /** Paj rounds orders down to whole cents. */
@@ -124,21 +124,23 @@ class RoundingPartner extends MockPartner {
   }
 }
 
-const plan = planRoute({
-  corridor: "EUR-NGN",
-  privacy: "public",
-  source: { venue: "tempo", asset: "pathUSD" },
-  destination: { venue: "partner_fiat", asset: "NGN" },
-  env: "mainnet",
-});
+const planFrom = (asset: "pathUSD" | "USDC.e") =>
+  planRoute({
+    corridor: "EUR-NGN",
+    privacy: "public",
+    source: { venue: "tempo", asset },
+    destination: { venue: "partner_fiat", asset: "NGN" },
+    env: "mainnet",
+  });
+const plan = planFrom("pathUSD");
 
-function data(): PayoutData {
+function data(asset: "pathUSD" | "USDC.e" = "pathUSD"): PayoutData {
   const id = uuidv7();
   return {
     payoutId: id,
     customerId: "eu-payco",
     corridor: "EUR-NGN",
-    asset: "pathUSD",
+    asset,
     venue: "tempo",
     amount: "7000000",
     reference: encodeRef({ kind: RefKind.Payout, corridor: "EUR-NGN", shielded: false, id, customerTag: customerTag("eu-payco", "s") }),
@@ -147,7 +149,7 @@ function data(): PayoutData {
 }
 
 async function engineWith(pendingPolls = 0) {
-  const { leg, sent } = harness(pendingPolls);
+  const { leg, sent, quotes } = harness(pendingPolls);
   const registry = new PartnerRegistry();
   const partner = new RoundingPartner({ webhookSecret: "whsec_t" });
   registry.register(partner);
@@ -163,7 +165,7 @@ async function engineWith(pendingPolls = 0) {
     },
   });
   const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, { ...leg, backoffMs: 1 }, payout]);
-  return { engine, sent, funded };
+  return { engine, sent, funded, quotes };
 }
 
 const bal = async (id: Promise<string>) => (await ledger.balance(await id)).amount;
@@ -204,6 +206,31 @@ describe("across.bridge on the mainnet payout route", () => {
     expect(await bal(accounts.clearing("payout-dust", "USDC", "solana"))).toBe(-6_399n);
     expect(await bal(accounts.customerHold("eu-payco", "EUR-NGN", "pathUSD", "tempo"))).toBe(0n);
     expect(await bal(accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo"))).toBe(43_000_000n);
+  });
+
+  it("pays out from a USDC.e balance too: Across takes it directly, no swap first", async () => {
+    await ledger.post({
+      kind: "deposit",
+      lines: [
+        { account: await accounts.vault("treasury", "USDC.e", "tempo"), direction: "D", money: money("USDC.e", 10_000_000n) },
+        { account: await accounts.customer("eu-payco", "EUR-NGN", "USDC.e", "tempo"), direction: "C", money: money("USDC.e", 10_000_000n) },
+      ],
+    });
+    const route = planFrom("USDC.e");
+    expect(route.steps.map((s) => `${s.kind}:${s.from.asset}`)).toEqual(["ledger.reserve:USDC.e", "across.bridge:USDC.e", "across.bridge:USDC", "partner.payout:USDC"]);
+    const { engine, funded, quotes } = await engineWith();
+    const id = await engine.start({ kind: "payout", plan: route, data: data("USDC.e") });
+    expect(await engine.run(id)).toBe("completed");
+    expect([...quotes.values()].find((q) => q.hop === "tempo-base")!.inputToken).toBe("0x20C000000000000000000000b9537d11c60E8b50");
+    expect(funded).toEqual([6_990_000n]);
+    expect(await ledger.checkInvariants()).toEqual([]);
+    expect(await bal(accounts.vault("treasury", "USDC.e", "tempo"))).toBe(3_000_000n);
+    // Gas is still paid in pathUSD, from the owner's float.
+    expect(await bal(accounts.vault("treasury", "pathUSD", "tempo"))).toBe(50_000_000n - TEMPO_GAS);
+    expect(await bal(accounts.clearing("usd-peg", "USDC.e", "tempo"))).toBe(0n);
+    expect(await bal(accounts.clearing("usd-peg", "USDC", "solana"))).toBe(0n);
+    expect(await bal(accounts.customer("eu-payco", "EUR-NGN", "USDC.e", "tempo"))).toBe(3_000_000n);
+    expect(await bal(accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo"))).toBe(50_000_000n);
   });
 
   it("waits on the same deposit when a fill is slow, and never resends", async () => {

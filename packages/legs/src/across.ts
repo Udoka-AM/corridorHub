@@ -7,7 +7,7 @@ import type { ArtifactStore } from "./shielded.ts";
 
 /**
  * The live `across.bridge` leg (mainnet): one hop of the hub's route out to
- * Solana, Tempo pathUSD → Base USDC or Base USDC → Solana USDC.
+ * Solana, Tempo pathUSD or USDC.e → Base USDC, or Base USDC → Solana USDC.
  *
  * Exactly once: the deposit hash is written to the artifact store as soon as
  * the origin chain confirms it, and a retry only waits for that deposit's
@@ -48,6 +48,17 @@ const HOPS: Record<Hop, HopSpec> = {
     to: { vault: "solana-egress", asset: "USDC", venue: "solana" },
   },
 };
+
+/** Tempo stablecoins a payout can leave the hub in, and their Across input tokens. */
+const TEMPO_INPUTS: Partial<Record<Asset, string>> = { pathUSD: TOKENS.tempoPathUSD, "USDC.e": TOKENS.tempoUSDCe };
+
+function specFor(hop: Hop, fromAsset: Asset): HopSpec {
+  const spec = HOPS[hop];
+  if (hop !== "tempo-base") return spec;
+  const inputToken = TEMPO_INPUTS[fromAsset];
+  if (!inputToken) throw new NonRetryableError(`across.bridge cannot send ${fromAsset} from Tempo`);
+  return { ...spec, inputToken, from: { ...spec.from, asset: fromAsset } };
+}
 
 export function hopOf(from: Venue, to: Venue): Hop {
   const hop = `${from}-${to}`;
@@ -106,7 +117,7 @@ export function acrossBridgeLeg(opts: AcrossLegOptions): Leg<PayoutData> {
     backoffMs: 5_000,
     async forward(ctx) {
       const hop = hopOf(ctx.step.from.venue, ctx.step.to.venue);
-      const spec = HOPS[hop];
+      const spec = specFor(hop, ctx.step.from.asset);
       const input = amountIn(ctx);
       const key = `across:${ctx.idempotencyKey}`;
       let art = ((await opts.artifacts.get<{ [k: string]: Json }>(key)) ?? {}) as Artifact;
@@ -159,15 +170,16 @@ export function acrossBridgeLeg(opts: AcrossLegOptions): Leg<PayoutData> {
 
       const bookings: EntryInput[] = [];
       if (hop === "tempo-base") {
-        // Out of the hub: pathUSD leaves the treasury into the USD peg …
+        // Out of the hub: the stablecoin (pathUSD or USDC.e) leaves the treasury into the USD peg …
+        const asset = spec.from.asset;
         bookings.push({
           kind: "bridge.deposit",
           reference: d.reference,
           sagaId: ctx.sagaId,
           external: { venue: "tempo", ref: art.depositTx! },
           lines: [
-            { account: await a.clearing("usd-peg", "pathUSD", "tempo"), direction: "D", money: money("pathUSD", input) },
-            { account: from, direction: "C", money: money("pathUSD", input) },
+            { account: await a.clearing("usd-peg", asset, "tempo"), direction: "D", money: money(asset, input) },
+            { account: from, direction: "C", money: money(asset, input) },
           ],
         });
         // … and comes out as USDC on Base, less Across's fee. The peg's USDC side is

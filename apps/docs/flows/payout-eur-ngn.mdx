@@ -15,6 +15,8 @@ A European payout company pays Ada Obi in Lagos. Its customer balance already si
 
 On mainnet the payout takes two Across hops, because Paj settles on Solana and Across has no direct Tempo → Solana route.
 
+A payout can be funded from a pathUSD or a USDC.e balance on Tempo. Across takes either one directly, so neither needs a swap first. Each is booked in its own asset, and gas is paid in pathUSD from the owner's float. Every hop books the amount that actually arrived and Across's fee. The partner is funded with exactly what its order asks for, and any rounding dust is held for the customer. Other stablecoins (USDT, EURC, PYUSD) are watched and reconciled today; paying out from them needs a swap leg first, and that is on the [roadmap](/status/roadmap).
+
 <Frame caption="Fig. 05 · A EUR → NGN payout, step by step across the ledger, Tempo, Solana, the partner and the bank.">
   <img className="block dark:hidden" src="/images/diagrams/payout-flow-light.svg" alt="Sequence of a EUR to NGN payout" />
   <img className="hidden dark:block" src="/images/diagrams/payout-flow-dark.svg" alt="Sequence of a EUR to NGN payout" />

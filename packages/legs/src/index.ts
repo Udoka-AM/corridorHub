@@ -246,7 +246,8 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
 
       const a = ctx.accounts;
       const hold = await a.customerHold(d.customerId, d.corridor, d.asset, d.venue);
-      const pegTempo = await a.clearing("usd-peg", "pathUSD", "tempo");
+      // The hub side of the peg is in whichever stablecoin the payout was funded from (pathUSD or USDC.e).
+      const pegTempo = await a.clearing("usd-peg", d.asset, d.venue);
       const pegSolana = await a.clearing("usd-peg", "USDC", "solana");
       const egress = await a.vault("solana-egress", "USDC", "solana");
       // The customer bears the bridge fees: recovered against the expense the bridge legs booked.
