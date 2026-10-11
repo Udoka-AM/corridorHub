@@ -10,6 +10,7 @@
     "payout:demo": "tsx scripts/payout-demo.ts",
     "mainnet:wallets": "tsx scripts/mainnet-wallets.ts",
     "mainnet:run": "tsx scripts/mainnet-run.ts",
+    "mainnet:saga": "tsx scripts/mainnet-saga.ts",
     "across:testnet": "tsx scripts/across-testnet.ts",
     "zcash:spike": "tsx scripts/zcash-spike.ts",
     "zcash:frost": "tsx scripts/zcash-frost.ts",

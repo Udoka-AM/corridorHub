@@ -393,7 +393,9 @@ async function mainnet() {
     const ref = decodeRef(r.reference);
     const live = paj ? await paj.getOrder(r.payout.id).then((o) => o.partnerStatus, () => null) : null;
     const seconds = r.startedAt && r.bankCredit?.creditedAt ? (Date.parse(r.bankCredit.creditedAt) - Date.parse(r.startedAt)) / 1000 : null;
-    const sum = (chain: string) => r.gas.filter((g: Row) => g.chain === chain).reduce((a: bigint, g: Row) => a + BigInt(g.amount), 0n);
+    // Tempo gas is recorded in pathUSD base units (6 dp), or 18 dp when read from receipt wei.
+    const usd = (g: Row) => Number(g.amount) / (String(g.unit).includes("18 dp") ? 1e18 : 1e6);
+    const sum = (chain: string) => r.gas.filter((g: Row) => g.chain === chain).reduce((a: number, g: Row) => a + (chain === "base" ? Number(g.amount) / 1e18 : usd(g)), 0);
     return {
       reference: r.reference,
       decoded: { kind: "payout", corridor: r.corridor, paymentId: ref.id, shielded: ref.shielded },
@@ -405,7 +407,10 @@ async function mainnet() {
       seconds,
       partnerStatus: live ?? r.pajStatus,
       partnerStatusLive: live !== null,
-      gas: { tempo: `${(Number(sum("tempo")) / 1e18).toFixed(6)} pathUSD`, base: `${(Number(sum("base")) / 1e18).toFixed(9)} ETH` },
+      gas: { tempo: `${sum("tempo").toFixed(6)} pathUSD`, base: `${sum("base").toFixed(9)} ETH` },
+      engine: r.engine ?? "script",
+      sagaId: r.sagaId ?? null,
+      vaultCheck: r.vaultCheck ?? null,
       legs: [
         { label: "Tempo → Base deposit", url: `${EXPLORER.mainnet}/tx/${r.tempoDeposit}` },
         { label: "Base fill", url: `https://basescan.org/tx/${r.tempoFill}` },

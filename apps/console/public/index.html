@@ -268,7 +268,8 @@ async function refreshMainnet() {
       `<span>${esc(p.input.amount)} ${esc(p.input.asset)} on Tempo → ${delivered} credited${p.bankCredit ? ` · ${esc(p.bankCredit.bank)}` : ""}</span>${p.seconds != null ? `<span class="meta">${p.seconds} s end to end</span>` : ""}</div>` +
       `<div class="meta">Paj ${esc(p.partnerStatus)}${p.partnerStatusLive ? " (live)" : ""} · ${esc(p.usdcToPartner)} USDC at ${esc(p.rate)} = ₦${esc(p.quotedFiat)} quoted · gas ${esc(p.gas.tempo)} + ${esc(p.gas.base)}` +
       `${p.bankCredit ? ` · bank narration <span class="mono">${esc(p.bankCredit.narration)}</span>` : ""}</div>` +
-      `<div class="meta">reference <span class="mono">${esc(short(p.reference, 12))}</span> · payment id <span class="mono">${esc(p.decoded.paymentId)}</span></div>` +
+      `<div class="meta">reference <span class="mono">${esc(short(p.reference, 12))}</span> · payment id <span class="mono">${esc(p.decoded.paymentId)}</span> · ${p.engine === "saga" ? `saga engine <span class="mono">${esc(short(p.sagaId, 6))}</span>, booked in the mainnet ledger` : "run by script, before the saga engine"}</div>` +
+      (p.vaultCheck ? `<div class="meta">${p.vaultCheck.map((v) => `${chip(v.balanced ? "balanced" : "drift")} ${esc(v.vault)}: on-chain ${esc(v.onchain)} = ledger ${esc(v.ledger)}`).join("<br>")}</div>` : "") +
       `<div class="links">${links}</div></div>`;
   }).join("") || `<div class="empty">No mainnet payouts recorded yet (pnpm mainnet:run --go)</div>`;
 }

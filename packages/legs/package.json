@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@corridor/core": "workspace:*",
+    "@corridor/bridge-across": "workspace:*",
     "@corridor/chain-tempo": "workspace:*",
     "@corridor/ledger": "workspace:*",
     "@corridor/saga": "workspace:*",

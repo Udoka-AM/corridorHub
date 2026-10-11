@@ -208,7 +208,10 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
       const r = d.recipient as { kind?: string; bankCode?: string; accountNumber?: string };
       if (r.kind !== "bank" || !r.bankCode || !r.accountNumber) throw new NonRetryableError("payout recipient needs bankCode and accountNumber");
       const partner = opts.partners.forPayout(currency, chain);
-      const usdc = BigInt(d.amount);
+      // What reached the egress vault: the payout amount on testnet, less Across's fees on mainnet.
+      const bridged = Object.values(ctx.outputs).filter((o): o is { received: string; fee: string } => !!(o as { received?: string } | null)?.received);
+      const usdc = bridged.length ? BigInt(bridged.at(-1)!.received) : BigInt(d.amount);
+      const bridgeFees = bridged.reduce((s, o) => s + BigInt(o.fee), 0n);
 
       // Exactly-once: reuse the order this step already opened (and funded) if any.
       let link = await opts.events.linkedOrder(ctx.idempotencyKey);
@@ -229,7 +232,8 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
         const order = await partner.getOrder(link!.orderId);
         if (order.status === "failed") throw new Error(`partner rejected order ${order.id} before funding`);
         if (!opts.fund) throw new NonRetryableError("no funding function configured for partner payouts");
-        const fundingRef = await opts.fund({ chain, to: link!.fundingAddress!, usdcAmount: usdc, reference: d.reference, order });
+        // Partners may round the order (Paj to cents): fund exactly what the order asks for.
+        const fundingRef = await opts.fund({ chain, to: link!.fundingAddress!, usdcAmount: order.usdcAmount || usdc, reference: d.reference, order });
         await opts.events.markFunded(ctx.idempotencyKey, fundingRef);
         link = { ...link!, fundingRef };
       }
@@ -245,11 +249,18 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
       const pegTempo = await a.clearing("usd-peg", "pathUSD", "tempo");
       const pegSolana = await a.clearing("usd-peg", "USDC", "solana");
       const egress = await a.vault("solana-egress", "USDC", "solana");
+      // The customer bears the bridge fees: recovered against the expense the bridge legs booked.
+      // Anything the partner's rounding left in the egress vault is dust held for the customer.
+      const paid = done.usdcAmount > 0n ? done.usdcAmount : usdc;
+      const total = BigInt(d.amount);
+      const dust = total - paid - bridgeFees;
+      if (dust < 0n) throw new ManualReviewError(`partner ${partner.id} took ${paid} for a ${total} payout after ${bridgeFees} in bridge fees`);
       return {
         output: {
           partner: partner.id,
           orderId: done.id,
           fundingRef: link!.fundingRef!,
+          usdcPaid: paid.toString(),
           fiatAmount: done.fiatAmount.toString(),
           currency,
           rate: done.rate,
@@ -265,8 +276,12 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
             lines: [
               { account: hold, direction: "D", money: amountOf(d) },
               { account: pegTempo, direction: "C", money: amountOf(d) },
-              { account: pegSolana, direction: "D", money: money("USDC", usdc) },
-              { account: egress, direction: "C", money: money("USDC", usdc) },
+              { account: pegSolana, direction: "D", money: money("USDC", total) },
+              { account: egress, direction: "C", money: money("USDC", paid) },
+              ...(bridgeFees > 0n
+                ? [{ account: await a.revenue("bridge-fee-recovery", "USDC", "solana"), direction: "C" as const, money: money("USDC", bridgeFees) }]
+                : []),
+              ...(dust > 0n ? [{ account: await a.clearing("payout-dust", "USDC", "solana"), direction: "C" as const, money: money("USDC", dust) }] : []),
             ],
           },
         ],
@@ -367,3 +382,4 @@ export const ledgerCreditLeg: Leg<CollectionData> = {
   },
 };
 export * from "./shielded.ts";
+export { acrossBridgeLeg, hopOf, type AcrossLegOptions, type GasCost, type Hop } from "./across.ts";
