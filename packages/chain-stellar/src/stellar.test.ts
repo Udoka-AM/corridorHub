@@ -1,0 +1,202 @@
+import { describe, expect, it } from "vitest";
+import { Keypair, Memo, Networks, Operation, TransactionBuilder, Account as SdkAccount } from "@stellar/stellar-sdk";
+import { RefKind, customerTag, encodeRef, fromStellarMemo, toStellarMemo, uuidv7, type Observation } from "@corridor/core";
+import { STELLAR_ISSUERS, assetOf, fromStellarAmount, stellarAsset, toStellarAmount } from "./assets.ts";
+import { StellarObserver, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
+import { ed25519StellarSigner, localStellarSigner } from "./index.ts";
+
+const USDC_ISSUER = STELLAR_ISSUERS.USDC!.testnet!;
+
+const reference = () =>
+  encodeRef({ kind: RefKind.Payout, corridor: "EUR-KES", shielded: false, id: uuidv7(), customerTag: customerTag("eu-payco", "s") });
+
+const memoOf = (ref: ReturnType<typeof reference>) => Buffer.from(toStellarMemo(ref)).toString("base64");
+
+function payment(over: Partial<StellarPaymentRecord> = {}): StellarPaymentRecord {
+  return {
+    id: "op1",
+    paging_token: "100",
+    type: "payment",
+    transaction_hash: "abc",
+    created_at: "2026-10-17T09:00:00Z",
+    asset_type: "credit_alphanum4",
+    asset_code: "USDC",
+    asset_issuer: USDC_ISSUER,
+    from: "GVAULT",
+    to: "GANCHOR",
+    amount: "2.9000000",
+    ...over,
+  };
+}
+
+/** A Horizon stand-in that pages like the real one. */
+function fakeHorizon(records: StellarPaymentRecord[]): PaymentSource & { calls: (string | undefined)[] } {
+  const calls: (string | undefined)[] = [];
+  return {
+    calls,
+    async fetch(_account, cursor, limit) {
+      calls.push(cursor);
+      const from = cursor ? records.findIndex((r) => r.paging_token === cursor) + 1 : 0;
+      return records.slice(from, from + limit);
+    },
+  };
+}
+
+function memoryCursors(): CursorStore & { stored: Map<string, bigint> } {
+  const stored = new Map<string, bigint>();
+  return {
+    stored,
+    async get(name) {
+      return stored.get(name);
+    },
+    async set(name, cursor) {
+      stored.set(name, cursor);
+    },
+  };
+}
+
+describe("Stellar amounts", () => {
+  it("formats and parses the hub's 7 decimal places exactly", () => {
+    expect(toStellarAmount({ asset: "USDC", amount: 29_000_000n })).toBe("2.9000000");
+    expect(fromStellarAmount("USDC", "2.9000000")).toBe(29_000_000n);
+    expect(fromStellarAmount("USDC", "2.9")).toBe(29_000_000n);
+    expect(fromStellarAmount("XLM", "0.0000001")).toBe(1n);
+  });
+
+  it("refuses an amount with more precision than Stellar can hold", () => {
+    expect(() => fromStellarAmount("USDC", "2.90000001")).toThrow(/more than 7 decimals/);
+  });
+});
+
+describe("Stellar assets", () => {
+  it("treats the issuer as part of the asset's identity", () => {
+    const other = Keypair.random().publicKey();
+    expect(assetOf(payment(), "testnet")).toBe("USDC");
+    // Same code, different issuer: not the USDC Corridor settles in.
+    expect(assetOf(payment({ asset_issuer: other }), "testnet")).toBeNull();
+    expect(assetOf({ asset_type: "native" }, "testnet")).toBe("XLM");
+  });
+
+  it("says which issuer is missing rather than guessing one", () => {
+    expect(() => stellarAsset("MGUSD", "mainnet")).toThrow(/no mainnet issuer configured for MGUSD/);
+    expect(stellarAsset("USDC", "testnet").getIssuer()).toBe(USDC_ISSUER);
+  });
+});
+
+describe("the reference as MEMO_HASH", () => {
+  it("rides on a real transaction and comes back off it whole", async () => {
+    const keypair = Keypair.fromSecret(Keypair.random().secret());
+    const signer = localStellarSigner(keypair.secret());
+    const ref = reference();
+
+    const tx = new TransactionBuilder(new SdkAccount(signer.address, "1"), {
+      fee: "100",
+      networkPassphrase: Networks.TESTNET,
+      memo: Memo.hash(Buffer.from(toStellarMemo(ref))),
+    })
+      .addOperation(Operation.payment({ destination: Keypair.random().publicKey(), asset: stellarAsset("USDC", "testnet"), amount: "2.9" }))
+      .setTimeout(180)
+      .build();
+
+    // The memo on the signed transaction is the 32 reference bytes, unchanged.
+    expect(fromStellarMemo(Buffer.from(tx.memo.value as Uint8Array).toString("base64"))).toBe(ref);
+
+    // And the signer's signature over the transaction hash verifies.
+    tx.addSignature(signer.address, Buffer.from(await signer.sign(tx.hash())).toString("base64"));
+    const signature = (tx.signatures[0]!.signature as unknown as { value: Uint8Array }).value;
+    expect(keypair.verify(tx.hash(), Buffer.from(signature))).toBe(true);
+  });
+
+  it("gives an Ed25519 key held elsewhere the same Stellar address", async () => {
+    const keypair = Keypair.random();
+    const held = ed25519StellarSigner(
+      { kind: "kms", signBytes: async (m) => new Uint8Array(keypair.sign(Buffer.from(m))) },
+      keypair.rawPublicKey(),
+    );
+    expect(held.address).toBe(keypair.publicKey());
+    expect(keypair.verify(Buffer.from("payout"), Buffer.from(await held.sign(new Uint8Array(Buffer.from("payout")))))).toBe(true);
+  });
+});
+
+describe("StellarObserver", () => {
+  const observe = async (records: StellarPaymentRecord[], unreferenced = false) => {
+    const source = fakeHorizon(records);
+    const cursors = memoryCursors();
+    const observer = new StellarObserver(source, { name: "vaults", network: "testnet", accounts: ["GVAULT"], cursors, pageSize: 2, unreferenced });
+    return { seen: await observer.poll(), source, cursors };
+  };
+
+  it("joins the memo back to the reference and reports the movement", async () => {
+    const ref = reference();
+    const { seen } = await observe([payment({ transaction: { memo: memoOf(ref), memo_type: "hash", ledger: 42 } })]);
+    expect(seen).toEqual<Observation[]>([
+      {
+        venue: "stellar",
+        externalRef: "abc:op1",
+        reference: ref,
+        asset: "USDC",
+        amount: 29_000_000n,
+        from: "GVAULT",
+        to: "GANCHOR",
+        blockNumber: 42n,
+        observedAt: new Date("2026-10-17T09:00:00Z"),
+      },
+    ]);
+  });
+
+  it("pages through Horizon and resumes from the stored cursor", async () => {
+    const records = [1, 2, 3, 4, 5].map((n) =>
+      payment({ id: `op${n}`, paging_token: `${100 + n}`, transaction: { memo: memoOf(reference()), memo_type: "hash", ledger: n } }),
+    );
+    const { seen, source, cursors } = await observe(records);
+    expect(seen).toHaveLength(5);
+    // Pages of two, stopping on the short page.
+    expect(source.calls).toEqual([undefined, "102", "104"]);
+    expect(cursors.stored.get("vaults")).toBe(105n);
+  });
+
+  it("ignores a payment without a reference unless asked for unreferenced movements", async () => {
+    expect(await (await observe([payment()])).seen).toEqual([]);
+    const { seen } = await observe([payment()], true);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.reference).toBeNull();
+  });
+
+  it("skips a look-alike asset from another issuer", async () => {
+    const ref = reference();
+    const { seen } = await observe([
+      payment({ asset_issuer: Keypair.random().publicKey(), transaction: { memo: memoOf(ref), memo_type: "hash" } }),
+    ]);
+    expect(seen).toEqual([]);
+  });
+
+  it("reports account funding and the fee the transaction charged", async () => {
+    const { seen } = await observe(
+      [
+        payment({
+          type: "create_account",
+          from: undefined,
+          to: undefined,
+          amount: undefined,
+          asset_type: "native",
+          asset_code: undefined,
+          asset_issuer: undefined,
+          funder: "GSPONSOR",
+          account: "GVAULT",
+          starting_balance: "1.5000000",
+          transaction: { ledger: 7, source_account: "GVAULT", fee_charged: "100" },
+        }),
+      ],
+      true,
+    );
+    expect(seen).toEqual([
+      expect.objectContaining({ externalRef: "abc:op1", asset: "XLM", amount: 15_000_000n, from: "GSPONSOR", to: "GVAULT" }),
+      expect.objectContaining({ externalRef: "abc:fee", asset: "XLM", amount: 100n, from: "GVAULT" }),
+    ]);
+  });
+
+  it("drops movements from a failed transaction", async () => {
+    const { seen } = await observe([payment({ transaction_successful: false, transaction: { memo: memoOf(reference()), memo_type: "hash" } })]);
+    expect(seen).toEqual([]);
+  });
+});
