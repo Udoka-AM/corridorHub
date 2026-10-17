@@ -5,9 +5,13 @@ import type { Fiat, Hex } from "@corridor/core";
  * against USDC (payout / offramp) and collects local currency into USDC
  * (collection / onramp). Every partner is normalised to this interface so
  * legs, webhooks and reconciliation never depend on one provider's API.
+ *
+ * A Stellar anchor speaks SEPs rather than a bespoke REST API, and
+ * `SepAnchor` in ./sep.ts implements this same interface over SEP-10/12/31/38
+ * — so an anchor and a cross-chain partner are interchangeable to the legs.
  */
 
-export type PartnerChain = "SOLANA" | "BASE";
+export type PartnerChain = "STELLAR" | "SOLANA" | "BASE";
 
 export type OrderStatus = "open" | "processing" | "completed" | "failed";
 

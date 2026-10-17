@@ -1,13 +1,13 @@
 import { createECDH, createPrivateKey, sign as nodeSign } from "node:crypto";
-import { keccak256, toHex } from "viem";
-import { PublicKey, Secp256k1 } from "viem/tempo";
+import { keccak256, recoverPublicKey, serializeSignature, toHex } from "viem";
 import type { Hex } from "@corridor/core";
-import type { EcdsaSignature, Ed25519Signer, Secp256k1Signer } from "./index.ts";
+import { toViemSignature, type EcdsaSignature, type Ed25519Signer, type Secp256k1Signer } from "./index.ts";
 
 /**
  * Turnkey adapter. Keys live in the customer's Turnkey organisation; Corridor
- * calls the raw-payload signing activity with a digest (secp256k1: Tempo,
- * Base) or a transaction message (Ed25519: Solana) and gets a signature back.
+ * calls the raw-payload signing activity with a digest (secp256k1: Base and
+ * other EVM chains) or a transaction message (Ed25519: Stellar, Solana) and
+ * gets a signature back.
  *
  * Requests are authenticated with an API key stamp: the request body signed
  * with the API key's P-256 private key, sent in the `X-Stamp` header. If the
@@ -134,7 +134,7 @@ const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
 const PROBE = keccak256(toHex("corridor:turnkey:public-key"));
 
 /**
- * secp256k1 key in Turnkey (Tempo and Base vaults). Pass the key's public key
+ * secp256k1 key in Turnkey (Base and other EVM vaults). Pass the key's public key
  * if you have it; otherwise it is recovered once from a signature over a fixed
  * probe digest, so no read permission is needed.
  */
@@ -157,7 +157,7 @@ export function turnkeySecp256k1Signer(api: TurnkeyApi, signWith: string, public
     async publicKey() {
       if (!cached) {
         const sig = await signDigest(PROBE);
-        cached = PublicKey.toHex(Secp256k1.recoverPublicKey({ payload: PROBE, signature: sig })) as Hex;
+        cached = (await recoverPublicKey({ hash: PROBE, signature: serializeSignature(toViemSignature(sig)) })) as Hex;
       }
       return cached;
     },

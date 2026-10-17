@@ -6,18 +6,9 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "tempo:smoke": "tsx scripts/tempo-smoke.ts",
-    "payout:demo": "tsx scripts/payout-demo.ts",
-    "mainnet:wallets": "tsx scripts/mainnet-wallets.ts",
-    "mainnet:run": "tsx scripts/mainnet-run.ts",
-    "mainnet:saga": "tsx scripts/mainnet-saga.ts",
-    "across:testnet": "tsx scripts/across-testnet.ts",
-    "zcash:batch": "tsx scripts/zcash-batch.ts",
-    "zcash:frost": "tsx scripts/zcash-frost.ts",
-    "importer:demo": "tsx scripts/importer-demo.ts",
-    "console": "tsx apps/console/src/server.ts",
-    "console:snapshot": "tsx scripts/snapshot-console.ts",
-    "paj:check": "tsx scripts/paj-check.ts",
+    "stellar:smoke": "tsx scripts/stellar-smoke.ts",
+    "stellar:wallets": "tsx scripts/stellar-wallets.ts",
+    "stellar:payout": "tsx scripts/stellar-payout.ts",
     "watch:report": "tsx scripts/watch-report.ts"
   },
   "devDependencies": {
@@ -27,22 +18,20 @@
     "vitest": "3"
   },
   "dependencies": {
-    "@corridor/chain-tempo": "workspace:^",
-    "@corridor/core": "workspace:^",
-    "@corridor/ledger": "workspace:^",
-    "@corridor/legs": "workspace:^",
-    "@corridor/recon": "workspace:^",
-    "@corridor/routing": "workspace:^",
-    "@corridor/saga": "workspace:^",
-    "@electric-sql/pglite": "^0.5.8",
-    "viem": "2.56.9",
-    "@corridor/bridge-across": "workspace:*",
-    "@corridor/chain-zcash": "workspace:*",
-    "@corridor/partners": "workspace:*",
-    "@corridor/webhooks": "workspace:*",
-    "@corridor/chain-solana": "workspace:*",
-    "@corridor/swap-near": "workspace:*",
     "@corridor/chain-evm": "workspace:*",
-    "@corridor/signer": "workspace:*"
+    "@corridor/chain-solana": "workspace:*",
+    "@corridor/chain-stellar": "workspace:*",
+    "@corridor/core": "workspace:*",
+    "@corridor/ledger": "workspace:*",
+    "@corridor/legs": "workspace:*",
+    "@corridor/partners": "workspace:*",
+    "@corridor/recon": "workspace:*",
+    "@corridor/routing": "workspace:*",
+    "@corridor/saga": "workspace:*",
+    "@corridor/signer": "workspace:*",
+    "@corridor/webhooks": "workspace:*",
+    "@electric-sql/pglite": "^0.5.8",
+    "@stellar/stellar-sdk": "^17.2.1",
+    "viem": "2.56.9"
   }
 }

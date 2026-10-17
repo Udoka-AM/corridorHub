@@ -1,4 +1,4 @@
-import { FIAT, parseMoney, type Fiat, type Hex } from "@corridor/core";
+import { FIAT, type Fiat, type Hex, assetDecimals, parseMoney, rescale } from "@corridor/core";
 import {
   PartnerError,
   type CollectionRequest,
@@ -22,7 +22,7 @@ import { header, verifyWebhookSignature } from "./webhook.ts";
  * - Status: INIT → PROCESSING → COMPLETED | ERROR, pushed by signed webhook.
  */
 
-const USDC_MINT: Record<PartnerChain, string> = {
+const USDC_MINT: Partial<Record<PartnerChain, string>> = {
   SOLANA: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
   BASE: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
 };
@@ -173,11 +173,16 @@ export class PajPartner implements RampPartner {
 }
 
 // Paj uses decimal numbers on the wire; Corridor uses integer minor units.
+// Paj settles on Solana, where USDC has 6 decimals, so an amount carrying a
+// seventh is not payable: `rescale` refuses it rather than rounding it away.
+const USDC_DP = assetDecimals("USDC");
+const SOLANA_USDC_DP = 6;
+
 function usdcToNumber(base: bigint): number {
-  return Number(base) / 1e6;
+  return Number(rescale(base, USDC_DP, SOLANA_USDC_DP)) / 10 ** SOLANA_USDC_DP;
 }
 function numberToUsdc(n: number | string): bigint {
-  return parseMoney("USDC", Number(n).toFixed(6)).amount;
+  return parseMoney("USDC", Number(n).toFixed(USDC_DP)).amount;
 }
 function minorToNumber(c: Fiat, minor: bigint): number {
   return Number(minor) / 10 ** FIAT[c].decimals;

@@ -1,5 +1,5 @@
 {
-  "name": "@corridor/chain-tempo",
+  "name": "@corridor/chain-stellar",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@corridor/core": "workspace:*"
+    "@corridor/core": "workspace:*",
+    "@stellar/stellar-sdk": "^17.2.1"
   }
 }

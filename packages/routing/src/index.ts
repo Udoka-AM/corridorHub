@@ -4,29 +4,34 @@ import { isShieldedVenue, type Asset, type CorridorCode, type Fiat, type Venue }
  * Route graph. Nodes are (venue, asset) positions; edges are leg kinds the
  * saga engine can execute.
  *
- * The network is hub-and-spoke with Tempo as the settlement hub:
- *   - a **collection** brings funds from a spoke into the customer's Tempo balance
+ * The network is hub-and-spoke with Stellar as the settlement hub:
+ *   - a **collection** brings funds from a spoke into the customer's Stellar balance
  *   - a **payout** takes funds from that balance out to a spoke
  * A cross-border flow (e.g. a Nigerian importer paying a Chinese supplier) is
  * a collection in NGN followed by a payout in CNY/USD. N spokes need N
  * integrations, not N×N corridors, and every flow is settled, held and
- * reconciled on Tempo.
+ * reconciled on Stellar.
  *
- * "Shielded" is a constraint on where a payout ends, not a separate subsystem.
+ * Anchors are the fiat spokes and they settle on Stellar itself, so the
+ * anchor leg touches the hub directly: no bridge hop stands between a payout
+ * and the beneficiary's currency. Other chains only appear as inflows, where
+ * USDC arrives over CCTP and is credited on the hub.
  */
 
 export type LegKind =
   | "ledger.reserve"
   | "ledger.credit"
-  | "tempo.dexSwap"
-  | "tempo.transfer"
-  | "across.bridge"
+  /** Payment on Stellar carrying the reference as MEMO_HASH. */
+  | "stellar.transfer"
+  /** Strict-receive path payment: on-ledger FX between two issued assets. */
+  | "stellar.pathPayment"
+  /** USDC in from Base or Solana over CCTP. */
+  | "cctp.transfer"
   | "bridge.simulated"
   | "solana.transfer"
+  /** Anchor spokes, over the normalised partner interface (SEP-6/24/31/38). */
   | "partner.collect"
-  | "partner.payout"
-  | "near.swap"
-  | "zcash.shieldedBatch";
+  | "partner.payout";
 
 export interface Position {
   venue: Venue;
@@ -82,7 +87,7 @@ export interface RouteRequest {
 }
 
 /** The hub: customer balances are held and settled here. */
-export const HUB: Position = { venue: "tempo", asset: "pathUSD" };
+export const HUB: Position = { venue: "stellar", asset: "USDC" };
 
 /**
  * Where ramp partners can collect local currency (on-ramp) and pay it out
@@ -91,14 +96,19 @@ export const HUB: Position = { venue: "tempo", asset: "pathUSD" };
  */
 export const COLLECTION_CURRENCIES: readonly Fiat[] = [
   // Africa: importers and businesses paying abroad
-  "NGN", "KES", "GHS", "ZAR", "EGP", "UGX", "XOF",
+  "KES", "XOF", "TZS", "NGN", "GHS", "ZAR", "EGP", "UGX",
   // Diaspora and corporate senders
   "USD", "EUR", "GBP", "CAD",
 ];
 
+/**
+ * Payout currencies, in the order corridors open: Kenyan shilling, West
+ * African franc and Tanzanian shilling first, then naira through a licensed
+ * partner, then Ghana and South Africa.
+ */
 export const PAYOUT_CURRENCIES: readonly Fiat[] = [
   // Africa
-  "NGN", "KES", "GHS", "ZAR", "EGP", "UGX", "TZS", "RWF", "XOF", "XAF", "MAD",
+  "KES", "XOF", "TZS", "NGN", "GHS", "ZAR", "EGP", "UGX", "RWF", "XAF", "MAD",
   // Asia and Middle East: supplier payments for imports
   "CNY", "HKD", "INR", "AED", "SGD", "TRY", "IDR", "VND", "PHP", "JPY",
   // Americas
@@ -108,42 +118,47 @@ export const PAYOUT_CURRENCIES: readonly Fiat[] = [
 ];
 
 /**
- * Currencies a partner can pay out directly from Base USDC, one Across hop from the hub.
- * Empty for now: Paj, the naira partner, settles on Solana only (Oct 2026). Adding a
- * Base-settling partner is a one-line change here.
+ * Currencies reachable only through an anchor that settles off Stellar, for
+ * as long as no Stellar anchor holds the licence. Naira is the case that
+ * matters: it goes out over a cross-chain partner until a licensed naira
+ * anchor is live on Stellar, and moving it is then one line here.
  */
-export const BASE_PAYOUT_CURRENCIES: readonly Fiat[] = [];
+export const OFF_STELLAR_PAYOUT_CURRENCIES: readonly Fiat[] = ["NGN"];
+
+/** The same, for collections. */
+export const OFF_STELLAR_COLLECTION_CURRENCIES: readonly Fiat[] = ["NGN"];
 
 const p = (venue: Venue, asset: Asset): Position => ({ venue, asset });
 
 /** The edges Corridor can execute. Venue-specific details live in the leg implementations. */
 export const DEFAULT_EDGES: Edge[] = [
-  { kind: "tempo.dexSwap", from: p("tempo", "USDC.e"), to: p("tempo", "pathUSD"), cost: 1 },
+  // On-ledger FX and stablecoin swaps, through Stellar's own order books.
+  { kind: "stellar.pathPayment", from: p("stellar", "EURC"), to: p("stellar", "USDC"), cost: 1 },
+  { kind: "stellar.pathPayment", from: p("stellar", "USDC"), to: p("stellar", "EURC"), cost: 1 },
+  { kind: "stellar.pathPayment", from: p("stellar", "MGUSD"), to: p("stellar", "USDC"), cost: 1 },
+  { kind: "stellar.pathPayment", from: p("stellar", "USDC"), to: p("stellar", "MGUSD"), cost: 1 },
 
-  // Hub ↔ Solana liquidity. Live Across has no direct Tempo↔Solana route: two hops via Base.
-  { kind: "across.bridge", from: p("tempo", "pathUSD"), to: p("base", "USDC"), cost: 2, env: ["mainnet"] },
-  // Across also takes USDC.e on Tempo directly, so a USDC.e balance pays out without a DEX swap first.
-  { kind: "across.bridge", from: p("tempo", "USDC.e"), to: p("base", "USDC"), cost: 2, env: ["mainnet"] },
-  { kind: "across.bridge", from: p("base", "USDC"), to: p("solana", "USDC"), cost: 2, env: ["mainnet"] },
-  { kind: "across.bridge", from: p("solana", "USDC"), to: p("base", "USDC"), cost: 2, env: ["mainnet"] },
-  { kind: "across.bridge", from: p("base", "USDC"), to: p("tempo", "pathUSD"), cost: 2, env: ["mainnet"] },
-  // Same interface where Across has no Tempo deployment (testnet).
-  { kind: "bridge.simulated", from: p("tempo", "pathUSD"), to: p("solana", "USDC"), cost: 3, env: ["testnet"] },
-  { kind: "bridge.simulated", from: p("solana", "USDC"), to: p("tempo", "pathUSD"), cost: 3, env: ["testnet"] },
+  // Inflows from other chains. CCTP burns and mints canonical USDC, so no
+  // wrapped asset ever reaches the hub.
+  { kind: "cctp.transfer", from: p("base", "USDC"), to: p("stellar", "USDC"), cost: 2, env: ["mainnet"] },
+  { kind: "cctp.transfer", from: p("solana", "USDC"), to: p("stellar", "USDC"), cost: 2, env: ["mainnet"] },
+  { kind: "cctp.transfer", from: p("stellar", "USDC"), to: p("base", "USDC"), cost: 2, env: ["mainnet"] },
+  { kind: "cctp.transfer", from: p("stellar", "USDC"), to: p("solana", "USDC"), cost: 2, env: ["mainnet"] },
+  // Same interface where CCTP is not available to us (testnet).
+  { kind: "bridge.simulated", from: p("stellar", "USDC"), to: p("solana", "USDC"), cost: 3, env: ["testnet"] },
+  { kind: "bridge.simulated", from: p("solana", "USDC"), to: p("stellar", "USDC"), cost: 3, env: ["testnet"] },
 
-  // Spokes: ramp partners collect and pay out local currency against USDC on Solana.
-  ...COLLECTION_CURRENCIES.map((c): Edge => ({ kind: "partner.collect", from: p("partner_fiat", c), to: p("solana", "USDC"), cost: 1 })),
-  ...PAYOUT_CURRENCIES.map((c): Edge => ({ kind: "partner.payout", from: p("solana", "USDC"), to: p("partner_fiat", c), cost: 1 })),
-  // Partners that settle on Base would pay out straight from Base USDC: one bridge hop instead of two.
-  ...BASE_PAYOUT_CURRENCIES.map((c): Edge => ({ kind: "partner.payout", from: p("base", "USDC"), to: p("partner_fiat", c), cost: 1 })),
-
-  // Shielded spoke: into the Ironwood pool, then one batch transaction to all recipients.
-  // Into the shielded pool through NEAR Intents, which delivers ZEC to the vault's unified address.
-  // NEAR Intents has no Tempo market, so mainnet swaps from Base USDC (one Across hop out of the hub).
-  { kind: "near.swap", from: p("base", "USDC"), to: p("zcash_ironwood", "ZEC"), cost: 2, env: ["mainnet"] },
-  // Testnet: live mainnet quote, real Tempo leg out of the treasury, real testnet ZEC into the vault.
-  { kind: "near.swap", from: p("tempo", "pathUSD"), to: p("zcash_ironwood", "ZEC"), cost: 2, env: ["testnet"] },
-  { kind: "zcash.shieldedBatch", from: p("zcash_ironwood", "ZEC"), to: p("zcash_ironwood", "ZEC"), cost: 1 },
+  // Anchor spokes: local currency in and out against USDC on the hub itself.
+  ...COLLECTION_CURRENCIES.filter((c) => !OFF_STELLAR_COLLECTION_CURRENCIES.includes(c)).map(
+    (c): Edge => ({ kind: "partner.collect", from: p("partner_fiat", c), to: p("stellar", "USDC"), cost: 1 }),
+  ),
+  // Collected on Solana by a licensed partner, then brought to the hub.
+  ...OFF_STELLAR_COLLECTION_CURRENCIES.map((c): Edge => ({ kind: "partner.collect", from: p("partner_fiat", c), to: p("solana", "USDC"), cost: 1 })),
+  ...PAYOUT_CURRENCIES.filter((c) => !OFF_STELLAR_PAYOUT_CURRENCIES.includes(c)).map(
+    (c): Edge => ({ kind: "partner.payout", from: p("stellar", "USDC"), to: p("partner_fiat", c), cost: 1 }),
+  ),
+  // Currencies whose licensed partner settles on Solana: one CCTP hop out of the hub.
+  ...OFF_STELLAR_PAYOUT_CURRENCIES.map((c): Edge => ({ kind: "partner.payout", from: p("solana", "USDC"), to: p("partner_fiat", c), cost: 1 })),
 ];
 
 const key = (x: Position) => `${x.venue}/${x.asset}`;
@@ -154,8 +169,7 @@ export function planRoute(req: RouteRequest, edges: Edge[] = DEFAULT_EDGES): Rou
   const purpose = req.purpose ?? "payout";
   validate(req, purpose);
 
-  // The batch leg is appended explicitly, so keep it out of path search.
-  const usable = edges.filter((e) => (!e.env || e.env.includes(req.env)) && e.kind !== "zcash.shieldedBatch");
+  const usable = edges.filter((e) => !e.env || e.env.includes(req.env));
   const path = cheapestPath(req.source, req.destination, usable);
   if (!path) {
     throw new NoRouteError(`no ${req.env} ${purpose} route from ${key(req.source)} to ${key(req.destination)}`);
@@ -167,11 +181,6 @@ export function planRoute(req: RouteRequest, edges: Edge[] = DEFAULT_EDGES): Rou
     legs = [...path, { kind: "ledger.credit", from: req.destination, to: req.destination, cost: 0 }];
   } else {
     legs = [{ kind: "ledger.reserve", from: req.source, to: req.source, cost: 0 }, ...path];
-    if (req.privacy === "shielded") {
-      const batch = edges.find((e) => e.kind === "zcash.shieldedBatch");
-      if (!batch) throw new NoRouteError("no shielded batch leg available");
-      legs.push(batch);
-    }
   }
 
   return {
@@ -191,14 +200,16 @@ export function planRoute(req: RouteRequest, edges: Edge[] = DEFAULT_EDGES): Rou
 function validate(req: RouteRequest, purpose: Purpose): void {
   const onHub = (x: Position) => x.venue === HUB.venue;
   if (purpose === "payout" && !onHub(req.source)) {
-    throw new NoRouteError("payouts are funded from the customer's balance on the Tempo hub");
+    throw new NoRouteError("payouts are funded from the customer's balance on the Stellar hub");
   }
   if (purpose === "collection") {
-    if (!onHub(req.destination)) throw new NoRouteError("collections settle into the Tempo hub");
+    if (!onHub(req.destination)) throw new NoRouteError("collections settle into the Stellar hub");
     if (req.privacy !== "public") throw new NoRouteError("collections are public; privacy applies to payouts");
   }
   if (req.privacy === "shielded" && !isShieldedVenue(req.destination.venue)) {
-    throw new NoRouteError("a shielded payout must end in a shielded venue");
+    // No shielded venue is configured yet: the confidential lane lands with
+    // Stellar confidential tokens and auditor keys (ADR 0005).
+    throw new NoRouteError("no shielded venue is available: the confidential lane is not live yet");
   }
   if (req.privacy === "public" && isShieldedVenue(req.destination.venue)) {
     throw new NoRouteError("a public payout cannot end in a shielded venue");

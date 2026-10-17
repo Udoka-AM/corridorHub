@@ -1,5 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { FIAT, type Fiat } from "@corridor/core";
+import { FIAT, type Fiat, assetDecimals } from "@corridor/core";
 import {
   PartnerError,
   type CollectionRequest,
@@ -11,6 +11,9 @@ import {
   type Rates,
 } from "./types.ts";
 import { header, signWebhook, verifyWebhookSignature } from "./webhook.ts";
+
+/** The hub's own precision, so the mock prices like a real anchor. */
+const USDC_DP = assetDecimals("USDC");
 
 /**
  * A ramp partner for testnet and tests, behaving like Paj: one-off funding
@@ -72,7 +75,7 @@ export class MockPartner implements RampPartner {
       chain: req.chain,
       currency: req.currency,
       usdcAmount: req.usdcAmount,
-      fiatAmount: toMinor(req.currency, (Number(req.usdcAmount) / 1e6) * offRamp),
+      fiatAmount: toMinor(req.currency, (Number(req.usdcAmount) / 10 ** USDC_DP) * offRamp),
       rate: offRamp,
       fundingAddress: base58(randomBytes(32)), // a valid Solana address, so devnet funding can be a real transfer
       reference: req.reference,
@@ -85,7 +88,7 @@ export class MockPartner implements RampPartner {
 
   async openCollection(req: CollectionRequest): Promise<PartnerOrder> {
     const { onRamp } = await this.rates(req.currency);
-    const usdc = BigInt(Math.floor((Number(req.fiatAmount) / 10 ** FIAT[req.currency].decimals / onRamp) * 1e6));
+    const usdc = BigInt(Math.floor((Number(req.fiatAmount) / 10 ** FIAT[req.currency].decimals / onRamp) * 10 ** USDC_DP));
     const order: PartnerOrder = {
       partner: this.id,
       id: `mock_${randomUUID()}`,

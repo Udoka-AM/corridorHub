@@ -8,16 +8,16 @@ const FEE_MANAGER = "0xfeec000000000000000000000000000000000000";
 const ZERO = "0x0000000000000000000000000000000000000000";
 const STRANGER = "0x1111111111111111111111111111111111111111";
 const opts = {
-  vaults: [{ name: "treasury", address: TREASURY, asset: "pathUSD" as const, venue: "tempo" as const }],
+  vaults: [{ name: "treasury", address: TREASURY, asset: "USDC" as const, venue: "stellar" as const }],
   fundingSources: [ZERO],
   feeCollector: FEE_MANAGER,
 };
 
 const obs = (ref: string, from: string, to: string, amount: bigint, block: bigint): Observation => ({
-  venue: "tempo",
+  venue: "stellar",
   externalRef: ref,
   reference: null,
-  asset: "pathUSD",
+  asset: "USDC",
   amount,
   from,
   to,
@@ -39,9 +39,9 @@ describe("vault accounting", () => {
     expect(await bookVaultMovements(ledger, accounts, movements, opts)).toEqual({ gas: 1, funding: 1, failed: [] });
     expect(await bookVaultMovements(ledger, accounts, movements, opts)).toEqual({ gas: 0, funding: 0, failed: [] });
 
-    const vault = await accounts.vault("treasury", "pathUSD", "tempo");
-    expect(await ledger.balance(vault)).toEqual(money("pathUSD", 999_902n));
-    expect(await ledger.balance(await accounts.expense("gas", "pathUSD", "tempo"))).toEqual(money("pathUSD", 98n));
+    const vault = await accounts.vault("treasury", "USDC", "stellar");
+    expect(await ledger.balance(vault)).toEqual(money("USDC", 999_902n));
+    expect(await ledger.balance(await accounts.expense("gas", "USDC", "stellar"))).toEqual(money("USDC", 98n));
     expect(summarize(await reconcile(ledger, movements)).matched).toBe(2);
   });
 

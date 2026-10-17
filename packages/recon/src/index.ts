@@ -3,8 +3,8 @@ import type { Db, Ledger } from "@corridor/ledger";
 
 /**
  * Reconciliation: joins what observers saw on each venue with what the ledger
- * booked. Tempo log watchers, partner webhooks and the Zcash viewing-key
- * scanner all feed the same matcher.
+ * booked. Stellar payment watchers, chain observers on the spokes and anchor
+ * webhooks all feed the same matcher.
  */
 
 export type MatchStatus =
@@ -32,7 +32,10 @@ export async function reconcile(ledger: Ledger, observations: Observation[]): Pr
       results.push({ observation, status: observation.reference ? "unbooked" : "unreferenced" });
       continue;
     }
-    const bookedAmount = await ledger.entryTotal(entryId, observation.asset);
+    // Compare against the movement across Corridor's own positions: the
+    // customer-liability side of the same entry is in the same asset now that
+    // the hub settles in USDC, and no observer ever sees it.
+    const bookedAmount = await ledger.entryTotal(entryId, observation.asset, { excludeLiabilities: true });
     results.push({
       observation,
       entryId,

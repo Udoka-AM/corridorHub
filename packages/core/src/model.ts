@@ -1,15 +1,17 @@
 /**
- * Core domain model. Privacy is modelled as a venue (`zcash_ironwood`), not a
- * feature flag: shielded and public payouts are different paths through the
- * same route graph, booked in the same ledger. See docs/ARCHITECTURE.md §2.
+ * Core domain model.
  *
- * Corridor is a hub-and-spoke network: every flow is a collection into the
- * Tempo settlement hub or a payout out of it (§2.1). A corridor is just the
- * (funding currency, beneficiary currency) pair, so any region can be added
- * as a spoke without new corridor code.
+ * Corridor is a hub-and-spoke network on Stellar: every flow is a collection
+ * into the Stellar settlement hub or a payout out of it (docs/ARCHITECTURE.md
+ * §2.1). A corridor is just the (funding currency, beneficiary currency)
+ * pair, so any region can be added as a spoke without new corridor code.
+ *
+ * Anchors are the fiat spokes, normalised behind one partner interface
+ * (SEP-10/12/6/24/31/38), so N anchors mean N integrations rather than N×N
+ * corridors.
  */
 
-export const VENUES = ["tempo", "base", "solana", "partner_fiat", "zcash_ironwood"] as const;
+export const VENUES = ["stellar", "base", "solana", "partner_fiat"] as const;
 export type Venue = (typeof VENUES)[number];
 
 /**
@@ -59,19 +61,24 @@ export type Region = (typeof FIAT)[Fiat]["region"];
 
 /**
  * On-chain assets Corridor holds, routes through or observes. Stablecoins are
- * issuer-neutral: USDC, USDT, PYUSD and EURC are all first-class, so a
- * customer's ledger covers whatever its providers settle in. Which assets
- * exist on which chain lives in each chain package's registry.
+ * issuer-neutral: USDC, EURC, PYUSD and MGUSD are all first-class, so a
+ * customer's ledger covers whatever its anchors settle in.
+ *
+ * `decimals` is the ledger's minor unit, and it is the hub's own precision:
+ * Stellar carries every balance to 7 decimal places, so the ledger does too
+ * and a booked balance can equal an on-chain balance exactly (ADR 0008).
+ * Spokes that use fewer decimals convert at the edge — USDC is 6 dp on Solana
+ * and Base, which scales into 7 dp exactly. Which assets exist on which chain
+ * lives in each chain package's registry.
  */
 export const DIGITAL_ASSETS = {
-  pathUSD: { decimals: 6, currency: "USD" },
-  "USDC.e": { decimals: 6, currency: "USD" },
-  USDC: { decimals: 6, currency: "USD" },
-  USDT: { decimals: 6, currency: "USD" },
-  PYUSD: { decimals: 6, currency: "USD" },
-  EURC: { decimals: 6, currency: "EUR" },
-  ZEC: { decimals: 8, currency: "ZEC" },
-  // Native gas assets on the spokes. Held only as fee float and booked to expense:gas.
+  USDC: { decimals: 7, currency: "USD" },
+  USDT: { decimals: 7, currency: "USD" },
+  PYUSD: { decimals: 7, currency: "USD" },
+  MGUSD: { decimals: 7, currency: "USD" },
+  EURC: { decimals: 7, currency: "EUR" },
+  // Native gas assets. Held only as fee float and booked to expense:gas.
+  XLM: { decimals: 7, currency: "XLM" },
   SOL: { decimals: 9, currency: "SOL" },
   ETH: { decimals: 18, currency: "ETH" },
 } as const;
@@ -83,14 +90,14 @@ export const STABLECOINS = (Object.keys(DIGITAL_ASSETS) as DigitalAsset[]).filte
   (a): a is Stablecoin => DIGITAL_ASSETS[a].currency === "USD" || DIGITAL_ASSETS[a].currency === "EUR",
 );
 
-/** The asset each venue charges network fees in (Tempo charges in the stablecoin itself). */
-export const GAS_ASSET = { tempo: "pathUSD", base: "ETH", solana: "SOL" } as const;
+/** The asset each venue charges network fees in. */
+export const GAS_ASSET = { stellar: "XLM", base: "ETH", solana: "SOL" } as const;
 
 export function isStablecoin(asset: Asset): asset is Stablecoin {
   return (STABLECOINS as readonly string[]).includes(asset);
 }
 
-/** The fiat currency a stablecoin tracks (USD for USDC/USDT/PYUSD/pathUSD, EUR for EURC). */
+/** The fiat currency a stablecoin tracks (USD for USDC/USDT/PYUSD/MGUSD, EUR for EURC). */
 export function pegOf(asset: Stablecoin): "USD" | "EUR" {
   return DIGITAL_ASSETS[asset].currency;
 }
@@ -111,8 +118,12 @@ export function fiatFromIndex(index: number): Fiat {
   return hit[0];
 }
 
-/** Venues where value is only observable with a viewing key. */
-export const SHIELDED_VENUES: ReadonlySet<Venue> = new Set(["zcash_ironwood"]);
+/**
+ * Venues where value is only observable with a viewing key. Empty for now:
+ * the confidential lane arrives with Stellar confidential tokens and auditor
+ * keys (ADR 0005), and the reference already reserves a flag for it.
+ */
+export const SHIELDED_VENUES: ReadonlySet<Venue> = new Set<Venue>();
 
 export function isShieldedVenue(venue: Venue): boolean {
   return SHIELDED_VENUES.has(venue);
@@ -165,4 +176,18 @@ export function formatMoney({ asset, amount }: Money): string {
   const whole = s.slice(0, s.length - decimals);
   const frac = s.slice(s.length - decimals).replace(/0+$/, "");
   return `${whole}${frac ? "." + frac : ""} ${asset}`;
+}
+
+/**
+ * Rescale minor units between two precisions, refusing anything that would
+ * silently drop value. Spokes with fewer decimals than the hub (USDC is 6 dp
+ * on Solana and Base, 7 dp on Stellar) convert through this, so a stroop of
+ * dust surfaces as an error instead of disappearing.
+ */
+export function rescale(amount: bigint, from: number, to: number): bigint {
+  if (from === to) return amount;
+  if (to > from) return amount * 10n ** BigInt(to - from);
+  const divisor = 10n ** BigInt(from - to);
+  if (amount % divisor !== 0n) throw new Error(`${amount} (${from} dp) does not fit in ${to} dp without losing value`);
+  return amount / divisor;
 }

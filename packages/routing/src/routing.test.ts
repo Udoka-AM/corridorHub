@@ -1,77 +1,81 @@
 import { describe, expect, it } from "vitest";
 import { NoRouteError, planRoute } from "./index.ts";
 
-const source = { venue: "tempo", asset: "pathUSD" } as const;
+const source = { venue: "stellar", asset: "USDC" } as const;
 
 describe("route planner", () => {
-  it("routes a mainnet NGN payout through Base to Solana, where the naira partner settles", () => {
-    const plan = planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" });
+  it("pays out through a Stellar anchor without leaving the hub", () => {
+    const plan = planRoute({ corridor: "EUR-KES", privacy: "public", source, destination: { venue: "partner_fiat", asset: "KES" }, env: "mainnet" });
     expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
-      "ledger.reserve:tempo->tempo",
-      "across.bridge:tempo->base",
-      "across.bridge:base->solana",
-      "partner.payout:solana->partner_fiat",
+      "ledger.reserve:stellar->stellar",
+      "partner.payout:stellar->partner_fiat",
     ]);
     expect(plan.steps.every((s) => s.referenceScope === "payout")).toBe(true);
   });
 
-  it("uses the simulated bridge on testnet, where Across has no Tempo deployment", () => {
+  it("opens the first three corridors as single-hop anchor payouts", () => {
+    for (const asset of ["KES", "XOF", "TZS"] as const) {
+      const plan = planRoute({ corridor: `EUR-${asset}`, privacy: "public", source, destination: { venue: "partner_fiat", asset }, env: "mainnet" });
+      expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "partner.payout"]);
+    }
+  });
+
+  it("takes one CCTP hop for naira, where the licensed partner settles on Solana", () => {
+    const plan = planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" });
+    expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
+      "ledger.reserve:stellar->stellar",
+      "cctp.transfer:stellar->solana",
+      "partner.payout:solana->partner_fiat",
+    ]);
+  });
+
+  it("uses the simulated bridge on testnet, where CCTP is not wired up", () => {
     const plan = planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "testnet" });
     expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "bridge.simulated", "partner.payout"]);
   });
 
-  it("routes a shielded payout into the Ironwood pool through the same graph", () => {
-    const plan = planRoute({ corridor: "USD-USD", privacy: "shielded", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "testnet" });
-    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "near.swap", "zcash.shieldedBatch"]);
-  });
-
-  it("never puts per-recipient references on public legs of a shielded route", () => {
-    const plan = planRoute({ corridor: "USD-USD", privacy: "shielded", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "testnet" });
-    const scopes = Object.fromEntries(plan.steps.map((s) => [s.kind, s.referenceScope]));
-    expect(scopes).toEqual({ "ledger.reserve": "batch", "near.swap": "batch", "zcash.shieldedBatch": "item" });
-  });
-
-  it("converts other Tempo stablecoins to pathUSD first", () => {
+  it("converts another issued stablecoin to USDC on Stellar's own order books first", () => {
     const plan = planRoute({
-      corridor: "EUR-NGN",
+      corridor: "EUR-KES",
       privacy: "public",
-      source: { venue: "tempo", asset: "USDC.e" },
-      destination: { venue: "partner_fiat", asset: "NGN" },
-      env: "testnet",
+      source: { venue: "stellar", asset: "EURC" },
+      destination: { venue: "partner_fiat", asset: "KES" },
+      env: "mainnet",
     });
-    expect(plan.steps[1]?.kind).toBe("tempo.dexSwap");
+    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "stellar.pathPayment", "partner.payout"]);
   });
 
-  it("rejects mismatched privacy and destination", () => {
+  it("refuses a shielded payout until the confidential lane is live", () => {
     expect(() =>
-      planRoute({ corridor: "EUR-NGN", privacy: "shielded", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "testnet" }),
-    ).toThrow(NoRouteError);
-    expect(() =>
-      planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "testnet" }),
-    ).toThrow(NoRouteError);
-  });
-
-  it("takes the two-hop Solana route where no partner pays out from Base", () => {
-    const plan = planRoute({ corridor: "USD-UGX", privacy: "public", source, destination: { venue: "partner_fiat", asset: "UGX" }, env: "mainnet" });
-    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "across.bridge", "across.bridge", "partner.payout"]);
-    expect(plan.steps.at(-1)?.from.venue).toBe("solana");
+      planRoute({ corridor: "USD-USD", privacy: "shielded", source, destination: { venue: "partner_fiat", asset: "USD" }, env: "testnet" }),
+    ).toThrow(/confidential lane is not live/);
   });
 
   it("routes an import payment from a Nigerian importer's balance to a Chinese supplier", () => {
     const plan = planRoute({ corridor: "NGN-CNY", privacy: "public", source, destination: { venue: "partner_fiat", asset: "CNY" }, env: "mainnet" });
     expect(plan.purpose).toBe("payout");
-    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "across.bridge", "across.bridge", "partner.payout"]);
+    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "partner.payout"]);
   });
 
   it("pays suppliers across Asia and the Americas from the same hub", () => {
     for (const asset of ["HKD", "INR", "AED", "USD", "BRL", "MXN"] as const) {
-      const plan = planRoute({ corridor: `NGN-${asset}`, privacy: "public", source, destination: { venue: "partner_fiat", asset }, env: "testnet" });
+      const plan = planRoute({ corridor: `NGN-${asset}`, privacy: "public", source, destination: { venue: "partner_fiat", asset }, env: "mainnet" });
       expect(plan.steps.at(-1)).toMatchObject({ kind: "partner.payout", to: { asset } });
     }
   });
 
-  it("collects local currency into the Tempo hub and credits the customer", () => {
-    const mainnet = planRoute({
+  it("collects local currency into the Stellar hub and credits the customer", () => {
+    const direct = planRoute({
+      corridor: "KES-CNY",
+      purpose: "collection",
+      privacy: "public",
+      source: { venue: "partner_fiat", asset: "KES" },
+      destination: source,
+      env: "mainnet",
+    });
+    expect(direct.steps.map((s) => `${s.kind}:${s.to.venue}`)).toEqual(["partner.collect:stellar", "ledger.credit:stellar"]);
+
+    const viaSolana = planRoute({
       corridor: "NGN-CNY",
       purpose: "collection",
       privacy: "public",
@@ -79,41 +83,33 @@ describe("route planner", () => {
       destination: source,
       env: "mainnet",
     });
-    expect(mainnet.steps.map((s) => `${s.kind}:${s.to.venue}`)).toEqual([
+    expect(viaSolana.steps.map((s) => `${s.kind}:${s.to.venue}`)).toEqual([
       "partner.collect:solana",
-      "across.bridge:base",
-      "across.bridge:tempo",
-      "ledger.credit:tempo",
+      "cctp.transfer:stellar",
+      "ledger.credit:stellar",
     ]);
-    const testnet = planRoute({ ...mainnet, source: { venue: "partner_fiat", asset: "NGN" }, destination: source, env: "testnet" });
+
+    const testnet = planRoute({ ...viaSolana, source: { venue: "partner_fiat", asset: "NGN" }, destination: source, env: "testnet" });
     expect(testnet.steps.map((s) => s.kind)).toEqual(["partner.collect", "bridge.simulated", "ledger.credit"]);
   });
 
-  it("never lets a flow bypass the Tempo hub", () => {
+  it("never lets a flow bypass the Stellar hub", () => {
     // A payout must be funded from the hub...
     expect(() =>
       planRoute({ corridor: "NGN-CNY", privacy: "public", source: { venue: "partner_fiat", asset: "NGN" }, destination: { venue: "partner_fiat", asset: "CNY" }, env: "mainnet" }),
-    ).toThrow(/Tempo hub/);
+    ).toThrow(/Stellar hub/);
     // ...and a collection must land on it.
     expect(() =>
       planRoute({ corridor: "NGN-USD", purpose: "collection", privacy: "public", source: { venue: "partner_fiat", asset: "NGN" }, destination: { venue: "solana", asset: "USDC" }, env: "mainnet" }),
-    ).toThrow(/Tempo hub/);
+    ).toThrow(/Stellar hub/);
   });
 
-  it("routes a mainnet shielded batch out of the hub through Base and NEAR Intents", () => {
-    const plan = planRoute({ corridor: "USD-USD", privacy: "shielded", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "mainnet" });
-    expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
-      "ledger.reserve:tempo->tempo",
-      "across.bridge:tempo->base",
-      "near.swap:base->zcash_ironwood",
-      "zcash.shieldedBatch:zcash_ironwood->zcash_ironwood",
-    ]);
-    expect(plan.steps.filter((s) => s.referenceScope === "item").map((s) => s.kind)).toEqual(["zcash.shieldedBatch"]);
-  });
-
-  it("supports a shielded supplier payment from an importer", () => {
-    const plan = planRoute({ corridor: "NGN-CNY", privacy: "shielded", source, destination: { venue: "zcash_ironwood", asset: "ZEC" }, env: "testnet" });
-    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "near.swap", "zcash.shieldedBatch"]);
+  it("has no route to a currency no anchor covers", () => {
+    expect(() =>
+      planRoute({ corridor: "EUR-CHF", privacy: "public", source, destination: { venue: "partner_fiat", asset: "RWF" }, env: "mainnet" }),
+    ).not.toThrow();
+    expect(() =>
+      planRoute({ corridor: "EUR-USD", privacy: "public", source, destination: { venue: "stellar", asset: "XLM" }, env: "mainnet" }),
+    ).toThrow(NoRouteError);
   });
 });
-

@@ -202,10 +202,23 @@ export class Ledger {
   }
 
   /** Sum of debits in `asset` on an entry: the amount the entry moved in that asset. */
-  async entryTotal(entryId: string, asset: Asset): Promise<bigint> {
+  /**
+   * Total debited in `asset` by one entry.
+   *
+   * `excludeLiabilities` leaves out the customer-facing side of the entry, so
+   * what remains is the movement across Corridor's own positions — which is
+   * what a chain or anchor observation can be compared against. It matters
+   * now that the hub and its spokes settle in the same asset: a payout debits
+   * the customer's hold in USDC *and* moves USDC on a chain, and only the
+   * second of those is what an observer saw.
+   */
+  async entryTotal(entryId: string, asset: Asset, opts: { excludeLiabilities?: boolean } = {}): Promise<bigint> {
     const { rows } = await this.db.query<{ total: string | null }>(
-      `select sum(amount)::text total from postings where entry_id = $1 and asset = $2 and direction = 'D'`,
-      [entryId, asset],
+      `select sum(p.amount)::text total
+         from postings p join accounts a on a.id = p.account_id
+        where p.entry_id = $1 and p.asset = $2 and p.direction = 'D'
+          and ($3::bool is not true or a.type <> 'liability')`,
+      [entryId, asset, opts.excludeLiabilities ?? false],
     );
     return BigInt(rows[0]?.total ?? "0");
   }

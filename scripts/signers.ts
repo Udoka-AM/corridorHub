@@ -7,12 +7,16 @@
  * - CORRIDOR_SIGNER=turnkey with TURNKEY_ORGANIZATION_ID,
  *   TURNKEY_API_PRIVATE_KEY and <KEY_NAME>_TURNKEY_SIGN_WITH (the wallet
  *   account address, or SOLANA_VAULT_TURNKEY_ADDRESS for the Solana vault).
+ *
+ * Stellar and Solana share Ed25519, so one held key serves both: the Turnkey
+ * or MPC signer is wrapped by `ed25519StellarSigner` with its raw public key.
  */
 import { readFileSync } from "node:fs";
 import {
   TurnkeyApi,
   awsKmsApi,
   awsKmsSigner,
+  ed25519PublicKeyBytes,
   turnkeyEd25519Signer,
   turnkeySecp256k1Signer,
   evmAccount,
@@ -20,10 +24,10 @@ import {
   localEd25519Signer,
   localSecp256k1Signer,
   solanaSigner,
-  tempoAccount,
   type Secp256k1Signer,
 } from "@corridor/signer";
-import { testnetKey } from "./env.ts";
+import { ed25519StellarSigner, localStellarSigner, type StellarSigner } from "@corridor/chain-stellar";
+import { testnetKey, testnetStellarSecret } from "./env.ts";
 
 let turnkey: TurnkeyApi | undefined;
 function turnkeyApi(): TurnkeyApi {
@@ -51,8 +55,18 @@ export async function secp256k1SignerFor(keyName: string): Promise<Secp256k1Sign
   return localSecp256k1Signer(testnetKey(keyName));
 }
 
-export async function tempoAccountFor(keyName: string) {
-  return tempoAccount(await secp256k1SignerFor(keyName));
+/**
+ * The Stellar signer for a vault. A deployment points CORRIDOR_SIGNER at its
+ * own Ed25519 key holder; locally it is a Stellar secret in .env.local.
+ */
+export async function stellarSignerFor(keyName: string): Promise<StellarSigner> {
+  if (process.env.CORRIDOR_SIGNER === "turnkey") {
+    const signWith = process.env[`${keyName}_TURNKEY_SIGN_WITH`];
+    if (!signWith) throw new Error(`CORRIDOR_SIGNER=turnkey needs ${keyName}_TURNKEY_SIGN_WITH`);
+    const signer = turnkeyEd25519Signer(turnkeyApi(), signWith);
+    return ed25519StellarSigner(signer, ed25519PublicKeyBytes(signer));
+  }
+  return localStellarSigner(testnetStellarSecret(`${keyName}_STELLAR_SECRET`));
 }
 
 /** A Base (EVM) account for the relay wallet, through the same signer selection. */

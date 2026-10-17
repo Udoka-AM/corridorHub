@@ -1,8 +1,14 @@
-import { hashMessage, hashTypedData, keccak256, numberToHex, serializeSignature, serializeTransaction, type Address } from "viem";
+import { hashMessage, hashTypedData, keccak256, numberToHex, recoverPublicKey, serializeSignature, serializeTransaction, type Address } from "viem";
 import { publicKeyToAddress } from "viem/utils";
-import { toAccount, type LocalAccount } from "viem/accounts";
-import { Account as TempoAccount, PublicKey, Secp256k1 } from "viem/tempo";
-import { createKeyPairSignerFromBytes, signBytes as ed25519Sign, type Address as SolanaAddress, type SignatureBytes, type TransactionPartialSigner } from "@solana/kit";
+import { privateKeyToAccount, sign as secp256k1Sign, toAccount, type LocalAccount } from "viem/accounts";
+import {
+  createKeyPairSignerFromBytes,
+  getAddressEncoder,
+  signBytes as ed25519Sign,
+  type Address as SolanaAddress,
+  type SignatureBytes,
+  type TransactionPartialSigner,
+} from "@solana/kit";
 import type { Hex } from "@corridor/core";
 
 /**
@@ -12,8 +18,10 @@ import type { Hex } from "@corridor/core";
  * an MPC provider. The saga engine, routing and ledger never see key material.
  *
  * Two key families cover every venue Corridor moves money on:
- * - secp256k1 for Tempo and Base (EVM),
- * - Ed25519 for Solana.
+ * - secp256k1 for Base and other EVM chains,
+ * - Ed25519 for Stellar and Solana, which share the curve: one key can hold
+ *   both, and `ed25519PublicKeyBytes` gives the raw key that
+ *   `@corridor/chain-stellar` encodes as a G… address.
  */
 
 /** An ECDSA signature over a 32-byte digest, normalised to low-s with its recovery bit. */
@@ -53,22 +61,6 @@ export async function evmAddress(signer: Secp256k1Signer): Promise<Address> {
   return publicKeyToAddress(await signer.publicKey());
 }
 
-/**
- * A Tempo account backed by any secp256k1 signer. Tempo transactions (type
- * 0x76, fees in stablecoins) are hashed by viem/tempo and only the digest is
- * sent to the signer.
- */
-export async function tempoAccount(signer: Secp256k1Signer) {
-  return TempoAccount.from({
-    keyType: "secp256k1",
-    publicKey: PublicKey.fromHex(await signer.publicKey()),
-    source: signer.kind,
-    async sign({ hash }) {
-      return serializeSignature(toViemSignature(await signer.signDigest(hash)));
-    },
-  });
-}
-
 /** A viem account for Base (or any EVM chain) backed by any secp256k1 signer. */
 export async function evmAccount(signer: Secp256k1Signer): Promise<LocalAccount> {
   const address = await evmAddress(signer);
@@ -89,6 +81,15 @@ export async function evmAccount(signer: Secp256k1Signer): Promise<LocalAccount>
   });
 }
 
+/**
+ * The signer's raw 32-byte Ed25519 public key. Solana writes that key in
+ * base58 and Stellar in StrKey, so this is how one KMS or MPC key serves
+ * both: pass it to `ed25519StellarSigner` for the G… address.
+ */
+export function ed25519PublicKeyBytes(signer: Ed25519Signer): Uint8Array {
+  return new Uint8Array(getAddressEncoder().encode(signer.address as SolanaAddress));
+}
+
 /** A @solana/kit transaction signer backed by any Ed25519 signer (KMS, MPC or local). */
 export function solanaSigner(signer: Ed25519Signer): TransactionPartialSigner {
   const address = signer.address as SolanaAddress;
@@ -107,15 +108,15 @@ export function solanaSigner(signer: Ed25519Signer): TransactionPartialSigner {
 /* ------------------------------------------------------------------ */
 
 export function localSecp256k1Signer(privateKey: Hex): Secp256k1Signer {
-  const publicKey = PublicKey.toHex(Secp256k1.getPublicKey({ privateKey })) as Hex;
+  const publicKey = privateKeyToAccount(privateKey).publicKey as Hex;
   return {
     kind: "local",
     async publicKey() {
       return publicKey;
     },
     async signDigest(digest) {
-      const { r, s, yParity } = Secp256k1.sign({ payload: digest, privateKey });
-      return { r, s, yParity: yParity as 0 | 1 };
+      const { r, s, yParity } = await secp256k1Sign({ hash: digest, privateKey });
+      return { r: BigInt(r), s: BigInt(s), yParity: yParity as 0 | 1 };
     },
   };
 }
@@ -201,7 +202,7 @@ export function awsKmsSigner(kms: KmsApi, keyId: string): Secp256k1Signer {
       const { r, s: rawS } = parseDerSignature(der);
       const s = rawS > N / 2n ? N - rawS : rawS;
       for (const yParity of [0, 1] as const) {
-        const recovered = PublicKey.toHex(Secp256k1.recoverPublicKey({ payload: digest, signature: { r, s, yParity } }));
+        const recovered = await recoverPublicKey({ hash: digest, signature: serializeSignature(toViemSignature({ r, s, yParity })) });
         if (recovered.toLowerCase() === expected.toLowerCase()) return { r, s, yParity };
       }
       throw new Error(`KMS signature for ${keyId} does not match its public key`);

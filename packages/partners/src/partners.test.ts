@@ -69,7 +69,7 @@ describe("Paj adapter", () => {
     const order = await paj.openPayout({
       currency: "NGN",
       chain: "SOLANA",
-      usdcAmount: 7_000_000n,
+      usdcAmount: 70_000_000n,
       beneficiary: { bankCode: "058", accountNumber: "0123456789" },
       reference: ref,
     });
@@ -84,14 +84,14 @@ describe("Paj adapter", () => {
       mint: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v",
       description: `corridor:${ref.slice(2)}`,
     });
-    expect(order).toMatchObject({ kind: "payout", status: "open", fundingAddress: "4KSLE7EU1P7PQ8Rc4hdb2ZKq2JmWHD8UXJp7guEdyT9j", usdcAmount: 7_000_000n, fiatAmount: 1_071_000n, reference: ref });
+    expect(order).toMatchObject({ kind: "payout", status: "open", fundingAddress: "4KSLE7EU1P7PQ8Rc4hdb2ZKq2JmWHD8UXJp7guEdyT9j", usdcAmount: 70_000_000n, fiatAmount: 1_071_000n, reference: ref });
   });
 
   it("refuses Base, which Paj does not settle on for Corridor yet, before calling Paj", async () => {
     const calls: { url: string; init: RequestInit }[] = [];
     const paj = new PajPartner({ apiKey: "k", fetchImpl: recordingFetch(pajTx({ chain: "BASE" }), calls) });
     await expect(
-      paj.openPayout({ currency: "NGN", chain: "BASE", usdcAmount: 1_000_000n, beneficiary: { bankCode: "058", accountNumber: "1" }, reference: ref }),
+      paj.openPayout({ currency: "NGN", chain: "BASE", usdcAmount: 10_000_000n, beneficiary: { bankCode: "058", accountNumber: "1" }, reference: ref }),
     ).rejects.toThrow(/does not settle on BASE/);
     expect(calls).toHaveLength(0);
   });
@@ -102,7 +102,7 @@ describe("Paj adapter", () => {
     const paj = new PajPartner({ apiKey: "k", fetchImpl: recordingFetch(tx, calls) });
     const order = await paj.openCollection({ currency: "NGN", chain: "SOLANA", fiatAmount: 1_560_000n, recipient: "Recip1", reference: ref });
     expect(JSON.parse(String(calls[0]!.init.body))).toMatchObject({ fiatAmount: 15600, recipient: "Recip1", userExternalId: `corridor:${ref.slice(2)}` });
-    expect(order).toMatchObject({ kind: "collection", virtualAccount: { bank: "Wema", accountNumber: "9912345678" }, usdcAmount: 10_000_000n, reference: ref });
+    expect(order).toMatchObject({ kind: "collection", virtualAccount: { bank: "Wema", accountNumber: "9912345678" }, usdcAmount: 100_000_000n, reference: ref });
   });
 
   it("normalises webhook status updates and recovers the reference from the echoed description", () => {
@@ -118,7 +118,7 @@ describe("Paj adapter", () => {
   it("refuses currencies Paj does not serve in that direction", async () => {
     const paj = new PajPartner({ apiKey: "k", fetchImpl: recordingFetch({}, []) });
     await expect(
-      paj.openPayout({ currency: "CNY", chain: "SOLANA", usdcAmount: 1n, beneficiary: { bankCode: "x", accountNumber: "y" }, reference: ref }),
+      paj.openPayout({ currency: "CNY", chain: "SOLANA", usdcAmount: 10n, beneficiary: { bankCode: "x", accountNumber: "y" }, reference: ref }),
     ).rejects.toThrow(/does not support CNY/);
   });
 });
@@ -134,7 +134,7 @@ describe("mock partner", () => {
         events.push(JSON.parse(body).partnerStatus);
       },
     });
-    const order = await mock.openPayout({ currency: "NGN", chain: "SOLANA", usdcAmount: 7_000_000n, beneficiary: { bankCode: "058", accountNumber: "1" }, reference: ref });
+    const order = await mock.openPayout({ currency: "NGN", chain: "SOLANA", usdcAmount: 70_000_000n, beneficiary: { bankCode: "058", accountNumber: "1" }, reference: ref });
     expect(order.fundingAddress).toBeDefined();
     expect(order.fiatAmount).toBe(1_071_000n); // 7 USDC × 1530
     const done = await mock.observeFunding(order.id, "sig123");
@@ -148,7 +148,7 @@ describe("mock partner", () => {
     const o = await mock.openCollection({ currency: "NGN", chain: "SOLANA", fiatAmount: 1_560_000n, recipient: "HubWallet", reference: ref });
     expect(o.virtualAccount?.accountNumber).toMatch(/^9\d{9}$/);
     const done = await mock.payerTransferred(o.id);
-    expect(sent).toEqual([["HubWallet", 10_000_000n]]); // ₦15,600 at 1,560 = 10 USDC
+    expect(sent).toEqual([["HubWallet", 100_000_000n]]); // ₦15,600 at 1,560 = 10 USDC
     expect(done).toMatchObject({ status: "completed", txSignature: "deliverySig" });
   });
 });

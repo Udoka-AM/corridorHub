@@ -5,14 +5,14 @@ import {
   decodeRef,
   encodeRef,
   fromSolanaMemo,
-  fromZcashMemo,
+  fromStellarMemo,
   toSolanaMemo,
-  toZcashMemo,
+  toStellarMemo,
   tryDecodeRef,
   uuidv7,
   type CorridorRef,
 } from "./reference.ts";
-import { formatMoney, parseMoney } from "./model.ts";
+import { formatMoney, parseMoney, rescale } from "./model.ts";
 
 const ref = (over: Partial<CorridorRef> = {}): CorridorRef => ({
   kind: RefKind.Payout,
@@ -63,35 +63,43 @@ describe("Corridor Reference", () => {
     expect(a[14]).toBe("7");
   });
 
-  it("carries the same reference on Solana and Zcash", () => {
-    const hex = encodeRef(ref({ shielded: true, corridor: "USD-USD" }));
+  it("carries the same reference on Stellar and Solana", () => {
+    const hex = encodeRef(ref({ corridor: "USD-USD" }));
     expect(fromSolanaMemo(toSolanaMemo(hex))).toBe(hex);
 
-    const memo = toZcashMemo(hex, "INV-2026-0042");
-    expect(memo.length).toBe(512);
-    expect(memo[0]).toBeLessThanOrEqual(0xf4); // ZIP-302 text memo, readable in the recipient's wallet
-    expect(new TextDecoder().decode(memo.subarray(0, memo.indexOf(0)))).toBe(`INV-2026-0042\ncorridor:${hex.slice(2)}`);
-    expect(fromZcashMemo(memo)).toEqual({ ref: hex, invoiceRef: "INV-2026-0042" });
+    const memo = toStellarMemo(hex);
+    expect(memo.length).toBe(32); // MEMO_HASH is exactly a Corridor Reference
+    expect(fromStellarMemo(Buffer.from(memo).toString("base64"))).toBe(hex);
   });
 
-  it("ignores Zcash memos that are not Corridor references", () => {
-    const text = new Uint8Array(512);
-    text.set(new TextEncoder().encode("hello"));
-    expect(fromZcashMemo(text)).toBeNull();
-    const binary = new Uint8Array(512).fill(0xff);
-    expect(fromZcashMemo(binary)).toBeNull();
+  it("ignores Stellar memos that are not Corridor references", () => {
+    expect(fromStellarMemo(Buffer.alloc(32).toString("base64"))).toBeNull(); // 32 bytes, bad version
+    expect(fromStellarMemo(Buffer.from("INV-2026-0042").toString("base64"))).toBeNull(); // wrong length
+    const hex = encodeRef(ref());
+    expect(fromStellarMemo(Buffer.from(toStellarMemo(hex)).toString("base64"), "text")).toBeNull();
   });
 });
 
 describe("money", () => {
   it("parses and formats minor units exactly", () => {
-    const m = parseMoney("pathUSD", "12.5");
-    expect(m.amount).toBe(12_500_000n);
-    expect(formatMoney(m)).toBe("12.5 pathUSD");
-    expect(formatMoney(parseMoney("ZEC", "0.00000001"))).toBe("0.00000001 ZEC");
+    const m = parseMoney("USDC", "12.5");
+    expect(m.amount).toBe(125_000_000n); // 7 dp, the hub's own precision
+    expect(formatMoney(m)).toBe("12.5 USDC");
+    expect(formatMoney(parseMoney("XLM", "0.0000001"))).toBe("0.0000001 XLM");
   });
 
   it("refuses more precision than the asset has", () => {
     expect(() => parseMoney("NGN", "1.001")).toThrow(/decimals/);
+  });
+});
+
+describe("rescale", () => {
+  it("scales a 6 dp spoke amount into the hub's 7 dp exactly", () => {
+    expect(rescale(2_900_000n, 6, 7)).toBe(29_000_000n);
+    expect(rescale(29_000_000n, 7, 6)).toBe(2_900_000n);
+  });
+
+  it("refuses to drop a stroop on the way out to a 6 dp spoke", () => {
+    expect(() => rescale(29_000_001n, 7, 6)).toThrow(/without losing value/);
   });
 });

@@ -3,14 +3,16 @@ import { FIAT, corridor, fiatFromIndex, parseCorridor, type CorridorCode } from 
 
 /**
  * Corridor Reference: one 32-byte identifier that follows a payout across
- * Tempo (TIP-20 memo, an indexed event topic), Solana (SPL Memo) and Zcash
- * (encrypted output memo). Layout v2 (docs/ARCHITECTURE.md §7):
+ * Stellar (MEMO_HASH, which is exactly 32 bytes) and the spokes that feed it
+ * (SPL Memo on Solana, anchor free-text fields). Because the reference is the
+ * memo, reconciliation is a join on the watched account's own payment stream
+ * and needs no indexer (ADR 0003). Layout v2 (docs/ARCHITECTURE.md §7):
  *
  *   0      version (0x02)
  *   1      kind
  *   2      funding currency (FIAT index)
  *   3      beneficiary currency (FIAT index)
- *   4      flags (bit0 = shielded)
+ *   4      flags (bit0 = shielded, reserved for the confidential lane)
  *   5–20   payout / batch id (UUIDv7)
  *   21–27  customer tag (keyed hash, 7 bytes)
  *   28–31  checksum = sha256(bytes 0–27)[0..4]
@@ -98,37 +100,32 @@ export function fromSolanaMemo(memo: string): Hex | null {
   return m ? (`0x${m[1]}` as Hex) : null;
 }
 
-export const ZCASH_MEMO_BYTES = 512;
+export const STELLAR_MEMO_HASH_BYTES = 32;
 
 /**
- * Zcash: the reference plus an invoice reference, carried as a ZIP-302 text
- * memo on each shielded output. It is encrypted to the recipient (and to
- * holders of the viewing key), and the recipient's wallet shows it as text:
- *
- *   INV-2026-0042
- *   corridor:<64 hex>
+ * Stellar: carried as the transaction's `MEMO_HASH`, which is exactly the 32
+ * bytes of a Corridor Reference — no truncation, no encoding games, and the
+ * memo is part of the signed transaction rather than a separate operation.
+ * Horizon returns it base64-encoded, which is what `fromStellarMemo` takes.
  */
-export function toZcashMemo(ref: Hex, invoiceRef = ""): Uint8Array {
-  if (/[\r\n]/.test(invoiceRef)) throw new Error("invoiceRef must be a single line");
-  const text = `${invoiceRef ? invoiceRef + "\n" : ""}corridor:${ref.slice(2)}`;
-  const bytes = new TextEncoder().encode(text);
-  if (bytes.length > ZCASH_MEMO_BYTES) throw new Error("memo exceeds 512 bytes");
-  const memo = new Uint8Array(ZCASH_MEMO_BYTES); // ZIP-302: text is zero-padded to 512 bytes
-  memo.set(bytes);
-  return memo;
+export function toStellarMemo(ref: Hex): Uint8Array {
+  const bytes = fromHex(ref);
+  if (bytes.length !== STELLAR_MEMO_HASH_BYTES) throw new Error(`MEMO_HASH must be ${STELLAR_MEMO_HASH_BYTES} bytes`);
+  return bytes;
 }
 
-export function fromZcashMemo(memo: Uint8Array): { ref: Hex; invoiceRef: string } | null {
-  // ZIP-302: a first byte above 0xF4 means the memo is not UTF-8 text.
-  if (memo.length === 0 || memo.length > ZCASH_MEMO_BYTES || memo[0]! > 0xf4) return null;
-  const end = memo.indexOf(0);
-  const text = new TextDecoder().decode(end === -1 ? memo : memo.subarray(0, end));
-  const m = /(?:^|\n)corridor:([0-9a-f]{64})\s*$/.exec(text);
-  if (!m) return null;
-  const ref = `0x${m[1]}` as Hex;
-  if (!tryDecodeRef(ref)) return null;
-  const invoiceRef = text.slice(0, m.index).trim();
-  return { ref, invoiceRef };
+/** Horizon gives `memo_type: "hash"` memos as base64. Returns null for any other memo. */
+export function fromStellarMemo(memoBase64: string, memoType = "hash"): Hex | null {
+  if (memoType !== "hash" && memoType !== "return") return null;
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(memoBase64, "base64");
+  } catch {
+    return null;
+  }
+  if (bytes.length !== STELLAR_MEMO_HASH_BYTES) return null;
+  const ref = toHex(new Uint8Array(bytes));
+  return tryDecodeRef(ref) ? ref : null;
 }
 
 // ---- helpers ----

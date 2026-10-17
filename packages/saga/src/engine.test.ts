@@ -11,7 +11,7 @@ let accounts: Accounts;
 const plan = planRoute({
   corridor: "EUR-NGN",
   privacy: "public",
-  source: { venue: "tempo", asset: "pathUSD" },
+  source: { venue: "stellar", asset: "USDC" },
   destination: { venue: "partner_fiat", asset: "NGN" },
   env: "testnet",
 });
@@ -20,8 +20,8 @@ const data: PayoutData = {
   payoutId: "p1",
   customerId: "eu-payco",
   corridor: "EUR-NGN",
-  asset: "pathUSD",
-  venue: "tempo",
+  asset: "USDC",
+  venue: "stellar",
   amount: "3000000",
   reference: `0x${"ab".repeat(32)}`,
   recipient: { kind: "bank" },
@@ -36,16 +36,16 @@ function fakeLeg(kind: Leg["kind"], log: string[], opts: { failTimes?: number } 
     async forward(ctx) {
       log.push(`fwd ${kind}`);
       if (failures-- > 0) throw new Error(`transient ${kind}`);
-      const vault = await ctx.accounts.vault("treasury", "pathUSD", "tempo");
-      const clearing = await ctx.accounts.clearing(kind, "pathUSD", "tempo");
+      const vault = await ctx.accounts.vault("treasury", "USDC", "stellar");
+      const clearing = await ctx.accounts.clearing(kind, "USDC", "stellar");
       return {
         output: { ok: kind },
         bookings: [
           {
             kind,
             lines: [
-              { account: clearing, direction: "D", money: money("pathUSD", 1n) },
-              { account: vault, direction: "C", money: money("pathUSD", 1n) },
+              { account: clearing, direction: "D", money: money("USDC", 1n) },
+              { account: vault, direction: "C", money: money("USDC", 1n) },
             ],
           },
         ],
@@ -53,16 +53,16 @@ function fakeLeg(kind: Leg["kind"], log: string[], opts: { failTimes?: number } 
     },
     async compensate(ctx) {
       log.push(`comp ${kind}`);
-      const vault = await ctx.accounts.vault("treasury", "pathUSD", "tempo");
-      const clearing = await ctx.accounts.clearing(kind, "pathUSD", "tempo");
+      const vault = await ctx.accounts.vault("treasury", "USDC", "stellar");
+      const clearing = await ctx.accounts.clearing(kind, "USDC", "stellar");
       return {
         output: { undone: kind },
         bookings: [
           {
             kind: `${kind}.undo`,
             lines: [
-              { account: vault, direction: "D", money: money("pathUSD", 1n) },
-              { account: clearing, direction: "C", money: money("pathUSD", 1n) },
+              { account: vault, direction: "D", money: money("USDC", 1n) },
+              { account: clearing, direction: "C", money: money("USDC", 1n) },
             ],
           },
         ],
@@ -75,13 +75,13 @@ beforeEach(async () => {
   db = await openLocalDb();
   ledger = await Ledger.open(db);
   accounts = new Accounts(ledger);
-  const vault = await accounts.vault("treasury", "pathUSD", "tempo");
-  const customer = await accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo");
+  const vault = await accounts.vault("treasury", "USDC", "stellar");
+  const customer = await accounts.customer("eu-payco", "EUR-NGN", "USDC", "stellar");
   await ledger.post({
     kind: "deposit",
     lines: [
-      { account: vault, direction: "D", money: money("pathUSD", 10_000_000n) },
-      { account: customer, direction: "C", money: money("pathUSD", 10_000_000n) },
+      { account: vault, direction: "D", money: money("USDC", 10_000_000n) },
+      { account: customer, direction: "C", money: money("USDC", 10_000_000n) },
     ],
   });
 });
@@ -99,7 +99,7 @@ describe("saga engine", () => {
     expect(await engine.run(id)).toBe("completed");
     expect(log).toEqual(["fwd bridge.simulated", "fwd partner.payout"]);
 
-    const hold = await accounts.customerHold("eu-payco", "EUR-NGN", "pathUSD", "tempo");
+    const hold = await accounts.customerHold("eu-payco", "EUR-NGN", "USDC", "stellar");
     expect((await ledger.balance(hold)).amount).toBe(3_000_000n);
 
     // Re-running a finished saga is a no-op.
@@ -135,8 +135,8 @@ describe("saga engine", () => {
     expect(view.steps.map((s) => s.status)).toEqual(["compensated", "compensated", "failed"]);
 
     // Customer is whole again and the books still balance.
-    const available = await accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo");
-    const hold = await accounts.customerHold("eu-payco", "EUR-NGN", "pathUSD", "tempo");
+    const available = await accounts.customer("eu-payco", "EUR-NGN", "USDC", "stellar");
+    const hold = await accounts.customerHold("eu-payco", "EUR-NGN", "USDC", "stellar");
     expect((await ledger.balance(available)).amount).toBe(10_000_000n);
     expect((await ledger.balance(hold)).amount).toBe(0n);
     expect(await ledger.checkInvariants()).toEqual([]);
@@ -193,8 +193,8 @@ describe("saga engine", () => {
       async forward(ctx) {
         calls.push(worker);
         await new Promise((r) => setTimeout(r, delayMs));
-        const vault = await ctx.accounts.vault("treasury", "pathUSD", "tempo");
-        const clearing = await ctx.accounts.clearing("bridge", "pathUSD", "tempo");
+        const vault = await ctx.accounts.vault("treasury", "USDC", "stellar");
+        const clearing = await ctx.accounts.clearing("bridge", "USDC", "stellar");
         return {
           output: { by: worker },
           bookings: [
@@ -202,8 +202,8 @@ describe("saga engine", () => {
               kind: "bridge.move",
               external: { venue: "internal", ref: `${worker}:${Date.now()}` },
               lines: [
-                { account: clearing, direction: "D", money: money("pathUSD", 1n) },
-                { account: vault, direction: "C", money: money("pathUSD", 1n) },
+                { account: clearing, direction: "D", money: money("USDC", 1n) },
+                { account: vault, direction: "C", money: money("USDC", 1n) },
               ],
             },
           ],

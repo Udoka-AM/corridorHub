@@ -19,13 +19,13 @@ beforeEach(async () => {
   ledger = await Ledger.open(db);
   accounts = new Accounts(ledger);
   events = await PartnerEventStore.open(db);
-  const treasury = await accounts.vault("treasury", "pathUSD", "tempo");
-  const customer = await accounts.customer("eu-payco", "EUR-NGN", "pathUSD", "tempo");
+  const treasury = await accounts.vault("treasury", "USDC", "stellar");
+  const customer = await accounts.customer("eu-payco", "EUR-NGN", "USDC", "stellar");
   await ledger.post({
     kind: "deposit",
     lines: [
-      { account: treasury, direction: "D", money: money("pathUSD", 50_000_000n) },
-      { account: customer, direction: "C", money: money("pathUSD", 50_000_000n) },
+      { account: treasury, direction: "D", money: money("USDC", 500_000_000n) },
+      { account: customer, direction: "C", money: money("USDC", 500_000_000n) },
     ],
   });
 });
@@ -37,19 +37,19 @@ const fakeBridge: Leg<any> = {
   async forward(ctx) {
     const amt = BigInt(ctx.data.amount ?? (Object.values(ctx.outputs).find((o: any) => o?.usdcAmount) as any).usdcAmount);
     const a = ctx.accounts;
-    const t = await a.vault("treasury", "pathUSD", "tempo");
-    const pt = await a.clearing("usd-peg", "pathUSD", "tempo");
+    const t = await a.vault("treasury", "USDC", "stellar");
+    const pt = await a.clearing("usd-peg", "USDC", "stellar");
     const ps = await a.clearing("usd-peg", "USDC", "solana");
-    const out = ctx.step.from.venue === "tempo";
+    const out = ctx.step.from.venue === "stellar";
     const vault = await a.vault(out ? "solana-egress" : "solana-ingress", "USDC", "solana");
-    const pair = (asset: "pathUSD" | "USDC", d: string, c: string) => [
+    const pair = (asset: "USDC", d: string, c: string) => [
       { account: d, direction: "D" as const, money: money(asset, amt) },
       { account: c, direction: "C" as const, money: money(asset, amt) },
     ];
     return {
       output: { amount: amt.toString() },
       bookings: [
-        { kind: "bridge", lines: out ? pair("pathUSD", pt, t) : pair("pathUSD", t, pt) },
+        { kind: "bridge", lines: out ? pair("USDC", pt, t) : pair("USDC", t, pt) },
         { kind: "fill", lines: out ? pair("USDC", vault, ps) : pair("USDC", ps, vault) },
       ],
     };
@@ -64,9 +64,9 @@ function payoutData(over: Partial<PayoutData> = {}): PayoutData {
     payoutId: id,
     customerId: "eu-payco",
     corridor: "EUR-NGN",
-    asset: "pathUSD",
-    venue: "tempo",
-    amount: "7000000",
+    asset: "USDC",
+    venue: "stellar",
+    amount: "70000000",
     reference: ref(),
     recipient: { kind: "bank", bankCode: "058", accountNumber: "0123456789" },
     ...over,
@@ -76,7 +76,7 @@ function payoutData(over: Partial<PayoutData> = {}): PayoutData {
 const payoutPlan = planRoute({
   corridor: "EUR-NGN",
   privacy: "public",
-  source: { venue: "tempo", asset: "pathUSD" },
+  source: { venue: "stellar", asset: "USDC" },
   destination: { venue: "partner_fiat", asset: "NGN" },
   env: "testnet",
 });
@@ -185,7 +185,7 @@ describe("collection: importer pays naira, customer's hub balance is credited", 
       purpose: "collection",
       privacy: "public",
       source: { venue: "partner_fiat", asset: "NGN" },
-      destination: { venue: "tempo", asset: "pathUSD" },
+      destination: { venue: "stellar", asset: "USDC" },
       env: "testnet",
     });
     expect(plan.steps.map((s) => s.kind)).toEqual(["partner.collect", "bridge.simulated", "ledger.credit"]);
@@ -203,8 +203,8 @@ describe("collection: importer pays naira, customer's hub balance is credited", 
     expect(await engine.run(id)).toBe("completed");
     expect(shown).toHaveLength(1);
 
-    const balance = await ledger.balance(await accounts.customer("acme-imports", "NGN-CNY", "pathUSD", "tempo"));
-    expect(balance.amount).toBe(10_000_000n); // ₦15,600 at 1,560 = 10 USDC, now spendable on the hub
+    const balance = await ledger.balance(await accounts.customer("acme-imports", "NGN-CNY", "USDC", "stellar"));
+    expect(balance.amount).toBe(100_000_000n); // ₦15,600 at 1,560 = 10 USDC, now spendable on the hub
     expect(await ledger.checkInvariants()).toEqual([]);
   });
 });

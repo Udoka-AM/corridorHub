@@ -1,7 +1,7 @@
+import { webcrypto } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { hashMessage, keccak256, parseTransaction, recoverAddress, recoverMessageAddress, serializeTransaction, toHex } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { Account as TempoAccount, PublicKey, Secp256k1 } from "viem/tempo";
+import { privateKeyToAccount, sign as secp256k1Sign } from "viem/accounts";
 import type { Hex } from "@corridor/core";
 import {
   awsKmsSigner,
@@ -9,9 +9,9 @@ import {
   evmAddress,
   localSecp256k1Signer,
   parseDerSignature,
+  ed25519PublicKeyBytes,
   localEd25519Signer,
   solanaSigner,
-  tempoAccount,
   toViemSignature,
   uncompressedFromSpki,
   type KmsApi,
@@ -35,10 +35,12 @@ function fakeKms(privateKey: Hex): KmsApi {
   let flip = false;
   return {
     async getPublicKey() {
-      return bytes(SPKI_HEADER + PublicKey.toHex(Secp256k1.getPublicKey({ privateKey })).slice(2));
+      return bytes(SPKI_HEADER + privateKeyToAccount(privateKey).publicKey.slice(2));
     },
     async signDigest(_keyId, digest) {
-      const { r, s } = Secp256k1.sign({ payload: toHex(digest), privateKey });
+      const sig = await secp256k1Sign({ hash: toHex(digest), privateKey });
+      const r = BigInt(sig.r);
+      const s = BigInt(sig.s);
       flip = !flip;
       const body = derInt(r) + derInt(flip ? N - s : s);
       return bytes("30" + (body.length / 2).toString(16).padStart(2, "0") + body);
@@ -52,7 +54,7 @@ describe("signer", () => {
   it("parses DER signatures and SPKI public keys", () => {
     const sig = parseDerSignature(bytes("3006020101020102"));
     expect(sig).toEqual({ r: 1n, s: 2n });
-    const pub = PublicKey.toHex(Secp256k1.getPublicKey({ privateKey: KEY }));
+    const pub = privateKeyToAccount(KEY).publicKey;
     expect(uncompressedFromSpki(bytes(SPKI_HEADER + pub.slice(2)))).toBe(pub);
   });
 
@@ -83,14 +85,17 @@ describe("signer", () => {
     expect(await recoverMessageAddress({ message, signature })).toBe(expectedAddress);
   });
 
-  it("gives a Tempo account the same address and signatures as viem/tempo's own local account", async () => {
-    const local = TempoAccount.fromSecp256k1(KEY);
-    const viaSigner = await tempoAccount(localSecp256k1Signer(KEY));
-    expect(viaSigner.address).toBe(local.address);
-    const hash = hashMessage("tempo");
-    expect(await viaSigner.sign({ hash })).toBe(await local.sign({ hash }));
-    const viaKms = await tempoAccount(awsKmsSigner(fakeKms(KEY), "k"));
-    expect(viaKms.address).toBe(local.address);
+  it("exposes the raw Ed25519 public key, so one key can address Solana and Stellar", async () => {
+    const { publicKey, privateKey } = (await webcrypto.subtle.generateKey({ name: "Ed25519" }, true, ["sign", "verify"])) as CryptoKeyPair;
+    const seed = new Uint8Array((await webcrypto.subtle.exportKey("pkcs8", privateKey)).slice(-32));
+    const raw = new Uint8Array(await webcrypto.subtle.exportKey("raw", publicKey));
+    // solana-keygen writes the secret as seed || public key.
+    const secret = new Uint8Array(64);
+    secret.set(seed);
+    secret.set(raw, 32);
+
+    const signer = await localEd25519Signer(secret);
+    expect(ed25519PublicKeyBytes(signer)).toEqual(raw);
   });
 
   it("wraps an Ed25519 signer as a Solana transaction signer", async () => {

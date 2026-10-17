@@ -7,16 +7,16 @@ export interface PayoutData {
   payoutId: string;
   customerId: string;
   corridor: CorridorCode;
-  /** Settlement asset and venue the customer is debited in (pathUSD on Tempo). */
+  /** Settlement asset and venue the customer is debited in (USDC on Stellar). */
   asset: Asset;
   venue: Venue;
   amount: string;
   reference: Hex;
-  /** Shielded routes: the only reference allowed on public legs. */
+  /** Batch routes: the only reference allowed on public legs. */
   batchReference?: Hex;
   recipient: { [k: string]: Json };
-  /** Tempo block the saga started at; legs scan from here to find work they already did. */
-  tempoStartBlock?: string;
+  /** Horizon paging token the saga started at; legs scan from here to find work they already did. */
+  stellarCursor?: string;
 }
 
 export const amountOf = (d: PayoutData) => money(d.asset, BigInt(d.amount));

@@ -1,11 +1,10 @@
 import { createECDH, createPublicKey, verify as nodeVerify, webcrypto } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { hashMessage, keccak256 } from "viem";
-import { privateKeyToAccount } from "viem/accounts";
-import { Account as TempoAccount, Secp256k1 } from "viem/tempo";
+import { privateKeyToAccount, sign as secp256k1Sign } from "viem/accounts";
 import { getAddressDecoder, verifySignature } from "@solana/kit";
 import type { Hex } from "@corridor/core";
-import { evmAccount, evmAddress, solanaSigner, tempoAccount } from "./index.ts";
+import { ed25519PublicKeyBytes, evmAccount, evmAddress, solanaSigner } from "./index.ts";
 import { TurnkeyApi, TurnkeyError, turnkeyEd25519Signer, turnkeySecp256k1Signer } from "./turnkey.ts";
 
 const EVM_KEY = "0x4c0883a69102937d6231471b5dbb6204fe5129617082792ae468d01a3f362318" as Hex;
@@ -43,8 +42,9 @@ async function fakeTurnkey(opts: { holdFirst?: boolean; fail?: boolean } = {}) {
     let result: object;
     if (hashFunction === "HASH_FUNCTION_NO_OP") {
       expect(signWith).toBe(EVM_ADDRESS);
-      const sig = Secp256k1.sign({ payload, privateKey: EVM_KEY });
-      result = { signRawPayloadResult: { r: sig.r.toString(16).padStart(64, "0"), s: sig.s.toString(16).padStart(64, "0"), v: `0${sig.yParity}` } };
+      const sig = await secp256k1Sign({ hash: payload, privateKey: EVM_KEY });
+      const hex = (v: `0x${string}`) => v.slice(2).padStart(64, "0");
+      result = { signRawPayloadResult: { r: hex(sig.r), s: hex(sig.s), v: `0${sig.yParity}` } };
     } else {
       expect(signWith).toBe(solAddress);
       const raw = new Uint8Array(await webcrypto.subtle.sign("Ed25519", ed.privateKey, Buffer.from(payload.slice(2), "hex")));
@@ -65,15 +65,10 @@ async function fakeTurnkey(opts: { holdFirst?: boolean; fail?: boolean } = {}) {
 }
 
 describe("Turnkey adapter", () => {
-  it("signs Tempo and Base digests with a Turnkey-held secp256k1 key", async () => {
+  it("signs EVM digests with a Turnkey-held secp256k1 key", async () => {
     const tk = await fakeTurnkey();
     const signer = turnkeySecp256k1Signer(tk.client, EVM_ADDRESS);
     expect(await evmAddress(signer)).toBe(EVM_ADDRESS); // public key recovered from a probe signature
-    const tempo = await tempoAccount(signer);
-    const local = TempoAccount.fromSecp256k1(EVM_KEY);
-    expect(tempo.address).toBe(local.address);
-    const hash = hashMessage("payout");
-    expect(await tempo.sign({ hash })).toBe(await local.sign({ hash }));
     const base = await evmAccount(signer);
     expect(base.address).toBe(EVM_ADDRESS);
     expect(tk.requests.every((r) => r.body.organizationId === "org_1")).toBe(true);

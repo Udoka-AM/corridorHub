@@ -8,14 +8,11 @@
   },
   "dependencies": {
     "@corridor/core": "workspace:*",
-    "@corridor/bridge-across": "workspace:*",
-    "@corridor/chain-tempo": "workspace:*",
+    "@corridor/chain-stellar": "workspace:*",
     "@corridor/ledger": "workspace:*",
     "@corridor/saga": "workspace:*",
     "@corridor/partners": "workspace:*",
     "@corridor/webhooks": "workspace:*",
-    "@corridor/routing": "workspace:*",
-    "@corridor/swap-near": "workspace:*",
-    "@corridor/chain-zcash": "workspace:*"
+    "@corridor/routing": "workspace:*"
   }
 }

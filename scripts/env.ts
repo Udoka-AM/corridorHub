@@ -1,6 +1,7 @@
 import { appendFileSync, existsSync } from "node:fs";
 import { setDefaultResultOrder } from "node:dns";
 import { generatePrivateKey } from "viem/accounts";
+import { Keypair } from "@stellar/stellar-sdk";
 import type { Hex } from "@corridor/core";
 
 // Some IPv6-only networks (NAT64) hand Node unreachable IPv6 addresses for
@@ -20,4 +21,17 @@ export function testnetKey(name: string): Hex {
     console.log(`generated ${name} -> ${ENV_FILE}`);
   }
   return v as Hex;
+}
+
+/** Read a Stellar secret from .env.local, generating a fresh testnet keypair on first use. */
+export function testnetStellarSecret(name: string): string {
+  let v = process.env[name];
+  if (!v) {
+    const keypair = Keypair.random();
+    v = keypair.secret();
+    appendFileSync(ENV_FILE, `${name}=${v}\n`);
+    process.env[name] = v;
+    console.log(`generated ${name} (${keypair.publicKey()}) -> ${ENV_FILE}`);
+  }
+  return v;
 }
