@@ -307,8 +307,12 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
         const order = await partner.getOrder(link!.orderId);
         if (order.status === "failed") throw new Error(`partner rejected order ${order.id} before funding`);
         if (!opts.fund) throw new NonRetryableError("no funding function configured for partner payouts");
+        // The receiving account recorded when the order was opened, or the
+        // one the anchor reports now: SEP-31 lets it arrive on either.
+        const to = link!.fundingAddress ?? order.fundingAddress;
+        if (!to) throw new NonRetryableError(`partner ${partner.id} gave no receiving account for order ${order.id}`);
         // Anchors may round the order: fund exactly what the order asks for.
-        const fundingRef = await opts.fund({ chain, to: link!.fundingAddress!, usdcAmount: order.usdcAmount || usdc, reference: d.reference, order });
+        const fundingRef = await opts.fund({ chain, to, usdcAmount: order.usdcAmount || usdc, reference: d.reference, order });
         await opts.events.markFunded(ctx.idempotencyKey, fundingRef);
         link = { ...link!, fundingRef };
       }

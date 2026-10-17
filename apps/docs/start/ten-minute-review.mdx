@@ -33,11 +33,13 @@ This page exists so a reviewer does not have to guess where the substance is. It
 
 ```bash
 pnpm install
-pnpm test                 # 124 tests, no network
+pnpm test                 # 128 tests, no network
 pnpm stellar:wallets      # creates and funds two testnet vaults
 pnpm stellar:smoke        # a real payment, reference read back off Horizon
 pnpm stellar:payout       # the whole saga: route, reserve, fund the anchor, book it
 ```
+
+For the SEP path against a server Corridor does not control, `./examples/anchor/up.sh` brings up Stellar's own Anchor Platform and the same payout script runs against it.
 
 `stellar:smoke` is the shortest proof that the reference survives a real Stellar transaction: it sends a payment with the reference as `MEMO_HASH`, reads the payment back off Horizon, and decodes the reference out of the memo. `stellar:payout` runs the same thing inside the saga engine, against a mock anchor on the Stellar chain, and prints the ledger invariants at the end.
 
@@ -55,7 +57,7 @@ This is the whole list, stated plainly so nothing below has to be inferred.
 
 | Not built | What that means |
 |---|---|
-| **No anchor is signed** | No real local currency has moved on Stellar. Payout runs use a mock anchor with the same lifecycle, over a real Stellar payment. |
+| **No anchor is signed** | No real local currency has moved on Stellar. The SEP path has run end to end against Stellar's own Anchor Platform, run locally ([`examples/anchor`](https://github.com/Udoka-AM/corridorHub/tree/main/examples/anchor)), not against a licensed anchor. |
 | **SEP-6 collections** | `openCollection` checks the anchor publishes a `TRANSFER_SERVER` and then raises, rather than guessing at a flow no signed anchor has exercised. |
 | **The `cctp.transfer` leg** | Declared in the route graph and planned for, but not written, so mainnet naira payouts do not run. Testnet uses `bridge.simulated`, whose Stellar side is real. |
 | **MGUSD, PYUSD and USDT issuers** | Deliberately unset until each is verified against the issuer's own `stellar.toml`. Asking for one raises an error that names the missing issuer. |

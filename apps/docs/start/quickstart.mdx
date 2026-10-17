@@ -1,6 +1,6 @@
 ---
 title: "Quickstart"
-description: "Install Corridor, run 124 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
+description: "Install Corridor, run 128 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
 icon: "terminal"
 ---
 
@@ -25,7 +25,53 @@ Corridor is a TypeScript monorepo (pnpm workspaces). The ledger runs on embedded
     pnpm typecheck
     pnpm test
     ```
-    124 tests cover the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
+    128 tests cover the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
+  </Step>
+  <Step title="Create two testnet vaults">
+    ```bash
+    pnpm stellar:wallets
+    ```
+    Generates keys into `.env.local` on first run and funds them from Friendbot. Keys stay local and the file is gitignored.
+  </Step>
+  <Step title="A first payment carrying the reference">
+    ```bash
+    pnpm stellar:smoke
+    ```
+    Sends a payment from the treasury vault to the escrow vault with a Corridor Reference as its `MEMO_HASH`, then asks Horizon for that account's payments and finds the movement again by its memo — the join reconciliation uses, with no indexer in the path. It prints the reference, the decoded fields, the explorer link and the ledger sequence.
+  </Step>
+  <Step title="A whole payout through the saga engine">
+    ```bash
+    pnpm stellar:payout
+    ```
+    Plans a EUR → KES route, reserves the customer's balance, opens an anchor order, funds it exactly once with a real Stellar payment, books every movement double-entry and prints the ledger invariants. The anchor is `MockPartner`, so no local currency moves; the route, the saga, the payment and every ledger entry are the real ones.
+---
+title: "Quickstart"
+description: "Install Corridor, run 128 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
+icon: "terminal"
+---
+
+Corridor is a TypeScript monorepo (pnpm workspaces). The ledger runs on embedded Postgres (PGlite) locally, so there is no database to install, and testnet keys are generated and funded from Friendbot on first run.
+
+## Prerequisites
+
+- Node.js 22 or later and pnpm 9
+- Nothing else. The test suite touches no network, and the Stellar scripts need only a testnet account, which they create.
+
+## Run it
+
+<Steps>
+  <Step title="Clone and install">
+    ```bash
+    cd corridorHub
+    pnpm install
+    ```
+  </Step>
+  <Step title="Verify">
+    ```bash
+    pnpm typecheck
+    pnpm test
+    ```
+    128 tests cover the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
   </Step>
   <Step title="Create two testnet vaults">
     ```bash
@@ -45,6 +91,15 @@ Corridor is a TypeScript monorepo (pnpm workspaces). The ledger runs on embedded
     ```
     Plans a EUR → KES route, reserves the customer's balance, opens an anchor order, funds it exactly once with a real Stellar payment, books every movement double-entry and prints the ledger invariants. The anchor is `MockPartner`, so no local currency moves; the route, the saga, the payment and every ledger entry are the real ones.
   </Step>
+  <Step title="Against a real SEP server">
+    ```bash
+    ./examples/anchor/up.sh
+    CORRIDOR_ANCHOR_BASE_URL=http://localhost:8080 \
+    CORRIDOR_ANCHOR_PLATFORM_URL=http://localhost:8085/ \
+    CORRIDOR_PAYOUT_CURRENCY=USD pnpm stellar:payout
+    ```
+    The same payout against Stellar's own Anchor Platform, brought up locally as a receiving SEP-31 anchor: SEP-1, SEP-10, SEP-38, SEP-31 and a funding payment carrying the anchor's own memo. Needs Docker. See [`examples/anchor`](https://github.com/Udoka-AM/corridorHub/tree/main/examples/anchor).
+  </Step>
 </Steps>
 
 <Note>
@@ -55,7 +110,7 @@ Both Stellar scripts move **XLM**, because a funded testnet USDC trustline needs
 
 | Command | What it does |
 |---|---|
-| `pnpm test` | 124 tests, no network |
+| `pnpm test` | 128 tests, no network |
 | `pnpm typecheck` | `tsc -b` across every package |
 | `pnpm stellar:wallets` | Create or inspect the testnet vaults (keys stay local) |
 | `pnpm stellar:smoke` | A real payment, with the reference read back off Horizon and decoded |
@@ -72,6 +127,10 @@ Both Stellar scripts move **XLM**, because a funded testnet USDC trustline needs
 | `CORRIDOR_SIGNER` | `aws-kms` or `turnkey`; the default is a local key from `.env.local` |
 | `CORRIDOR_TAG_SECRET` | Key for the reference's customer tag, so a public memo never identifies the customer |
 | `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>` | Supply an issuer Corridor does not ship ([ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity)) |
+| `CORRIDOR_ANCHOR_BASE_URL` | Run the payout against a real SEP server instead of the stand-in |
+| `CORRIDOR_PAYOUT_CURRENCY` | The corridor's destination currency; `KES` by default |
+| `CORRIDOR_FUNDING_ASSET` | What the anchor is funded in; `XLM` on testnet |
+| `CORRIDOR_ANCHOR_TIMEOUT_MS` | How long to wait for the anchor to complete an order |
 
 <Warning>
 Private keys are written to `.env.local`, which is gitignored. Never commit it.
@@ -97,4 +156,7 @@ apps/
   site/            Public website
   docs/            This documentation
 scripts/           stellar-wallets · stellar-smoke · stellar-payout · watch-report
+examples/
+  anchor/          A local receiving SEP-31 anchor: Stellar's Anchor Platform
+  watch/           Sample read-only configurations
 ```

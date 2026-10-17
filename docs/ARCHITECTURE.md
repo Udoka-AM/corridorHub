@@ -205,7 +205,7 @@ The ledger keeps Stellar's own 7 decimal places (ADR 0012), so a booked balance 
 ### 8.5 Anchors (`packages/partners`)
 
 - **Partner interface (`RampPartner`):** `rates`, `openPayout`, `openCollection`, `getOrder`, `verifyWebhook`, `parseWebhook`. Every provider is normalised to `open → processing → completed | failed`, and a `PartnerRegistry` picks the partner per currency, direction and chain.
-- **`SepAnchor`** implements that interface over the SEPs: SEP-1 for discovery, SEP-10 for authentication, SEP-12 for customer records, SEP-38 for a firm quote, SEP-31 for the payment itself. The SEP-10 challenge is checked before the vault signs it — it must be built by the anchor's own `SIGNING_KEY` and name this vault — so a stray endpoint cannot get the vault to sign something else. The JWT is cached for its lifetime.
+- **`SepAnchor`** implements that interface over the SEPs: SEP-1 for discovery, SEP-10 for authentication, SEP-12 for customer records, SEP-38 for a firm quote, SEP-31 for the payment itself. It has run end to end against Stellar's own Anchor Platform, brought up locally as a receiving anchor (`examples/anchor`); `baseUrl` points it at a server not served over HTTPS at its home domain, and the SEP-31 funding method is read from the anchor's own `GET /info`. The SEP-10 challenge is checked before the vault signs it — it must be built by the anchor's own `SIGNING_KEY` and name this vault — so a stray endpoint cannot get the vault to sign something else. The JWT is cached for its lifetime.
 - SEP-31 has no webhook: the sending anchor polls `GET /transactions/{id}`, which is what the saga's wait loop does, so `verifyWebhook` returns false and `parseWebhook` says so rather than pretending.
 - **Not built:** SEP-6 collections. `openCollection` checks the anchor publishes a `TRANSFER_SERVER` and then raises, rather than guessing at a flow no signed anchor has yet.
 - **Off-Stellar partners:** Paj (Solana → NGN) is carried over from the prototype for the naira corridor. It settles in 6-decimal USDC, so amounts convert through `rescale`, which refuses an amount carrying a seventh decimal instead of rounding it away.
@@ -234,7 +234,7 @@ The ledger keeps Stellar's own 7 decimal places (ADR 0012), so a booked balance 
 | Component | Mainnet | Testnet |
 |---|---|---|
 | Stellar | Code paths identical; no mainnet run yet | Live: payments with references, read back off Horizon |
-| Anchors | None signed | `MockPartner` with the same lifecycle and signed webhooks; `SepAnchor` against a stubbed anchor |
+| Anchors | None signed | `MockPartner` with the same lifecycle and signed webhooks; `SepAnchor` against Stellar's Anchor Platform, run locally, and against a stubbed anchor in tests |
 | CCTP | Leg not built | `bridge.simulated` with the same bookings |
 | Solana / Base | Carried over from the prototype for the naira corridor | Devnet |
 

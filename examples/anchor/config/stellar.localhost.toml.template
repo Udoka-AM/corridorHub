@@ -1,0 +1,27 @@
+ACCOUNTS = ["${DISTRIBUTION_ACCOUNT}"]
+VERSION = "0.1.0"
+SIGNING_KEY = "${HOST_SEP10_ACCOUNT}"
+NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+
+WEB_AUTH_ENDPOINT = "http://localhost:${SEP_PORT}/auth"
+KYC_SERVER = "http://localhost:${SEP_PORT}/sep12"
+DIRECT_PAYMENT_SERVER = "http://localhost:${SEP_PORT}/sep31"
+ANCHOR_QUOTE_SERVER = "http://localhost:${SEP_PORT}/sep38"
+
+[[CURRENCIES]]
+code = "native"
+status = "test"
+is_asset_anchored = false
+anchor_asset_type = "crypto"
+desc = "XLM, the native token of the Stellar network."
+
+[[CURRENCIES]]
+code = "USD"
+status = "test"
+is_asset_anchored = true
+anchor_asset_type = "fiat"
+desc = "US dollars, paid to a local bank account."
+
+[DOCUMENTATION]
+ORG_NAME = "Corridor local test anchor"
+ORG_DESCRIPTION = "Stellar's Anchor Platform, run locally so Corridor's SEP-31 path can be exercised against a real SEP server. Not a real anchor, and not affiliated with anyone."

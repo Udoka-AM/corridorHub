@@ -1,16 +1,25 @@
 /**
  * A whole payout through the saga engine, on Stellar, booked double-entry.
  *
- * The anchor here is `MockPartner`, so no real local currency moves — but the
- * route, the saga, the Stellar payment and every ledger entry are the real
- * ones. A signed anchor replaces the mock with `SepAnchor` and supplies its
- * own funding address and memo; nothing else changes.
+ * Two anchors, one code path:
  *
  *   pnpm stellar:payout
+ *     `MockPartner` stands in for the anchor, so the run needs nothing but a
+ *     funded testnet account. The route, the saga, the Stellar payment and
+ *     every ledger entry are the real ones.
+ *
+ *   CORRIDOR_ANCHOR_BASE_URL=http://localhost:8080 CORRIDOR_PAYOUT_CURRENCY=USD pnpm stellar:payout
+ *     `SepAnchor` against a real SEP server over the network: SEP-1
+ *     discovery, a SEP-10 challenge this vault verifies before signing,
+ *     SEP-12 customer records, a firm SEP-38 quote and a SEP-31 transaction,
+ *     funded with the anchor's own memo and polled to completion.
+ *     `examples/anchor` brings one up.
+ *
+ * No real local currency moves either way: no anchor is signed.
  */
-import { RefKind, customerTag, encodeRef, formatMoney, money, uuidv7 } from "@corridor/core";
+import { RefKind, customerTag, encodeRef, formatMoney, money, uuidv7, type Fiat } from "@corridor/core";
 import { explorerTx } from "@corridor/chain-stellar";
-import { MockPartner, PartnerRegistry } from "@corridor/partners";
+import { MockPartner, PartnerRegistry, SepAnchor, type RampPartner } from "@corridor/partners";
 import { planRoute } from "@corridor/routing";
 import { SagaEngine, ledgerReserveLeg, type PayoutData } from "@corridor/saga";
 import { partnerPayoutLeg, stellarAnchorFunder } from "@corridor/legs";
@@ -18,8 +27,58 @@ import { PartnerEventStore } from "@corridor/webhooks";
 import { NETWORK, openRuntime, report, vault } from "./runtime.ts";
 
 const CUSTOMER = "eu-payco";
-const CORRIDOR = "EUR-KES" as const;
+/**
+ * The corridor under test. KES is the first corridor Corridor opens; the
+ * local example anchor serves USD, because the Anchor Platform's stock
+ * reference server prices a fixed set of pairs.
+ */
+const PAYOUT_CURRENCY = (process.env.CORRIDOR_PAYOUT_CURRENCY ?? "KES") as Fiat;
+const CORRIDOR = `EUR-${PAYOUT_CURRENCY}` as const;
 const AMOUNT = 70_000_000n; // 7 USDC at the hub's 7 dp
+
+/** The asset the anchor is funded in. XLM on testnet, where a funded USDC trustline needs an issuer faucet. */
+const FUNDING_ASSET = (process.env.CORRIDOR_FUNDING_ASSET ?? "XLM") as "XLM" | "USDC";
+const ANCHOR_BASE_URL = process.env.CORRIDOR_ANCHOR_BASE_URL;
+/**
+ * The local example anchor's Platform API. Paying the beneficiary is the
+ * anchor's own business step, which a real anchor performs itself when the
+ * money lands in its customer's account; the stand-in has to be told. Unset
+ * against a real anchor.
+ */
+const ANCHOR_PLATFORM_URL = process.env.CORRIDOR_ANCHOR_PLATFORM_URL;
+
+/**
+ * Tell the local example anchor its operator has paid the beneficiary.
+ *
+ * A real anchor does this itself, off its own rail, and Corridor only ever
+ * reads the result. The Anchor Platform's reference server waits to be told,
+ * and will not accept it until its own Stellar observer has seen the funding
+ * payment — so this retries in the background while the saga waits.
+ */
+function settleAtExampleAnchorSoon(transactionId: string): void {
+  void (async () => {
+    const deadline = Date.now() + 120_000;
+    let lastError = "";
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 3_000));
+      const res = await fetch(ANCHOR_PLATFORM_URL!, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify([
+          { id: "1", jsonrpc: "2.0", method: "notify_offchain_funds_sent", params: { transaction_id: transactionId, message: "paid the beneficiary" } },
+        ]),
+      });
+      // JSON-RPC reports failure in the body, with a 200.
+      const [reply] = (await res.json()) as [{ result?: { status?: string }; error?: { message?: string } }];
+      if (reply?.result?.status === "completed") {
+        console.log("the example anchor reports the beneficiary paid (a real anchor does this itself)");
+        return;
+      }
+      lastError = reply?.error?.message ?? `status ${reply?.result?.status ?? res.status}`;
+    }
+    console.warn(`the example anchor never settled ${transactionId}: ${lastError}`);
+  })();
+}
 
 const rt = await openRuntime();
 const treasury = await vault("TREASURY");
@@ -38,11 +97,31 @@ try {
   });
 
   const events = await PartnerEventStore.open(rt.db);
-  // The escrow vault stands in for the anchor's receiving account, and the
-  // stand-in assigns its own funding memo the way a SEP-31 anchor does — so
-  // this run exercises the real funding path, not a shortcut.
-  const mock = new MockPartner({ webhookSecret: "whsec_dev", chains: ["STELLAR"], stellarAccount: escrow.address });
-  const registry = new PartnerRegistry().register(mock);
+
+  // A real SEP server when one is given, and otherwise a stand-in that
+  // assigns its own funding memo the way a SEP-31 anchor does — so either way
+  // the run exercises the real funding path rather than a shortcut.
+  let mock: MockPartner | undefined;
+  let anchor: RampPartner;
+  if (ANCHOR_BASE_URL) {
+    const domain = new URL(ANCHOR_BASE_URL).host;
+    anchor = new SepAnchor({
+      domain,
+      baseUrl: ANCHOR_BASE_URL,
+      network: NETWORK,
+      asset: { code: FUNDING_ASSET === "XLM" ? "native" : FUNDING_ASSET },
+      payoutCurrencies: [PAYOUT_CURRENCY],
+      senderId: process.env.CORRIDOR_SEP12_SENDER_ID,
+      receiverId: process.env.CORRIDOR_SEP12_RECEIVER_ID,
+      signer: { address: treasury.address, sign: (hash) => treasury.signer!.sign(hash) },
+    });
+    console.log(`anchor: ${domain} over SEP-1/10/12/38/31\n`);
+  } else {
+    mock = new MockPartner({ webhookSecret: "whsec_dev", chains: ["STELLAR"], stellarAccount: escrow.address });
+    anchor = mock;
+    console.log("anchor: MockPartner (set CORRIDOR_ANCHOR_BASE_URL for a real SEP server)\n");
+  }
+  const registry = new PartnerRegistry().register(anchor);
 
   // The real funding path: pay the order's receiving account out of the
   // treasury, carrying the anchor's memo when the order names one and the
@@ -51,9 +130,7 @@ try {
   let fundingTx = "";
   const fund = stellarAnchorFunder({
     treasury,
-    // XLM stands in for USDC on testnet, where a funded USDC trustline needs
-    // an issuer faucet. The same call moves USDC once the vault holds it.
-    asset: "XLM",
+    asset: FUNDING_ASSET,
     onSent: (sent, memo) => {
       fundingTx = sent.externalRef.split(":")[0]!;
       console.log(`funded ${formatMoney({ asset: sent.asset, amount: sent.amount })} with the anchor's memo (${memo.type}: ${memo.value})`);
@@ -65,9 +142,12 @@ try {
     partners: registry,
     events,
     pollMs: 500,
+    timeoutMs: Number(process.env.CORRIDOR_ANCHOR_TIMEOUT_MS ?? 5 * 60_000),
     fund: async (args) => {
       const ref = await fund(args);
-      await mock.observeFunding(args.order.id, fundingTx);
+      // A real anchor sees the payment itself, through its Stellar observer.
+      await mock?.observeFunding(args.order.id, fundingTx);
+      if (ANCHOR_PLATFORM_URL) settleAtExampleAnchorSoon(args.order.id);
       return ref;
     },
   });
@@ -76,7 +156,7 @@ try {
     corridor: CORRIDOR,
     privacy: "public",
     source: { venue: "stellar", asset: "USDC" },
-    destination: { venue: "partner_fiat", asset: "KES" },
+    destination: { venue: "partner_fiat", asset: PAYOUT_CURRENCY },
     env: NETWORK === "mainnet" ? "mainnet" : "testnet",
   });
   console.log(`route: ${plan.steps.map((s) => s.kind).join(" -> ")}\n`);

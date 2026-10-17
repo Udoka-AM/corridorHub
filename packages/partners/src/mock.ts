@@ -1,3 +1,4 @@
+import { Keypair } from "@stellar/stellar-sdk";
 import { randomBytes, randomUUID } from "node:crypto";
 import { FIAT, type Fiat, assetDecimals } from "@corridor/core";
 import {
@@ -34,9 +35,9 @@ export interface MockPartnerOptions {
   /** Which chains this stand-in settles on. Defaults to Solana. */
   chains?: readonly PartnerChain[];
   /**
-   * The account payouts on Stellar are funded to. A SEP-31 anchor returns a
-   * `G…` account; without this the stand-in returns a Solana address, which
-   * Stellar will not accept as a destination.
+   * The account payouts on Stellar are funded to. Defaults to a fresh valid
+   * `G…` address, which is enough for tests; a run that sends real money
+   * passes an account that exists on the network.
    */
   stellarAccount?: string;
   /**
@@ -66,6 +67,7 @@ export class MockPartner implements RampPartner {
   readonly collectionCurrencies: readonly Fiat[] = ["NGN", "KES", "GHS"];
   readonly chains: readonly PartnerChain[];
   private readonly orders = new Map<string, PartnerOrder>();
+  private stellarAccount?: string;
 
   constructor(private readonly opts: MockPartnerOptions) {
     this.id = opts.id ?? "mock";
@@ -90,7 +92,7 @@ export class MockPartner implements RampPartner {
         ? undefined
         : (this.opts.fundingMemo ?? ((o: { id: string }) => ({ memo: `mock-${o.id.slice(5, 13)}`, type: "text" as const })))({ id });
     return {
-      fundingAddress: this.opts.stellarAccount,
+      fundingAddress: this.opts.stellarAccount ?? (this.stellarAccount ??= Keypair.random().publicKey()),
       fundingMemo: assign?.memo,
       fundingMemoType: assign?.type,
     };

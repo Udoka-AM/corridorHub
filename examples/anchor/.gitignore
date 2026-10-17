@@ -1,0 +1,4 @@
+config/assets.yaml
+config/reference-config.yaml
+config/stellar.localhost.toml
+.env

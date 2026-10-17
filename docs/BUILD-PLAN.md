@@ -84,7 +84,7 @@ docs/              ARCHITECTURE.md (authoritative) · this file
 
 ```bash
 pnpm install
-pnpm test                 # 124 tests, 16 files, no network
+pnpm test                 # 128 tests, 16 files, no network
 pnpm typecheck            # tsc -b
 pnpm stellar:wallets      # create and fund two testnet vaults (Friendbot)
 pnpm stellar:smoke        # a real payment, reference read back off Horizon
@@ -108,7 +108,7 @@ Verified by audit on 17 Oct 2026. "Run" means a script exercised it against Stel
 | Account creation and funding, balance reporting | `scripts/stellar-wallets.ts` | Friendbot |
 | Horizon observation of watched accounts, reconciled against the ledger | `recon` · `scripts/watch-report.ts` | Runs; see the caveat in §5 |
 
-### Built and unit-tested (124 tests, 16 files)
+### Built and unit-tested (128 tests, 16 files)
 
 | Capability | Package | Tests |
 |---|---|---|
@@ -156,7 +156,7 @@ Also corrected while in there: `PartnerOrder.usdcAmount` was documented as 6 dp 
 
 | # | Gap | Blocker | Estimate |
 |---|---|---|---|
-| **B1** | **No signed anchor.** No real local currency has moved on Stellar. `SepAnchor` has only ever run against an in-process fetch stub. | A third party. Partly substitutable this week by running Stellar's own Anchor Platform locally (§7, W1). | Days (ours) / weeks (theirs) |
+| **B1** | **No signed anchor.** No real local currency has moved on Stellar. | A third party. The SEP path itself is no longer the gap: it has run end to end against Stellar's own Anchor Platform (`examples/anchor`). What is missing is a licensed counterparty. | Weeks (theirs) |
 | **B2** | **SEP-6 collections.** `openCollection` checks for `TRANSFER_SERVER` then raises. | Deliberate: no signed anchor has exercised the flow. | 2–3 days once an anchor exists |
 | **B3** | **The `cctp.transfer` leg.** Declared in the route graph, not written. Mainnet naira payouts do not run. | Nothing, but see §8 — we are deliberately not doing this. | 3–5 days |
 | **B4** | **The `stellar.pathPayment` leg.** The planner produces the edge; no implementation. A payout cannot be funded from an EURC or MGUSD balance. | Nothing. | 1 day |
@@ -205,13 +205,13 @@ Four tracks. Tracks run in parallel; within a track, order matters.
 
 | Day | W1 · Anchor | W2 · USDC | W3 · Read-only | W4 · Proof |
 |---|---|---|---|---|
-| ~~Sat 17~~ | ~~W1-1~~ ✅ · ~~W1-3~~ ✅ | — | — | — |
-| **Sun 18** | W1-2 Anchor Platform up | — | — | W4-1 CI · W4-2 issuers |
-| **Mon 19** | W1-2 continues | W2-1 trustline | — | — |
-| **Tue 20** | — | W2-2 faucet + USDC smoke | W3-1 `watch:report` v2 | — |
-| **Wed 21** | W1-4 payout against the platform | W2-3 USDC payout | W3-2 Stellar example data | — |
-| **Thu 22** | W1-5 evidence + docs | — | W3-3 docs + evidence | W4-3 vault accounting |
-| **Fri 23** | — | — | — | W4-4 path payment leg |
+| ~~Sat 17~~ | **W1 done**: ~~W1-1~~ ~~W1-2~~ ~~W1-3~~ ~~W1-4~~ ~~W1-5~~ ✅ | — | — | — |
+| **Sun 18** | — | W2-1 trustline | W3-1 `watch:report` v2 | W4-1 CI · W4-2 issuers |
+| **Mon 19** | — | W2-2 faucet + USDC smoke | W3-2 Stellar example data | — |
+| **Tue 20** | — | W2-3 USDC payout | W3-3 docs + evidence | W4-3 vault accounting |
+| **Wed 21** | — | — | — | W4-4 path payment leg |
+| **Thu 22** | Slack: the anchor hunt (§9), or pull W4-4 forward | | | |
+| **Fri 23** | Slack | | | |
 | **Sat 24** | W-wrap: re-verify everything, update README / ARCHITECTURE / docs site / this file, tag | | | |
 
 **Parallelism rule for agents:** one agent per track. W1 and W2 both touch `packages/chain-stellar` and `scripts/` — W1 owns `packages/partners/src/sep.ts` and the `fund` callback, W2 owns `scripts/stellar-wallets.ts` and asset selection. Coordinate on `packages/chain-stellar/src/index.ts`: W1 adds the memo function (D1), W2 only calls `trustAsset`. Land W1-3 before W2-3.
@@ -230,13 +230,16 @@ Every task has an ID, a definition of done, and the files it touches. Do not mar
 
 **W1-1 · Let `SepAnchor` reach a non-HTTPS host** *(fixes D2)* — ✅ **done 17 Oct.** `baseUrl?: string` on `SepAnchorOptions`, defaulting to `https://{domain}`; `domain` stays the SEP-10 `home_domain`. Three tests cover the override, the default and the error message.
 
-**W1-2 · Run Stellar's Anchor Platform locally** *(~half a day)*
+**W1-2 · Run Stellar's Anchor Platform locally** — ✅ **done 17 Oct.** `examples/anchor` brings it up with `./up.sh`: two testnet accounts created and funded with the repo's own tooling (no Stellar CLI needed), config templates filled, SEP-1/10/12/31/38 on, SEP-6/24/45 off. See its README for the four configuration traps that cost time.
+
+<details><summary>Original task</summary>
 - Clone `stellar/anchor-platform`, use its `quick-run/` directory, `./ap_start.sh`. SEP-1 TOML serves at `localhost:8080`.
 - Set `SEP31_ENABLED=true` and `SEP38_ENABLED=true` in `dev.env`; configure the asset in `config/assets.yaml` with `sep31.quotes_supported: true`; point `QUOTE_SERVER` at `localhost:8080/sep38` in `stellar.localhost.toml`.
 - The Anchor Platform implements SEP-31 **receive-only** — which is exactly the role we need it to play. Corridor is the *sending* anchor.
 - **Watch for:** doc versions differ on whether the TOML advertises `/sep12` or `/kyc` as `KYC_SERVER`. Check the TOML the running platform actually serves against what `SepAnchor` reads.
 - Commit the compose file and config into `examples/anchor/` with a README so anyone can reproduce the run. Do **not** commit secrets.
 - **Done when:** `curl localhost:8080/.well-known/stellar.toml` returns a TOML naming `WEB_AUTH_ENDPOINT`, `ANCHOR_QUOTE_SERVER` and `DIRECT_PAYMENT_SERVER`.
+</details>
 
 **W1-3 · Send a payment with the anchor's memo** *(fixes D1)* — ✅ **done 17 Oct.**
 - `transferWithMemo` supports `hash`, `text` and `id`; `transferWithReference` is a thin wrapper over it.
@@ -245,14 +248,26 @@ Every task has an ID, a definition of done, and the files it touches. Do not mar
 - `MockPartner` takes `stellarAccount` and assigns a text funding memo on Stellar orders, so `pnpm stellar:payout` exercises the anchor-memo path rather than a shortcut.
 - Five tests, including a crash between sending and recording. Verified on testnet: [`ac025984…`](https://stellar.expert/explorer/testnet/tx/ac025984a302d98edbb771bcf7f39f21fa83134938e10510e76d71ccba33bf89) carries `memo_type: text`, `memo: mock-8313e798`.
 
-**W1-4 · The run** *(~half a day)*
-- Point `stellar-payout.ts` at the local platform through `SepAnchor` instead of `MockPartner`, behind an env switch (`CORRIDOR_ANCHOR_BASE_URL`) so the mock stays the default for `pnpm test`.
-- **Done when:** the script prints a SEP-38 quote id, a SEP-31 transaction id, a funding transaction hash on stellar.expert, and a terminal status of `completed`, with `checkInvariants()` clean.
+**W1-4 · The run** — ✅ **done 17 Oct.** `CORRIDOR_ANCHOR_BASE_URL` switches `stellar-payout.ts` from the stand-in to `SepAnchor`; the mock stays the default. A full run completed: SEP-1, SEP-10 (challenge verified before signing), SEP-38 firm quote, SEP-31 order, a real Stellar payment carrying the anchor's `id` memo ([`ecc31ac7…`](https://stellar.expert/explorer/testnet/tx/ecc31ac72a77ff5afbb211db2f41a2e96acf83200b484ff6bf87671337666c6e)), the anchor's own observer seeing it, polling to `completed`, `paid 1538 USD at 2.1978`, invariants clean.
 
-**W1-5 · Write it down** *(~2h)*
+**Four defects in `SepAnchor` that only a real server exposed, all fixed:**
+
+| | What was wrong |
+|---|---|
+| **D4** | SEP-31 `POST /transactions` was sent without `funding_method`, which the spec requires. Now read from the anchor's own `GET /sep31/info`. |
+| **D5** | The receiving account was taken only from the POST reply. SEP-31 lets it arrive on `GET /transactions/{id}` instead, and an anchor may take a moment to assign it — so `openPayout` now waits for it, bounded. |
+| **D6** | `amount_out`/`destination_asset` were read in one shape only, so a real anchor's order came back with no currency and a zero fiat amount — which would have been **booked**. Now reads `amount_out_asset`, the nested `{ amount, asset }` and `destination_asset`. |
+| **D7** | The native asset was not expressible: `assetIds` always built `stellar:CODE:ISSUER`. Now `stellar:native`, and an issued asset with no issuer is refused rather than guessed. |
+
+Plus: `partnerPayoutLeg` falls back to the order's receiving account when the stored link has none, and `MockPartner` returns a valid `G…` account and assigns a funding memo on Stellar orders, so the default run exercises the same path.
+
+**W1-5 · Write it down** — ✅ **done 17 Oct.** Evidence page, the anchor integration page, the quickstart, the reviewer path and `examples/anchor/README.md`.
+
+<details><summary>Original task</summary>
 - Add the run to `apps/docs/status/evidence.mdx` under Stellar testnet, with the transaction link and the reproducing command.
 - Update `apps/docs/integrations/sep-anchors.mdx`: the "no anchor is signed" warning stays, but "only ever run against an in-process stub" becomes "run against Stellar's Anchor Platform".
 - Update `README.md`, `docs/ARCHITECTURE.md` §9 and §4 of this file.
+</details>
 
 ### W2 · Settle in USDC, not XLM
 

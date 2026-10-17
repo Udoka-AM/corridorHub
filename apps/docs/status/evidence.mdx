@@ -53,22 +53,48 @@ The funding payment carries **the anchor's own memo**, not the Corridor Referenc
 Both runs move **XLM**, because a funded testnet USDC trustline needs an issuer faucet. The USDC path is the same call with a different asset. The anchor in the payout run is `MockPartner` with `chains: ["STELLAR"]`: the route, the saga, the Stellar payment and every ledger entry are the real ones, and only the fiat side is simulated.
 </Note>
 
+### Against a real SEP server
+
+The hardest thing to show without a signed anchor is that the SEP path works against something Corridor does not control. `examples/anchor` brings up **Stellar's own Anchor Platform**, configured as a receiving SEP-31 anchor, and the same `pnpm stellar:payout` runs against it over the network.
+
+```bash
+./examples/anchor/up.sh
+CORRIDOR_ANCHOR_BASE_URL=http://localhost:8080 \
+CORRIDOR_ANCHOR_PLATFORM_URL=http://localhost:8085/ \
+CORRIDOR_PAYOUT_CURRENCY=USD pnpm stellar:payout
+```
+
+| Step | Result |
+|---|---|
+| SEP-1 | `stellar.toml` discovered over HTTP at a base URL that is not the home domain |
+| SEP-10 | The anchor's challenge **verified before the vault signed it**, and exchanged for a JWT |
+| SEP-38 | A firm quote: 7 `stellar:native` sold for `iso4217:USD` |
+| SEP-31 | Order opened with the quote, the beneficiary fields and the Corridor Reference; the anchor returned its receiving account and memo `13453` |
+| Funding | A real Stellar payment carrying **the anchor's `id` memo** — [`ecc31ac7…`](https://stellar.expert/explorer/testnet/tx/ecc31ac72a77ff5afbb211db2f41a2e96acf83200b484ff6bf87671337666c6e) |
+| The anchor's observer | The anchor saw the payment on-chain by itself and advanced the transaction |
+| Polling | SEP-31 has no webhook, so the saga polled `GET /transactions/{id}` to `completed` |
+| The books | `paid 1538 USD at 2.1978`; invariants clean; the customer's balance closed to zero |
+
+<Note>
+No local currency moved: the anchor is Stellar's reference implementation, run locally, and telling it the beneficiary was paid is a step a real anchor performs itself off its own rail. Everything on Corridor's side of the exchange is real, and nothing in the adapter is stubbed. See [`examples/anchor`](https://github.com/Udoka-AM/corridorHub/tree/main/examples/anchor).
+</Note>
+
 ## The test suite
 
 | Measure | Value |
 |---|---|
-| Tests | **124 passing**, no network |
+| Tests | **128 passing**, no network |
 | Stellar venue | 20 tests: the reference on a real transaction shape, issuer identity, the held-key signer, and the Horizon quirks that would otherwise lose every memo |
 | Routing | 11 tests: hub enforcement, every route shape, the shielded refusal, the off-Stellar list |
 | Reference codec | 12 tests: encode, decode, checksum, version rejection, currency pairs |
 | Ledger | 7 tests: balance per asset, no-overdraft, exactly-once external refs, append-only, global invariants |
 | Saga engine | 6 tests: compensation order, `manual_review`, lease fencing under a real race |
-| SEP anchor | 12 tests against a stubbed anchor: discovery over HTTPS or a given base URL, the challenge check, the quote, the order and its funding memo, status mapping |
+| SEP anchor | 16 tests against a stubbed anchor: discovery over HTTPS or a given base URL, the challenge check, the quote, the funding method read from the anchor's own `/info`, the receiving account whether it arrives on the POST or the GET, both amount shapes, and the status mapping |
 | Anchor funding | 5 tests: the anchor's memo is carried, the reference is the fallback, and a retry after a crash finds the payment instead of paying twice |
 | Partners, webhooks, signers, recon | The rest |
 
 ```bash
-pnpm test        # 124 tests
+pnpm test        # 128 tests
 pnpm typecheck   # tsc -b, clean
 ```
 
@@ -117,7 +143,7 @@ The reference was `0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb849
 
 Stated here so nothing has to be inferred from an absence.
 
-- **No signed anchor**, so no real local currency has moved on Stellar.
+- **No signed anchor**, so no real local currency has moved on Stellar. The SEP path has run against Stellar's own Anchor Platform locally, not against a licensed anchor.
 - **No mainnet run.** Code paths are identical; nothing has run on Stellar mainnet.
 - **No SEP-6 collection**, anywhere.
 - **No `cctp.transfer`**, so no Stellar → Solana movement has happened.

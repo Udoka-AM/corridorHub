@@ -42,7 +42,7 @@ That is the whole integration. `SepAnchor` implements `RampPartner`, so the legs
 | **SEP-10** | Authentication: your challenge, signed by the vault key, exchanged for a JWT | `WEB_AUTH_ENDPOINT`, `SIGNING_KEY` |
 | **SEP-12** | Customer records, when you need KYC on sender or receiver | `KYC_SERVER` |
 | **SEP-38** | Indicative prices and a firm quote before anything moves | `ANCHOR_QUOTE_SERVER` |
-| **SEP-31** | The cross-border payment itself | `DIRECT_PAYMENT_SERVER` |
+| **SEP-31** | The cross-border payment itself, and `GET /info` for the funding methods you accept | `DIRECT_PAYMENT_SERVER` |
 | **SEP-6** | Collections. **Not implemented** | `TRANSFER_SERVER` |
 
 If an endpoint is missing, Corridor says exactly that — *"anchor.example.com publishes no ANCHOR_QUOTE_SERVER, so it does not serve SEP-38"* — rather than failing somewhere later.
@@ -71,7 +71,7 @@ const order = await anchor.openPayout({
 
 1. **SEP-38** `POST /quote` with `context: "sep31"`, selling `stellar:USDC:GA5Z…` and buying `iso4217:KES`. The rate is held for the life of the quote, so the beneficiary amount is known before anything moves.
 2. **SEP-31** `POST /transactions` with the quote, the beneficiary fields and the Corridor Reference in `fields.transaction.reference`.
-3. The anchor returns `stellar_account_id` and **its own** `stellar_memo`. The funding payment must carry that memo, so Corridor's reference cannot ride in `MEMO_HASH` on this leg — it travels in the SEP-31 fields instead, and the join key becomes `(anchor, transaction id)` ([ADR 0003](/decisions/0003-reference-in-memo-hash)).
+3. The anchor returns `stellar_account_id` and **its own** `stellar_memo` — on the POST reply, or on `GET /transactions/{id}` a moment later, which Corridor waits for. The funding payment must carry that memo, so Corridor's reference cannot ride in `MEMO_HASH` on this leg — it travels in the SEP-31 fields instead, and the join key becomes `(anchor, transaction id)` ([ADR 0003](/decisions/0003-reference-in-memo-hash)).
 4. The payout leg funds the order **exactly once**. `stellarAnchorFunder` pays the receiving account out of the treasury carrying the anchor's memo, and before sending it asks Horizon whether a payment with that memo, to that account, for that amount already landed — so a crash between sending and recording resumes instead of paying twice.
 
 ## Status, and why there is no webhook
@@ -99,10 +99,12 @@ Corridor says so rather than pretending to support a delivery an anchor will nev
 </Warning>
 
 <Warning>
-**No anchor is signed.** Nothing in this page has run against a production anchor, and no real local currency has moved on Stellar. The adapter is covered by twelve tests against a stubbed anchor, including the challenge check, the quote, the order and the status mapping.
-
-What *has* run on testnet is the funding half: a payout funded with an anchor-assigned text memo rather than the reference ([`ac025984…`](https://stellar.expert/explorer/testnet/tx/ac025984a302d98edbb771bcf7f39f21fa83134938e10510e76d71ccba33bf89)), against a stand-in that assigns memos the way a SEP-31 anchor does.
+**No anchor is signed**, so no real local currency has moved on Stellar.
 </Warning>
+
+What *has* run is the whole SEP path against a server Corridor does not control: `examples/anchor` brings up **Stellar's own Anchor Platform** as a receiving SEP-31 anchor, and `pnpm stellar:payout` runs against it over the network — SEP-1, a SEP-10 challenge verified before the vault signs it, a firm SEP-38 quote, a SEP-31 order, a real Stellar payment carrying the anchor's own `id` memo, the anchor's observer seeing that payment by itself, and polling to `completed` with the books closing clean. The [evidence page](/status/evidence#against-a-real-sep-server) has the transaction.
+
+Sixteen tests cover the adapter against a stubbed anchor on top of that.
 
 ## Becoming a spoke
 

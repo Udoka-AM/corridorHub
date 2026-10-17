@@ -37,18 +37,31 @@ export interface SepAnchorOptions {
    */
   baseUrl?: string;
   id?: string;
-  /** The asset Corridor funds payouts in, as it appears in the anchor's toml. */
-  asset?: { code: string; issuer: string };
+  /**
+   * The asset Corridor funds payouts in, as it appears in the anchor's toml.
+   * `issuer` is required for an issued asset and omitted for native XLM
+   * (`code: "native"`).
+   */
+  asset?: { code: string; issuer?: string };
   network?: "testnet" | "mainnet";
   payoutCurrencies?: readonly Fiat[];
   collectionCurrencies?: readonly Fiat[];
   signer: ChallengeSigner;
+  /**
+   * How Corridor funds the order, as the anchor names it in `GET
+   * /sep31/info`. Discovered from the anchor when not set.
+   */
+  fundingMethod?: string;
   /** SEP-12 customer ids, when the anchor already knows the parties. */
   senderId?: string;
   receiverId?: string;
   fetch?: typeof fetch;
   /** Clock skew allowance when checking a challenge, in seconds. */
   now?: () => Date;
+  /** How long to wait for a new order's receiving account. Default 30s. */
+  openTimeoutMs?: number;
+  /** How often to re-ask for it. Default 1s. */
+  pollMs?: number;
 }
 
 interface StellarToml {
@@ -82,6 +95,7 @@ export class SepAnchor implements RampPartner {
   readonly collectionCurrencies: readonly Fiat[];
 
   private toml?: StellarToml;
+  private info?: Sep31Info;
   private token?: { jwt: string; expiresAt: number };
   private readonly http: typeof fetch;
 
@@ -175,15 +189,44 @@ export class SepAnchor implements RampPartner {
     return url.replace(/\/$/, "");
   }
 
-  private async fundingAsset(): Promise<{ code: string; issuer: string }> {
+  /**
+   * SEP-31 `GET /info`: which assets the anchor receives, and how it expects
+   * to be funded for each.
+   */
+  private async sep31Info(): Promise<Sep31Info> {
+    if (this.info) return this.info;
+    const payments = await this.endpoint("DIRECT_PAYMENT_SERVER", "SEP-31");
+    return (this.info = await this.call<Sep31Info>(`${payments}/info`));
+  }
+
+  /**
+   * The funding method to open the order with. SEP-31 requires one, and the
+   * anchor publishes what it accepts, so ask rather than guess.
+   */
+  private async fundingMethod(code: string): Promise<string | undefined> {
+    if (this.opts.fundingMethod) return this.opts.fundingMethod;
+    const info = await this.sep31Info();
+    const methods = info.receive?.[code]?.funding_methods;
+    if (!methods?.length) return undefined;
+    return methods[0];
+  }
+
+  private async fundingAsset(): Promise<{ code: string; issuer?: string }> {
     if (this.opts.asset) return this.opts.asset;
     throw new PartnerError(`${this.id} needs the funding asset configured (code and issuer)`, this.id);
   }
 
-  /** SEP-38 asset identification: `stellar:CODE:ISSUER` on-chain, `iso4217:XXX` for fiat. */
+  /**
+   * SEP-38 asset identification: `stellar:CODE:ISSUER` for an issued asset,
+   * `stellar:native` for XLM, and `iso4217:XXX` for fiat. An issued asset
+   * without an issuer is the mistake [ADR 0007] exists to prevent, so it is
+   * refused rather than guessed.
+   */
   private async assetIds(currency: Fiat): Promise<{ sell: string; buy: string }> {
     const { code, issuer } = await this.fundingAsset();
-    return { sell: `stellar:${code}:${issuer}`, buy: `iso4217:${currency}` };
+    const native = code === "native" || code === "XLM";
+    if (!native && !issuer) throw new PartnerError(`${this.id}: ${code} needs an issuer to be identified to the anchor`, this.id);
+    return { sell: native ? "stellar:native" : `stellar:${code}:${issuer}`, buy: `iso4217:${currency}` };
   }
 
   /** SEP-38 indicative prices, as a rate per USD. */
@@ -238,6 +281,7 @@ export class SepAnchor implements RampPartner {
         asset_code: code,
         asset_issuer: issuer,
         destination_asset: `iso4217:${req.currency}`,
+        funding_method: await this.fundingMethod(code),
         quote_id: quote.id,
         sender_id: this.opts.senderId,
         receiver_id: this.opts.receiverId,
@@ -247,7 +291,7 @@ export class SepAnchor implements RampPartner {
       }),
     });
 
-    return {
+    const order: PartnerOrder = {
       partner: this.id,
       id: created.id,
       kind: "payout",
@@ -264,6 +308,27 @@ export class SepAnchor implements RampPartner {
       reference: req.reference,
       createdAt: this.opts.now?.() ?? new Date(),
     };
+
+    // SEP-31 lets the anchor return the receiving account and its memo on
+    // `GET /transactions/{id}` rather than in the POST response, and an
+    // anchor may take a moment to assign them. Without them there is nothing
+    // to fund, so wait for them before handing the order back.
+    if (!order.fundingAddress) {
+      const deadline = Date.now() + (this.opts.openTimeoutMs ?? 30_000);
+      while (!order.fundingAddress) {
+        const fetched = await this.getOrder(created.id);
+        if (fetched.status === "failed") throw new PartnerError(`${this.id} rejected order ${created.id} before it could be funded`, this.id);
+        order.fundingAddress = fetched.fundingAddress;
+        order.fundingMemo = fetched.fundingMemo;
+        order.fundingMemoType = fetched.fundingMemoType;
+        if (order.fundingAddress) break;
+        if (Date.now() > deadline) {
+          throw new PartnerError(`${this.id} opened ${created.id} but assigned no receiving account`, this.id);
+        }
+        await new Promise((r) => setTimeout(r, this.opts.pollMs ?? 1_000));
+      }
+    }
+    return order;
   }
 
   /**
@@ -284,7 +349,10 @@ export class SepAnchor implements RampPartner {
   }
 
   private normalise(t: Sep31Transaction): PartnerOrder {
-    const currency = (t.destination_asset?.split(":")[1] ?? "") as Fiat;
+    const inAmount = amountOf(t.amount_in);
+    const outAmount = amountOf(t.amount_out);
+    // Anchors report the paid-out asset in one of three places.
+    const currency = ((t.amount_out_asset ?? assetOf(t.amount_out) ?? t.destination_asset)?.split(":")[1] ?? "") as Fiat;
     return {
       partner: this.id,
       id: t.id,
@@ -293,9 +361,9 @@ export class SepAnchor implements RampPartner {
       partnerStatus: t.status,
       chain: "STELLAR",
       currency,
-      usdcAmount: t.amount_in ? parseMoney("USDC", Number(t.amount_in).toFixed(7)).amount : 0n,
-      fiatAmount: t.amount_out && currency in FIAT ? parseMoney(currency, Number(t.amount_out).toFixed(FIAT[currency].decimals)).amount : 0n,
-      rate: Number(t.amount_out ?? 0) / Number(t.amount_in || 1),
+      usdcAmount: inAmount ? parseMoney("USDC", Number(inAmount).toFixed(7)).amount : 0n,
+      fiatAmount: outAmount && currency in FIAT ? parseMoney(currency, Number(outAmount).toFixed(FIAT[currency].decimals)).amount : 0n,
+      rate: Number(outAmount ?? 0) / Number(inAmount || 1),
       fundingAddress: t.stellar_account_id,
       fundingMemo: t.stellar_memo,
       fundingMemoType: t.stellar_memo_type,
@@ -318,17 +386,39 @@ export class SepAnchor implements RampPartner {
   }
 }
 
+interface Sep31Info {
+  receive?: Record<string, { enabled?: boolean; funding_methods?: string[] } | undefined>;
+}
+
+interface Sep31Amount {
+  amount?: string;
+  asset?: string;
+}
+
 interface Sep31Transaction {
   id: string;
   status: string;
-  amount_in?: string;
-  amount_out?: string;
+  /** A plain amount with a companion `_asset`, or the nested `{ amount, asset }`. */
+  amount_in?: string | Sep31Amount;
+  amount_in_asset?: string;
+  amount_out?: string | Sep31Amount;
+  amount_out_asset?: string;
+  /** What the order was opened with, when the anchor does not echo amounts. */
   destination_asset?: string;
   stellar_account_id?: string;
   stellar_memo?: string;
   stellar_memo_type?: "hash" | "text" | "id";
   stellar_transaction_id?: string;
   started_at?: string;
+}
+
+/** SEP-31 amounts are `{ amount, asset }` today and were plain strings before. */
+function amountOf(a: string | Sep31Amount | undefined): string | undefined {
+  return typeof a === "string" ? a : a?.amount;
+}
+
+function assetOf(a: string | Sep31Amount | undefined): string | undefined {
+  return typeof a === "string" ? undefined : a?.asset;
 }
 
 /**
