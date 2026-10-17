@@ -30,19 +30,19 @@ export default function Product() {
   );
 
   return (
-    <section className="product" ref={root} id="console" aria-label="The treasury console">
+    <section className="product" ref={root} id="books" aria-label="Books that match the chain">
       <div className="wrap">
         <div className="head">
           <Words as="h2" className="h2 reveal" text={"Books that close\nthemselves."} />
-          <a className="btn" href="./console/" data-hot>
-            Open the live console <span className="arr">↗</span>
+          <a className="btn" href="https://corridor.udokaam.dev/architecture/ledger" target="_blank" rel="noreferrer" data-hot>
+            Read the ledger <span className="arr">↗</span>
           </a>
         </div>
         <div className="screen">
           <div className="frame">
             <img
               src="./media/console-overview.jpg"
-              alt="Corridor treasury console: live payouts, hub balances, settlement network and reconciliation"
+              alt="The prototype's treasury console, reading Tempo and Solana: payouts, hub balances, settlement network and reconciliation"
               width={2200}
               height={1161}
               loading="lazy"
@@ -53,11 +53,16 @@ export default function Product() {
             <img src="./media/console-timeline.jpg" alt="" width={1600} height={1238} loading="lazy" decoding="async" />
           </div>
           <div className="proofcard">
-            <span className="label" style={{ color: "#5d5d5a" }}>Every vault</span>
-            <div className="big tnum">Δ 0.000000</div>
-            <span>On-chain balance vs ledger, fees and gas included</span>
+            <span className="label" style={{ color: "#5d5d5a" }}>Every entry</span>
+            <div className="big tnum">7 dp</div>
+            <span>Stellar&rsquo;s own precision, so a vault can equal the ledger to the stroop</span>
           </div>
         </div>
+        <p className="source">
+          Shown: the treasury console from Corridor&rsquo;s earlier <b>Tempo prototype</b>, reading Tempo and Solana. There is no console in the Stellar build — it was removed rather than
+          left reporting a chain this repository no longer settles on. Read-only reporting runs from <b>pnpm watch:report</b>, and the ledger, the saga tables and the matcher
+          already hold everything a console would show.
+        </p>
       </div>
     </section>
   );

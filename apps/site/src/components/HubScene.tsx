@@ -3,9 +3,9 @@ import { useMemo, useRef } from "react";
 import * as THREE from "three";
 
 /**
- * The network as a scene: Tempo is the hub, every region a spoke, and each
+ * The network as a scene: Stellar is the hub, every region a spoke, and each
  * moving point a payment. Collections travel in, payouts travel out; one
- * spoke wears a ring for the shielded Zcash lane.
+ * spoke wears a ring for the corridor that still settles off the hub.
  */
 
 const INK = new THREE.Color("#f4f4f0");
@@ -142,7 +142,7 @@ function Network({ reduced }: { reduced: boolean }) {
           <meshBasicMaterial color={INK} />
         </mesh>
       ))}
-      {/* the shielded spoke */}
+      {/* the one spoke off the hub */}
       <mesh position={spokes[5]} rotation={[Math.PI / 2, 0, 0]}>
         <torusGeometry args={[0.2, 0.008, 8, 64]} />
         <meshBasicMaterial color={INK} />

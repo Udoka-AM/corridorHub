@@ -77,7 +77,7 @@ export default function Collapse() {
           <div className="phase b">
             <span className="big">1</span>
             <h2 className="h2">One ledger. Your keys.</h2>
-            <p className="lede">One stablecoin balance in your own vault funds every corridor. Corridor runs each payout across your providers exactly once and matches it from funding to bank credit.</p>
+            <p className="lede">One USDC balance on Stellar, in your own vault, funds every corridor. Anchors settle on the hub itself, so Corridor pays each one exactly once and matches it from funding to bank credit.</p>
           </div>
         </div>
         <div className="field" aria-hidden="true">

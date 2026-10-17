@@ -32,7 +32,7 @@ export default function Closing() {
         <div className="paths">
           <div className="path">
             <h3 className="h3">Start read-only. Move money when ready.</h3>
-            <p className="lede">A 60-day pilot on the wallets you already run: matched payouts and an exceptions list, no keys shared. Taking design partners now, starting with Europe → Africa and Africa → Asia.</p>
+            <p className="lede">A 60-day pilot on the Stellar accounts you already run: matched payouts and an exceptions list, no keys shared. Taking design partners now, starting with Europe → East Africa.</p>
             <div>
               <a className="btn primary" href={PILOT} target="_blank" rel="noreferrer" data-hot>
                 Start a pilot <span className="arr">→</span>
@@ -40,11 +40,11 @@ export default function Closing() {
             </div>
           </div>
           <div className="path">
-            <h3 className="h3">One integration reaches every region.</h3>
-            <p className="lede">Payout partners, ramps and liquidity providers on any continent, in USDC, USDT, PYUSD or EURC.</p>
+            <h3 className="h3">Publish a stellar.toml. Reach every region.</h3>
+            <p className="lede">Anchors speak SEP-1, 10, 12, 38 and 31, so becoming a spoke is a home domain and an asset rather than an integration. No anchor is signed yet — the first one opens the first corridor.</p>
             <div>
-              <a className="btn" href="https://corridor.udokaam.dev/integrations/partner-interface" target="_blank" rel="noreferrer" data-hot>
-                Read the partner interface <span className="arr">↗</span>
+              <a className="btn" href="https://corridor.udokaam.dev/integrations/sep-anchors" target="_blank" rel="noreferrer" data-hot>
+                Read the anchor interface <span className="arr">↗</span>
               </a>
             </div>
           </div>

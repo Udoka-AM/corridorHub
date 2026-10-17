@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import { ANY_MOTION, gsap, useGSAP } from "../motion";
-import { BACKERS, CHAINS, STABLES } from "./Chains";
+import { CHAINS, FEE_ASSET, STABLES } from "./Chains";
 
 /** A figure whose digits roll into place like an odometer. */
 function Roll({ value }: { value: string }) {
@@ -24,10 +24,10 @@ function Roll({ value }: { value: string }) {
 }
 
 const STATS = [
-  { value: "74", unit: "s", note: "From Tempo to a Nigerian bank account, live on mainnet" },
-  { value: "59/59", unit: "", note: "Movements matched to the ledger across Tempo, Solana, partners and Zcash" },
+  { value: "32", unit: "B", note: "The reference, carried whole in Stellar's MEMO_HASH. No indexer." },
+  { value: "7", unit: "dp", note: "The ledger keeps Stellar's precision, so a vault equals the books" },
   { value: "0", unit: "", note: "Customer keys Corridor holds. Your KMS or MPC signs." },
-  { value: "2/3", unit: "", note: "Signers to move a shielded vault. One alone is refused." },
+  { value: "110", unit: "", note: "Tests over the venue, planner, ledger, saga and anchor adapter" },
 ];
 
 export default function Proof() {
@@ -60,15 +60,14 @@ export default function Proof() {
   );
 
   const strip: { name: string; issuer?: string; Icon: (typeof CHAINS)[number]["Icon"] }[] = [
-    ...CHAINS.slice(0, 1),
-    ...BACKERS,
-    ...CHAINS.slice(1),
+    ...CHAINS,
     ...STABLES,
+    FEE_ASSET,
   ];
   const loop = [...strip, ...strip];
   return (
     <section className="band" ref={root} aria-label="Proof">
-      <div className="marquee" aria-label="Built on Tempo, incubated by Stripe and Paradigm; settles across Solana, Base, Zcash and NEAR Intents in USDC and EURC from Circle, USDT from Tether and PYUSD from Paxos">
+      <div className="marquee" aria-label="Settles on Stellar, reaching Solana and Base, in USDC and EURC from Circle, USDT from Tether and PYUSD from Paxos, with XLM held only as fee float">
         <div className="track" aria-hidden="true">
           {loop.map(({ name, issuer, Icon }, i) => (
             <span className="item" key={i}>
@@ -91,6 +90,10 @@ export default function Proof() {
             </div>
           ))}
         </div>
+        <p className="source">
+          Two runs on Stellar testnet, 17 Oct 2026, reproducible with <b>pnpm stellar:smoke</b> and <b>pnpm stellar:payout</b>. No anchor is signed, so no local currency has moved on Stellar
+          yet. Corridor&rsquo;s earlier prototype settled on Tempo and paid ₦3,891.48 into a Nigerian bank account 74 seconds after 2.90 USDC.e left a vault, on 11 Oct 2026.
+        </p>
       </div>
     </section>
   );

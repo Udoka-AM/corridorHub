@@ -669,7 +669,7 @@ async function slow() {
 }
 if (REPLAY) {
   $("replayBanner").hidden = false;
-  $("replayBanner").innerHTML = `<strong>Replay of live runs</strong>, recorded ${esc(REPLAY.snapshotDate)}. The Live on mainnet panel is a real payout with real money. Every other balance, saga and reconciliation figure came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../">About Corridor</a>`;
+  $("replayBanner").innerHTML = `<strong>Corridor's earlier Tempo prototype</strong>, recorded ${esc(REPLAY.snapshotDate)} and kept as evidence of that build. Corridor now settles on Stellar and has no console; nothing on this page reflects the Stellar code. The Live on mainnet panel is a real payout with real money; every other figure came from Tempo Moderato, Solana devnet and Zcash testnet, and every ↗ link opens the real transaction. <a href="../">About Corridor</a>`;
   $("actionStatus").textContent = "Replay: each button opens the recorded run of that flow.";
 }
 drawMap(); loop(); slow(); refreshReadOnly(); refreshMainnet();
