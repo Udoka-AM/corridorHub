@@ -1,23 +1,37 @@
 ---
 title: "ADR 0002: The hub is enforced by the planner"
 sidebarTitle: "0002 · Hub enforced"
-description: "Every payout is funded from the Tempo hub and every collection lands on it. The route planner rejects anything else."
+description: "Every payout is funded from a balance on Stellar and every collection lands on Stellar. The route planner rejects anything else, which is what makes anchors additive."
 ---
 
 ## Context
 
 A network of bilateral corridors grows as N×N: every new region needs a link to every other. Treasury, reconciliation and visibility fragment the same way.
 
+Stellar makes the hub shape unusually cheap to hold to, because **anchors settle on Stellar itself**. The fiat spoke touches the hub directly, so insisting on the hub costs no extra hop on the common path.
+
 ## Decision
 
-**Tempo is the hub, enforced in code.** `planRoute` throws `NoRouteError` for a payout not funded from the hub or a collection that does not land on it. A corridor is just a currency pair, and the reference encodes the pair, so new corridors need no registry change.
+**Stellar is the hub, enforced in code.** `planRoute` throws `NoRouteError` for a payout not funded from the hub or a collection that does not land on it:
+
+```ts
+// packages/routing/src/index.ts
+if (purpose === "payout" && !onHub(req.source))
+  throw new NoRouteError("payouts are funded from the customer's balance on the Stellar hub");
+if (purpose === "collection" && !onHub(req.destination))
+  throw new NoRouteError("collections settle into the Stellar hub");
+```
+
+A corridor is just a currency pair and the reference encodes the pair ([ADR 0003](/decisions/0003-reference-in-memo-hash)), so a new corridor such as `GHS-HKD` needs no registry change.
 
 ## Consequences
 
-- N integrations instead of N×N: each new partner reaches every customer and region on day one.
+- **N integrations, not N×N corridors.** Because anchors speak the same SEPs ([ADR 0006](/decisions/0006-anchors-as-sep-spokes)), adding a region is a domain and an asset rather than an integration, and every existing spoke can reach it.
 - Every dollar is settled, held and reconciled in one ledger, visible to treasury in one place.
-- Some routes take an extra hop compared with a direct bridge (for example NGN → CNY crosses the hub). The cost is seconds and fractions of a cent per hop; the benefit is one balance and one set of books.
+- Hub enforcement is a correctness property, not a convention: it is tested in `packages/routing/src/routing.test.ts`.
+- A currency whose only licensed partner settles off Stellar costs one extra hop. Naira is the case that matters, and it sits in `OFF_STELLAR_PAYOUT_CURRENCIES` until a licensed naira anchor is live on Stellar; moving it onto the hub is then one line.
 
 ## Alternatives rejected
 
 - **Direct spoke-to-spoke routes when cheaper:** saves a hop, loses the single treasury and the single reconciliation point, which are the product.
+- **Hub as a convention, enforced in review:** the first exception under delivery pressure is the one that costs a day of reconciliation.

@@ -1,25 +1,28 @@
 ---
 title: "ADR 0009: Customers hold the keys"
 sidebarTitle: "0009 · Customers hold the keys"
-description: "Corridor signs through the customer's own KMS, HSM or MPC provider and never holds customer funds or key material."
+description: "Corridor signs through the customer's own KMS, HSM or MPC provider and never holds customer funds or key material. Stellar and Solana share Ed25519, so one held key serves both."
 ---
 
 ## Context
 
-The first build generated vault keys locally and moved money through wallets Corridor controlled. For a licensed payment company that is a dealbreaker: funds in flight would sit with an unlicensed intermediary, and due diligence stops at "who holds our money?". In most jurisdictions it would also make Corridor a money transmitter or crypto-asset service provider.
+The first build generated vault keys locally and moved money through wallets Corridor controlled. For a licensed payment company that is a dealbreaker: funds in flight would sit with an unlicensed intermediary, and due diligence stops at "who holds our money?". In most jurisdictions it would also make Corridor a money transmitter or a crypto-asset service provider.
 
 ## Decision
 
-**All signing goes through one interface, implemented by the customer's signer.** `@corridor/signer` defines secp256k1 (Tempo, Base) and Ed25519 (Solana) signers; adapters turn them into chain accounts. Corridor runs self-hosted or as a dedicated managed instance and calls the customer's KMS or MPC provider with digests only.
+**All signing goes through one interface, implemented by the customer's signer.** Corridor runs self-hosted or as a dedicated managed instance and calls the customer's KMS or MPC provider with digests only. Key material never enters Corridor's process.
+
+Stellar and Solana both use **Ed25519**, so one held key serves both: `ed25519PublicKeyBytes` returns the raw 32-byte key, Solana writes it in base58 and Stellar in StrKey, and `ed25519StellarSigner` wraps any `signBytes` implementation for Stellar. Signing is over the transaction hash, so the signer never sees transaction semantics.
 
 ## Consequences
 
 - Corridor is software, not a custodian: the licence, the funds and the keys stay with the customer.
-- AWS KMS is supported now; each further provider is one adapter.
-- Local keys remain for development and testnet only.
-- The shielded lane keeps FROST 2-of-3 ([ADR 0006](/decisions/0006-frost-threshold-vaults)).
+- AWS KMS and Turnkey adapters are built and tested; each further provider is one adapter, not a change to any leg.
+- The runtime picks the signer from the environment (`CORRIDOR_SIGNER=aws-kms|turnkey`), and the same flows run unchanged.
+- Local keys remain, for development and testnet only.
+- The same interface covers secp256k1 for EVM spokes, so a Base inflow signs the same way.
 
 ## Alternatives rejected
 
-- **Corridor-run custody with a licence:** slow to obtain, and it puts Corridor in competition with the providers it should route through.
-- **Partner custody (Corridor picks a custodian):** still a third party between the customer and its money, and it locks the customer to that custodian.
+- **Corridor-run custody with a licence:** slow to obtain, and it puts Corridor in competition with the anchors it should route through.
+- **Partner custody, with Corridor picking the custodian:** still a third party between the customer and its money, and it locks the customer to that custodian.

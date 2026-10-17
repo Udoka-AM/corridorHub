@@ -1,24 +1,31 @@
 ---
 title: "ADR 0011: Read-only first"
 sidebarTitle: "0011 · Read-only first"
-description: "A customer starts by letting Corridor watch its existing wallets and match its own payout records; moving money is the second step."
+description: "A customer starts by letting Corridor watch the Stellar accounts it already runs and match its own payout records. Moving money is the second step, on the customer's own signer."
 ---
 
 ## Context
 
-Asking a licensed payment company to route money through new software on day one needs a security review, a custody review and pre-funding before it sees any value. Meanwhile the problem it feels every day is visibility: a payout crosses several providers and chains, and breaks surface when a customer complains.
+Asking a licensed payment company to route money through new software on day one needs a security review, a custody review and pre-funding before it sees any value. Meanwhile the problem it feels every day is visibility: a payout crosses an anchor, a chain and a bank, and breaks surface when a customer complains.
 
 ## Decision
 
-**The first product is read-only.** Watch-only observers (Tempo reader, `SolanaWatcher`, `Erc20Watcher`) need only addresses. `reconcileReadOnly` matches the company's own payout records against what moved, by reference first and by amount and counterparty otherwise, and returns matched, short, over, pending, missing and unexpected, with a CSV export. Moving money through Corridor's sagas is the second step, on the customer's own signer.
+**The first product is read-only.** `StellarObserver` needs only account ids — no keys, no API access to the company's systems. `reconcileReadOnly` matches the company's own payout records against what moved, by reference first and by amount and counterparty otherwise, and returns `matched`, `short`, `over`, `pending`, `missing` and `unexpected`, with a CSV export.
+
+```bash
+CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
+```
+
+Moving money through Corridor's sagas is the second step, on the customer's own signer ([ADR 0009](/decisions/0009-customer-held-keys)).
 
 ## Consequences
 
-- A pilot can start in a day with no keys and no money at risk.
-- Heuristic matching is weaker than reference matching; the pilot makes that gap visible, which is the argument for routing through Corridor.
-- Base has no memo, so Base movements in read-only mode match by amount and counterparty only.
+- A pilot can start in a day, with no keys and no money at risk.
+- The same observers, matcher and statuses run unchanged when Corridor starts moving money. What changes is who signs.
+- Heuristic matching is weaker than reference matching. The pilot makes that gap visible, which is itself the argument for routing through Corridor: once Corridor sends the payment, the memo carries the reference and matching becomes exact.
+- Read-only sees what the watched accounts did. It cannot see a payout that never reached a chain at all, which is what the payout records are for.
 
 ## Alternatives rejected
 
-- **Integration-first:** slower to start and riskier for the customer.
+- **Integration-first:** slower to start and riskier for the customer, with the value arriving last.
 - **Accounting-style wallet reconciliation:** books wallets, not payouts; it cannot tell whether a beneficiary was paid.
