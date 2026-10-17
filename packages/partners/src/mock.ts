@@ -31,6 +31,8 @@ export interface MockPartnerOptions {
   /** Collections: send USDC to the order's recipient once the payer's transfer "arrives". */
   sendUsdc?: (recipient: string, usdcAmount: bigint, chain: PartnerChain) => Promise<string>;
   rates?: Partial<Record<Fiat, { onRamp: number; offRamp: number }>>;
+  /** Which chains this stand-in settles on. Defaults to Solana. */
+  chains?: readonly PartnerChain[];
   /** Make payouts fail at PROCESSING (bank rejected), for failure-path tests. */
   failPayouts?: boolean;
 }
@@ -50,12 +52,13 @@ export class MockPartner implements RampPartner {
   readonly id: string;
   readonly payoutCurrencies: readonly Fiat[];
   readonly collectionCurrencies: readonly Fiat[] = ["NGN", "KES", "GHS"];
-  readonly chains: readonly PartnerChain[] = ["SOLANA"];
+  readonly chains: readonly PartnerChain[];
   private readonly orders = new Map<string, PartnerOrder>();
 
   constructor(private readonly opts: MockPartnerOptions) {
     this.id = opts.id ?? "mock";
     this.payoutCurrencies = Object.keys({ ...DEFAULT_RATES, ...opts.rates }) as Fiat[];
+    this.chains = opts.chains ?? ["SOLANA"];
   }
 
   async rates(currency: Fiat): Promise<Rates> {

@@ -288,7 +288,10 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
 
       const a = ctx.accounts;
       const hold = await a.customerHold(d.customerId, d.corridor, d.asset, d.venue);
-      const egress = await a.vault(`${spoke}-egress`, "USDC", spoke);
+      // An anchor on the hub is paid out of the treasury; one that settles
+      // elsewhere is paid from the egress vault the bridge legs filled.
+      const crossVenue = spoke !== d.venue;
+      const egress = await a.vault(crossVenue ? `${spoke}-egress` : "treasury", "USDC", spoke);
       const paid = done.usdcAmount > 0n ? done.usdcAmount : usdc;
       const total = BigInt(d.amount);
       // Anything the anchor's rounding left in the egress vault is dust held for the customer.
@@ -297,7 +300,6 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
       const recovery = bridgeFees > 0n ? await a.revenue("bridge-fee-recovery", "USDC", spoke) : undefined;
       const dustAccount = dust > 0n ? await a.clearing("payout-dust", "USDC", spoke) : undefined;
       // On the hub the peg legs would be the same account twice, so they are left out.
-      const crossVenue = spoke !== d.venue;
       const pegHub = crossVenue ? await a.clearing("usd-peg", d.asset, d.venue) : undefined;
       const pegSpoke = crossVenue ? await a.clearing("usd-peg", "USDC", spoke) : undefined;
       return {

@@ -112,6 +112,52 @@ describe("partner payout leg", () => {
     for (const name of ["solana-egress"]) expect((await ledger.balance(await accounts.vault(name, "USDC", "solana"))).amount).toBe(0n);
   });
 
+  it("pays a Stellar anchor straight out of the treasury, with no bridge leg", async () => {
+    const registry = new PartnerRegistry();
+    const mock = new MockPartner({
+      webhookSecret: SECRET,
+      chains: ["STELLAR"],
+      deliver: (b, h) => handlePartnerWebhook(registry, events, "mock", b, h).then(() => {}),
+    });
+    registry.register(mock);
+    const leg = partnerPayoutLeg({
+      partners: registry,
+      events,
+      pollMs: 5,
+      fund: async ({ order, chain }) => {
+        expect(chain).toBe("STELLAR");
+        await mock.observeFunding(order.id, "stellarTx1");
+        return "stellarTx1";
+      },
+    });
+
+    const plan = planRoute({
+      corridor: "EUR-KES",
+      privacy: "public",
+      source: { venue: "stellar", asset: "USDC" },
+      destination: { venue: "partner_fiat", asset: "KES" },
+      env: "mainnet",
+    });
+    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "partner.payout"]);
+
+    // Fund this corridor's customer balance, as a collection would have.
+    await ledger.post({
+      kind: "deposit",
+      lines: [
+        { account: await accounts.vault("treasury", "USDC", "stellar"), direction: "D", money: money("USDC", 70_000_000n) },
+        { account: await accounts.customer("eu-payco", "EUR-KES", "USDC", "stellar"), direction: "C", money: money("USDC", 70_000_000n) },
+      ],
+    });
+
+    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, leg]);
+    const id = await engine.start({ kind: "payout", plan, data: payoutData({ corridor: "EUR-KES" }) });
+    expect(await engine.run(id)).toBe("completed");
+
+    // The payout left the treasury on the hub; no egress vault is involved.
+    expect((await ledger.balance(await accounts.vault("treasury", "USDC", "stellar"))).amount).toBe(500_000_000n);
+    expect(await ledger.checkInvariants()).toEqual([]);
+  });
+
   it("never funds an order twice across retries", async () => {
     const registry = new PartnerRegistry();
     const mock = new MockPartner({ webhookSecret: SECRET });

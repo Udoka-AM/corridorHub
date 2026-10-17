@@ -34,6 +34,47 @@ export interface StellarPaymentRecord {
   };
 }
 
+/**
+ * The SDK turns every Horizon `_links` entry into a method, so on an
+ * operation record `transaction` is a link-follower and the joined
+ * transaction sits in `transaction_attr` — and inside that, `ledger` is a
+ * link-follower too, with the sequence in `ledger_attr`. Normalising here
+ * keeps those quirks at the edge, so everything downstream reads the plain
+ * Horizon JSON shape above.
+ */
+export function normalizeRecord(raw: unknown): StellarPaymentRecord {
+  type Joined = NonNullable<StellarPaymentRecord["transaction"]> & { ledger_attr?: number };
+  const record = raw as StellarPaymentRecord & { transaction_attr?: Joined };
+  const joined: Joined | undefined = record.transaction_attr ?? (typeof record.transaction === "object" ? record.transaction : undefined);
+  const { transaction_attr: _ignored, ...rest } = record;
+  if (!joined) return { ...rest, transaction: undefined };
+  const ledger = typeof joined.ledger === "number" ? joined.ledger : joined.ledger_attr;
+  return {
+    ...rest,
+    transaction: {
+      memo: joined.memo,
+      memo_type: joined.memo_type,
+      ledger,
+      source_account: joined.source_account,
+      fee_charged: joined.fee_charged,
+      successful: joined.successful,
+    },
+  };
+}
+
+/**
+ * The ledger an operation landed in, from its TOID: Horizon packs the ledger
+ * sequence into the high 32 bits of every operation id, and the joined
+ * transaction does not carry the sequence itself.
+ */
+export function ledgerOf(pagingToken: string): bigint | undefined {
+  try {
+    return BigInt(pagingToken) >> 32n;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Where payment history comes from. `horizonPayments` is the real one; tests pass a fake. */
 export interface PaymentSource {
   /** Payments for `account` strictly after `cursor`, oldest first. */
@@ -101,7 +142,7 @@ export class StellarObserver {
 
     const tx = record.transaction;
     const reference: Hex | null = tx?.memo ? fromStellarMemo(tx.memo, tx.memo_type) : null;
-    const ledger = tx?.ledger === undefined ? undefined : BigInt(tx.ledger);
+    const ledger = tx?.ledger === undefined ? ledgerOf(record.paging_token) : BigInt(tx.ledger);
     const observedAt = new Date(record.created_at);
     const base = { venue: "stellar" as const, reference, blockNumber: ledger, observedAt };
     const out: Observation[] = [];

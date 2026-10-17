@@ -1,10 +1,10 @@
 import { Asset as SdkAsset, BASE_FEE, Horizon, Keypair, Memo, Networks, Operation, StrKey, TransactionBuilder } from "@stellar/stellar-sdk";
 import { fromStellarMemo, money, toStellarMemo, tryDecodeRef, type Asset, type Hex, type Observation } from "@corridor/core";
 import { NATIVE, assetOf, fromStellarAmount, issuerOf, stellarAsset, toStellarAmount, type StellarNetwork } from "./assets.ts";
-import { StellarObserver, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
+import { StellarObserver, ledgerOf, normalizeRecord, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
 
 export { NATIVE, STELLAR_DECIMALS, STELLAR_ISSUERS, assetOf, fromStellarAmount, issuerOf, stellarAsset, toStellarAmount, type StellarNetwork } from "./assets.ts";
-export { StellarObserver, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
+export { StellarObserver, ledgerOf, normalizeRecord, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
 
 export const HORIZON: Record<StellarNetwork, string> = {
   testnet: "https://horizon-testnet.stellar.org",
@@ -173,7 +173,7 @@ export function horizonPayments(server: Horizon.Server): PaymentSource {
       let call = server.payments().forAccount(account).join("transactions").order("asc").limit(limit);
       if (cursor) call = call.cursor(cursor);
       const page = await call.call();
-      return page.records as unknown as StellarPaymentRecord[];
+      return page.records.map(normalizeRecord);
     },
   };
 }
@@ -209,7 +209,7 @@ export async function findTransfersByReference(
         amount: fromStellarAmount(asset, record.amount),
         from: record.from,
         to: record.to,
-        blockNumber: record.transaction?.ledger === undefined ? undefined : BigInt(record.transaction.ledger),
+        blockNumber: record.transaction?.ledger === undefined ? ledgerOf(record.paging_token) : BigInt(record.transaction.ledger),
         observedAt: new Date(record.created_at),
       });
     }

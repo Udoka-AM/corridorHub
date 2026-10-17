@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { Keypair, Memo, Networks, Operation, TransactionBuilder, Account as SdkAccount } from "@stellar/stellar-sdk";
 import { RefKind, customerTag, encodeRef, fromStellarMemo, toStellarMemo, uuidv7, type Observation } from "@corridor/core";
 import { STELLAR_ISSUERS, assetOf, fromStellarAmount, stellarAsset, toStellarAmount } from "./assets.ts";
-import { StellarObserver, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
+import { StellarObserver, ledgerOf, normalizeRecord, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
 import { ed25519StellarSigner, localStellarSigner } from "./index.ts";
 
 const USDC_ISSUER = STELLAR_ISSUERS.USDC!.testnet!;
@@ -198,5 +198,55 @@ describe("StellarObserver", () => {
   it("drops movements from a failed transaction", async () => {
     const { seen } = await observe([payment({ transaction_successful: false, transaction: { memo: memoOf(reference()), memo_type: "hash" } })]);
     expect(seen).toEqual([]);
+  });
+});
+
+describe("Horizon records", () => {
+  /**
+   * The SDK makes a method out of every `_links` entry, so a joined payment
+   * arrives with `transaction` as a link-follower, the data in
+   * `transaction_attr`, and the ledger sequence in `ledger_attr` because
+   * `ledger` is a link-follower too. Getting this wrong loses every memo.
+   */
+  it("lifts the joined transaction out from behind the SDK's link methods", () => {
+    const ref = reference();
+    const raw = {
+      ...payment({ paging_token: "22512088261873665" }),
+      transaction: () => Promise.resolve({}),
+      transaction_attr: {
+        memo: memoOf(ref),
+        memo_type: "hash",
+        ledger: () => Promise.resolve({}),
+        ledger_attr: 5_241_517,
+        source_account: "GVAULT",
+        fee_charged: "100",
+        successful: true,
+      },
+    };
+
+    const record = normalizeRecord(raw);
+    expect(record.transaction).toEqual({
+      memo: memoOf(ref),
+      memo_type: "hash",
+      ledger: 5_241_517,
+      source_account: "GVAULT",
+      fee_charged: "100",
+      successful: true,
+    });
+    expect(fromStellarMemo(record.transaction!.memo!, record.transaction!.memo_type)).toBe(ref);
+  });
+
+  it("reads the ledger sequence out of an operation's TOID", () => {
+    // 22512088261873665 >> 32 — the ledger this operation landed in, checked
+    // against Horizon's own ledger_attr for the same operation.
+    expect(ledgerOf("22512088261873665")).toBe(5_241_504n);
+    expect(ledgerOf("not-a-token")).toBeUndefined();
+  });
+
+  it("falls back to the TOID when the joined transaction has no sequence", async () => {
+    const source = fakeHorizon([payment({ paging_token: "22512088261873665", transaction: { memo: memoOf(reference()), memo_type: "hash" } })]);
+    const observer = new StellarObserver(source, { name: "v", network: "testnet", accounts: ["GVAULT"], cursors: memoryCursors(), pageSize: 2 });
+    const [seen] = await observer.poll();
+    expect(seen!.blockNumber).toBe(5_241_504n);
   });
 });
