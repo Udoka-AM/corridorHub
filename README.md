@@ -103,6 +103,6 @@ CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
 
 Built and tested: the Stellar venue, the reference in `MEMO_HASH`, the planner, the saga engine, the ledger, read-only reconciliation, and the SEP anchor adapter against a stubbed anchor.
 
-Not done yet: no anchor is signed, so no real local currency has moved on Stellar; SEP-6 collections are unimplemented; CCTP legs are declared in the route graph but not built; the MGUSD, PYUSD and USDT issuers are unset until each is verified against its own `stellar.toml`; the treasury console and the documentation site still describe the Tempo prototype.
+Not done yet: no anchor is signed, so no real local currency has moved on Stellar; SEP-6 collections are unimplemented; the `cctp.transfer` and `stellar.pathPayment` legs are declared in the route graph but not built; the MGUSD, PYUSD and USDT issuers are unset until each is verified against its own `stellar.toml`; there is no treasury console.
 
 MIT licensed.

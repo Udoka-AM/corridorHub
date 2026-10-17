@@ -10,8 +10,8 @@ A single EUR → KES payout crosses a bank collection, a stablecoin issuer, an a
 
 Stellar is the settlement hub. Two things about Stellar decide the shape of the system:
 
-1. **`MEMO_HASH` is exactly 32 bytes**, which is exactly a Corridor Reference. The reference travels whole, as part of the signed transaction, so reconciliation is a join rather than an inference (§7).
-2. **Anchors settle on Stellar itself.** The fiat spoke touches the hub directly, so the common payout path has no bridge in it at all (§3).
+1. **`MEMO_HASH` is exactly 32 bytes**, which is exactly a Corridor Reference. The reference travels whole, as part of the signed transaction, so reconciliation is a join rather than an inference (§7, ADR 0003).
+2. **Anchors settle on Stellar itself.** The fiat spoke touches the hub directly, so the common payout path has no bridge in it at all (§3, ADR 0002).
 
 Customers adopt it in two stages:
 
@@ -23,14 +23,14 @@ Customers adopt it in two stages:
 | Principle | What it means in the code |
 |---|---|
 | **Customer-held keys** | Every vault signs through a signer interface. Stellar and Solana both use Ed25519, so one held key serves both: `ed25519StellarSigner` takes any `signBytes` implementation and its raw public key. Adapters exist for local keys (development), AWS KMS and Turnkey. Corridor never holds a key or a balance. |
-| **Book from the chain** | Every ledger entry for an on-chain movement is keyed by its transaction. Fees, reserves and rounding are booked from what the network reports, not estimated. The ledger keeps Stellar's own 7 decimal places, so a booked balance can equal an on-chain balance exactly; spokes with fewer decimals convert through `rescale`, which refuses any conversion that would drop value. |
-| **One reference end to end** | A 32-byte Corridor Reference rides Stellar's `MEMO_HASH`, the Solana memo on cross-chain spokes, and the anchor's own fields. |
-| **The hub is enforced** | Payouts are funded from a balance on Stellar, and collections land on Stellar. The route planner rejects any other shape, so every flow is settled, held and reconciled in one place. |
+| **Book from the chain** (ADR 0008) | Every ledger entry for an on-chain movement is keyed by its transaction. Fees, reserves and rounding are booked from what the network reports, not estimated. The ledger keeps Stellar's own 7 decimal places, so a booked balance can equal an on-chain balance exactly; spokes with fewer decimals convert through `rescale`, which refuses any conversion that would drop value. |
+| **One reference end to end** (ADR 0003) | A 32-byte Corridor Reference rides Stellar's `MEMO_HASH`, the Solana memo on cross-chain spokes, and the anchor's own fields. |
+| **The hub is enforced** (ADR 0002) | Payouts are funded from a balance on Stellar, and collections land on Stellar. The route planner rejects any other shape, so every flow is settled, held and reconciled in one place. |
 | **Exactly once across systems** | Every leg records its external side effect (a payment, an anchor order, a funding transfer) before it waits on it. A retry resumes the recorded work; a gap it cannot resolve stops the payout for a person. |
 | **Issuer identity is part of the asset** | USDC from any issuer other than the one Corridor settles in is not USDC. `assetOf` matches code *and* issuer, so a look-alike token is never booked. |
 | **Issuer-neutral** | USDC, USDT, PYUSD, MGUSD and EURC are each booked in their own asset. |
 
-**Privacy** is deliberately absent for now. The reference reserves a flag for it and the ledger and planner already carry the notion of a shielded venue, but no shielded venue is configured: the confidential lane arrives with Stellar confidential tokens and auditor keys, and until then `privacy: "shielded"` is refused with that reason.
+**Privacy** is deliberately absent for now (ADR 0005). The reference reserves a flag for it and the ledger and planner already carry the notion of a shielded venue, but no shielded venue is configured: the confidential lane arrives with Stellar confidential tokens and auditor keys, and until then `privacy: "shielded"` is refused with that reason.
 
 ## 3. Network topology: hub and spokes
 
@@ -67,7 +67,7 @@ Corridors open in this order: **KES** (Minisend), **XOF** (lomi.) and **TZS** (C
 Corridor settles in **USDC on Stellar** and books every other issued asset in its own asset:
 
 - **USDC** is the hub's unit of account. Customer balances, the treasury vault and the clearing accounts are all USDC on Stellar.
-- **EURC, MGUSD, PYUSD** are first-class. Converting between them is a `stellar.pathPayment` leg over Stellar's own order books — on-ledger FX, no external venue.
+- **EURC, MGUSD, PYUSD** are first-class. Converting between them is a `stellar.pathPayment` leg over Stellar's own order books — on-ledger FX, no external venue. The edge is in the route graph and the planner produces it; the leg implementation is not written yet (§8.6).
 - **XLM** is held only as fee float and booked to `expense:gas`. Stellar charges fees in XLM, so a vault keeps a small balance; `create_account` and sponsored reserves are observed and booked from the transaction that paid them.
 
 Issuers are configured per network in `STELLAR_ISSUERS`, overridable per deployment through `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>`. USDC (mainnet and testnet) and EURC (mainnet) are set; **MGUSD, PYUSD and USDT are deliberately unset** until each is verified against its issuer's own published `stellar.toml`, and asking for one raises an error that names the missing issuer rather than guessing.
@@ -172,6 +172,8 @@ bytes 28–31 checksum (first 4 bytes of sha256 over bytes 0–27)
 
 ### 8.1 Ledger (`packages/ledger`)
 
+The ledger keeps Stellar's own 7 decimal places (ADR 0012), so a booked balance can equal an on-chain balance exactly.
+
 - Accounts keyed `(owner_type, owner_id, corridor, asset, venue, type)`. Types: asset, liability, revenue, expense, clearing, equity.
 - Immutable journal. Every entry balances per asset; conversions between assets go through `clearing` accounts (the USD peg, USD → EUR).
 - Invariants enforced at write time and tested: entries balance, no-overdraft accounts never go negative, and each external movement is booked exactly once (unique `(venue, external_ref)`).
@@ -215,13 +217,13 @@ bytes 28–31 checksum (first 4 bytes of sha256 over bytes 0–27)
 - **`partner.payout`** opens the anchor order, funds it exactly once, and waits. The vault it funds from depends on where the anchor settles: an anchor on the hub is paid out of the treasury; one that settles elsewhere is paid from the egress vault a bridge leg filled, and the customer bears those fees. Anchor rounding is booked as dust held for the customer; a failure after funding stops at `manual_review`.
 - **`partner.collect`** opens the onramp order, waits for the anchor to deliver USDC to the ingress vault, and books it. **`ledger.credit`** then credits the customer's USDC balance on the hub.
 - **`bridge.simulated`** stands in for CCTP on testnet: the Stellar side is real (value moves to an escrow with the reference as memo) and the far side is simulated, with the same bookings.
-- **Not built:** the `cctp.transfer` leg. It is declared in the route graph and planned for, but the implementation is not written, so mainnet naira payouts do not run yet.
+- **Not built:** the `cctp.transfer` leg and the `stellar.pathPayment` leg. Both are declared in the route graph and planned for, but neither implementation is written, so mainnet naira payouts do not run and a payout cannot yet be funded from an EURC or MGUSD balance.
 
 ### 8.7 Reconciliation and read-only mode (`packages/recon`)
 
 - Observers emit `Observation { venue, externalRef, reference, asset, amount, blockNumber, observedAt }`. The matcher joins them with ledger entries and reports `matched`, `amount_mismatch`, `unbooked` or `unreferenced`, the same way for every venue.
 - Vault accounting books fees, reserves and owner top-ups from the chain, then compares each vault's on-chain balance with the ledger.
-- Read-only mode runs the same observers on accounts the customer already operates and matches them against the customer's own payout records: `matched`, `short`, `over`, `pending`, `missing`, `unexpected`, with an exceptions queue and a CSV export. `pnpm watch:report` runs it.
+- Read-only mode (ADR 0011) runs the same observers on accounts the customer already operates and matches them against the customer's own payout records: `matched`, `short`, `over`, `pending`, `missing`, `unexpected`, with an exceptions queue and a CSV export. `pnpm watch:report` runs it.
 
 ### 8.8 Treasury console (`apps/console`)
 
@@ -266,5 +268,6 @@ Both use XLM, because a funded testnet USDC trustline needs an issuer faucet; th
 ## 12. Further reading
 
 - [README](../README.md) — what Corridor is, what runs today, and how to reproduce it.
+- [The decision records](https://corridor.udokaam.dev/decisions/index) — twelve records with the context, the decision, the consequences accepted and the alternatives rejected. The ones cited above: 0002 (the hub is enforced), 0003 (the reference in `MEMO_HASH`, and no indexer), 0005 (the confidential lane is deferred), 0008 (book from the chain), 0011 (read-only first), 0012 (the 7-decimal ledger).
 - `packages/routing/src/routing.test.ts` — hub enforcement and every route shape above, as tests.
 - `packages/chain-stellar/src/stellar.test.ts` — the reference on a real transaction, issuer identity, and the Horizon quirks that would otherwise lose memos.
