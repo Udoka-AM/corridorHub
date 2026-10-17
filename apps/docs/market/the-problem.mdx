@@ -11,7 +11,7 @@ Cross-border payments are slow and expensive everywhere, and sending money into 
 To pay out instantly in Lagos, Nairobi or Accra, an operator keeps a funded bank account (a nostro) in each country, sized for peak days. That capital earns little, is exposed to local-currency devaluation, and grows with every corridor added. An operator in ten markets runs ten idle float pools, and an importer's bank repeats the exercise in reverse for every supplier country.
 
 <Card title="Corridor's answer" icon="circle-check">
-One pathUSD balance on the Tempo hub funds every corridor. Payout partners are funded per payment, just in time, and a 7-day forecast in the [treasury console](/architecture/treasury-console) says when to top up.
+One USDC balance on the Stellar hub funds every corridor. Anchors are funded per payment, just in time, out of the same balance. (The pre-funding forecast is designed and [not built](/architecture/treasury-console).)
 </Card>
 
 ## 2. Slow settlement through correspondent chains
@@ -19,7 +19,7 @@ One pathUSD balance on the Tempo hub funds every corridor. Payout partners are f
 A cross-border wire passes through correspondent banks, each adding cut-off windows, compliance checks and a day of float. T+1 to T+3 is normal; missing a cut-off on a Thursday can mean Tuesday. While money is in flight, neither sender nor beneficiary can use it.
 
 <Card title="Corridor's answer" icon="circle-check">
-Settlement on Tempo is final in about 0.6 seconds. The slowest remaining step is the local rail (bank transfer or mobile money), which the partner runs in minutes.
+Settlement on Stellar is final in seconds, and the anchor settles on the hub itself, so there is no bridge in the middle. The slowest remaining step is the local rail — bank transfer or mobile money — which the anchor runs in minutes.
 </Card>
 
 ## 3. Thin FX and opaque spreads
@@ -27,17 +27,17 @@ Settlement on Tempo is final in about 0.6 seconds. The slowest remaining step is
 Many African currencies trade thinly against the dollar, and onshore conversion can be restricted (China's CNY is the obvious case for importers). Spreads widen at every hop, and the customer rarely sees the rate before committing.
 
 <Card title="Corridor's answer" icon="circle-check">
-A firm rate from the partner that pays out, quoted with a time limit before funds move, and settlement in dollar stablecoins between hops so there is no intermediate conversion.
+A firm SEP-38 quote from the anchor that pays out, held for the life of the quote before funds move, and settlement in one dollar stablecoin on the hub so there is no intermediate conversion.
 </Card>
 
 ## 4. Reconciliation by hand, across providers
 
-A single payout touches the operator's ledger, a bank collection, one or more stablecoin providers, several chains and a payout partner, each with its own ids and dashboard. Matching them is still largely done with statements and spreadsheets. A payout that bridged but never reached the bank is usually found when the customer complains, float is stranded across venues nobody sees together, and switching providers breaks the process.
+A single payout touches the operator's ledger, a bank collection, a stablecoin issuer, an anchor and the beneficiary's bank, each with its own ids and dashboard. Matching them is still largely done with statements and spreadsheets. A payout that bridged but never reached the bank is usually found when the customer complains, float is stranded across venues nobody sees together, and switching providers breaks the process.
 
 <Card title="Corridor's answer" icon="circle-check">
-Every payout is matched from funding to bank credit. Read-only, Corridor matches the company's own records against the wallets it already runs and flags what is missing, short or unidentified ([pilot](/flows/read-only-pilot)). When Corridor moves the money, a 32-byte [Corridor Reference](/architecture/corridor-reference) rides in every chain's native memo and every partner's free-text field, so matching is exact: on testnet, 45 of 45 movements reconcile, and the treasury vault's on-chain balance equals the ledger exactly.
+Every payout is matched from funding to bank credit. Read-only, Corridor matches the company's own records against the wallets it already runs and flags what is missing, short or unidentified ([pilot](/flows/read-only-pilot)). When Corridor moves the money, a 32-byte [Corridor Reference](/architecture/corridor-reference) rides in Stellar's `MEMO_HASH` and the anchor's own fields, so matching is exact rather than heuristic — and because the ledger keeps Stellar's 7 decimal places, a vault's on-chain balance can equal the ledger to the stroop.
 </Card>
 
 ## And in the other direction: imports
 
-Africa's trade with the world reached **$1.5 trillion in 2024** ([Afreximbank, African Trade Report 2025](https://www.afreximbank.com/afreximbank-launches-2025-report-on-african-trade-in-a-shifting-global-financial-landscape/)). Every import is a payment out of the continent, and importers face all four costs, plus one more: on a public chain, a competitor can read exactly what they pay each supplier. Corridor's [shielded lane](/integrations/zcash) pays suppliers on Zcash, private from the public and open to the auditor.
+Africa's trade with the world reached **$1.5 trillion in 2024** ([Afreximbank, African Trade Report 2025](https://www.afreximbank.com/afreximbank-launches-2025-report-on-african-trade-in-a-shifting-global-financial-landscape/)). Every import is a payment out of the continent, and importers face all four costs, plus one more: on a public chain, a competitor can read exactly what they pay each supplier. Keeping those prices off a public ledger is a real need, and Corridor's answer waits for [Stellar confidential tokens](/decisions/0005-confidential-lane-deferred) rather than bolting a second settlement system onto the side.

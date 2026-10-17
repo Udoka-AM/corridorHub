@@ -47,21 +47,21 @@ These are scenarios, not forecasts: they count routed volume only and leave out 
 - **Network effects.** Each partner added reaches every customer and every other region. Customers get more corridors without more integrations, which raises switching costs.
 - **System of record.** The operations team's ledger, exceptions and audit history live in Corridor. Providers become interchangeable venues; Corridor does not.
 - **Data compounds.** Pre-funding forecasts improve with volume per corridor, and reconciliation history becomes audit evidence.
-- **Cheap rails underneath.** Hub settlement costs fractions of a cent per transfer on Tempo, and bridge hops cost fractions of a cent on Across, so the take is margin rather than pass-through.
+- **Cheap rails underneath.** Settlement on Stellar costs fractions of a cent per payment, and the common payout path has no bridge in it at all, so the take is margin rather than pass-through.
 
 ## Go-to-market
 
 <Steps>
   <Step title="Land read-only">
-    Licensed payout companies paying into Africa, starting with EUR → NGN: a 60-day read-only pilot on the wallets they already run.
+    Licensed payout companies paying into Africa, starting with EUR → KES: a 60-day read-only pilot on the Stellar accounts they already run.
   </Step>
   <Step title="Route">
-    Move payouts through Corridor on the customer's own signer, settling on Tempo.
+    Move payouts through Corridor on the customer's own signer, settling on Stellar through a signed anchor.
   </Step>
   <Step title="Reverse the flow">
-    The same customers' importer clients paying suppliers in Asia and the Americas (NGN → CNY first), on the same integration.
+    The same customers' importer clients paying suppliers in Asia and the Americas (KES → CNY first), on the same integration.
   </Step>
   <Step title="Add spokes along trade routes">
-    Every ramp or payout partner signed becomes a spoke for every customer: Latin America, the Middle East and Asia next.
+    Every anchor signed becomes a spoke for every customer: Latin America, the Middle East and Asia next.
   </Step>
 </Steps>

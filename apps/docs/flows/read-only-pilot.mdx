@@ -1,17 +1,19 @@
 ---
 title: "Read-only pilot"
-description: "How a payment company starts: Corridor watches the wallets it already runs, matches what moved against its own payout records, and returns an exceptions queue. No keys, nothing moves."
+description: "How a payment company starts: Corridor watches the Stellar accounts it already runs, matches what moved against its own payout records, and returns an exceptions queue. No keys, nothing moves."
 icon: "eye"
 ---
 
-The first step with Corridor moves no money. A payment company shares the addresses of the wallets it already uses with its current providers, plus an export of its payout records. Corridor watches those wallets, matches every stablecoin movement against the records, and produces the morning exceptions queue.
+The first step with Corridor moves no money. A payment company shares the account ids of the Stellar accounts it already uses, plus an export of its payout records. Corridor watches those accounts, matches every movement against the records, and produces the morning exceptions queue.
+
+This is the whole product on day one, and it is the reason a pilot can start without a custody review. See [ADR 0011](/decisions/0011-read-only-first).
 
 <Steps>
-  <Step title="Share addresses">
-    Tempo, Solana and Base addresses, in a short config file. No keys, no API access to the company's systems.
+  <Step title="Share account ids">
+    Stellar `G…` account ids. No keys, no API access to the company's systems. Solana and Base addresses can be included for wallets that still sit there.
   </Step>
   <Step title="Share payout records">
-    A CSV from the company's core system: id, chain, stablecoin, amount, direction, counterparty, reference (if any), time.
+    A CSV from the company's core system: id, venue, asset, amount, direction, counterparty, reference (if any), time.
   </Step>
   <Step title="Get matched payouts and exceptions">
     Every record is matched, short, over, pending or missing; every movement with no record is flagged. A CSV comes back for the finance team.
@@ -20,45 +22,57 @@ The first step with Corridor moves no money. A payment company shares the addres
 
 ## What gets observed
 
-| Chain | Observer | Stablecoins |
+| Venue | Observer | What it reads |
 |---|---|---|
-| Tempo | `TempoObserver` with a key-less reader | pathUSD, USDC.e (TIP-20) |
-| Solana | `SolanaWatcher`: amounts from each transaction's balance changes, so any program's transfers count | USDC, USDT, PYUSD (Token-2022), EURC |
-| Base | `Erc20Watcher` | USDC, EURC |
+| Stellar | `StellarObserver` with a key-less reader | Horizon payments in and out, with the memo joined in, resuming from a stored paging token |
+| Solana | `SolanaWatcher` | Amounts from each transaction's balance changes, so any program's transfers count; the memo where present |
+| Base | `Erc20Watcher` | USDC and EURC `Transfer` logs in and out of any address |
 
 ## How matching works
 
-1. **By Corridor Reference.** A movement that carries a reference (Tempo memo, Solana memo) matches the record with the same reference on the same chain, exactly.
-2. **By amount and counterparty.** Otherwise: same chain, same stablecoin, same direction, same counterparty when the record names one, nearest in time within six hours, exact amounts first.
+```ts
+const results = reconcileReadOnly(records, observations, { graceMs, windowMs });
+```
+
+1. **By Corridor Reference.** A movement carrying a reference — Stellar's `MEMO_HASH`, a Solana memo — matches the record with the same reference on the same venue, exactly.
+2. **By amount and counterparty.** Otherwise: same venue, same asset, same direction, same counterparty when the record names one, nearest in time within six hours, exact amounts first.
 
 | Status | Meaning | Action |
 |---|---|---|
 | `matched` | Seen, amount as expected | None |
-| `short` / `over` | Seen, but the amount differs | Chase the partner or the fee |
+| `short` / `over` | Seen, but the amount differs | Chase the provider or the fee |
 | `pending` | Not seen yet, inside the 30-minute grace period | Wait |
 | `missing` | Not seen after the grace period | Chase it before the customer complains |
 | `unexpected` | Moved on-chain with no record | Identify it: it may be customer money |
 
-Amounts stay in integer minor units throughout, so nothing is rounded.
-
-## In the console
-
-The treasury console shows the same run as an **exceptions queue**: short, over and missing payouts first, then the latest movements with no record. It rescans every five minutes. The [live console replay](https://corridorapp.udokaam.dev/console/) shows a recorded run.
+Amounts stay in integer minor units throughout, so nothing is rounded. `difference` is reported in minor units, and `matchedBy` says whether the match was exact or heuristic.
 
 ## Run it
 
 ```bash
-pnpm watch:report examples/watch/eu-payco-demo.json
+CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
 ```
 
-The example watches the sample customer's real testnet wallets (Tempo Moderato treasury, Solana devnet vault, Base Sepolia relay) against eight sample records. A run on 3 October 2026 observed 22 stablecoin movements and returned:
+It polls Horizon for each account's payments, reconciles them, prints a summary table and then every movement that is not `matched`. Nothing moves and no key is loaded: the client is built by `reader()`, which has no signer at all.
 
-| matched | short | over | pending | missing | unexpected |
-|---|---|---|---|---|---|
-| 6 | 1 | 0 | 0 | 1 | 15 |
+```text
+22 movements on 2 account(s) · testnet
+┌──────────────────┬───────┐
+│ matched          │  ...  │
+│ amount_mismatch  │  ...  │
+│ unbooked         │  ...  │
+│ unreferenced     │  ...  │
+└──────────────────┴───────┘
+```
 
-The unexpected movements are faucet mints and internal saga legs that the sample records do not cover, which is the point: a real pilot surfaces exactly these.
+`exceptions(results)` and `readOnlyCsv(results)` give the queue and the export for a finance team.
+
+## What it can and cannot see
+
+- It sees what the watched accounts did, and whether each payout record has a movement behind it.
+- It **cannot** see a payout that never reached a chain at all — which is what the payout records are for, and why `missing` is the most valuable status in the list.
+- Heuristic matching is weaker than reference matching, and Base has no memo field at all, so Base movements match by amount and counterparty only. The pilot makes that gap visible, which is itself the argument for routing through Corridor: once Corridor sends the payment, the reference rides `MEMO_HASH` and matching becomes exact.
 
 ## From pilot to moving money
 
-The same observers, references and matching run unchanged when Corridor starts moving money. The difference is who signs: the company connects its own signer ([Keys and signers](/architecture/keys-and-signers)), and Corridor's sagas move payouts over Tempo with the reference in every memo, so matching becomes exact instead of heuristic.
+The same observers, the same reference, the same matcher and the same statuses run unchanged when Corridor starts moving money. The only difference is who signs: the company connects its own signer ([Keys and signers](/architecture/keys-and-signers)), and Corridor's sagas send payouts on Stellar with the reference in every memo.

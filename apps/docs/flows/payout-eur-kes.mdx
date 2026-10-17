@@ -1,0 +1,91 @@
+---
+title: "Payout: EUR → KES"
+description: "A diaspora payout into a Kenyan account, walked step by step: plan, reserve, quote with the anchor, pay on Stellar with the reference, poll to completion, reconcile. Two legs and no bridge."
+icon: "send"
+---
+
+A European payout company pays a beneficiary in Nairobi. Its customer balance already sits on the Stellar hub as USDC.
+
+This is the shape `pnpm stellar:payout` runs on testnet: the route, the saga, the Stellar payment and every ledger entry are the real ones; the anchor is `MockPartner`, because **no anchor is signed**, so no Kenyan shilling actually moves.
+
+## The plan
+
+```text
+ledger.reserve → partner.payout
+```
+
+That is the whole route, on testnet and on mainnet. The anchor settles on the hub, so nothing stands between the customer's balance and the beneficiary's currency — no bridge, no second chain, no intermediate vault.
+
+<Frame caption="Fig. 05 · A EUR → KES payout, step by step across the ledger, the Stellar hub, the anchor and the bank.">
+  <img className="block dark:hidden" src="/images/diagrams/payout-flow-light.svg" alt="Sequence of a EUR to KES payout" />
+  <img className="hidden dark:block" src="/images/diagrams/payout-flow-dark.svg" alt="Sequence of a EUR to KES payout" />
+</Frame>
+
+## Step by step
+
+<Steps>
+  <Step title="Reserve">
+    The amount moves from the customer's available balance into a hold, so it cannot be spent twice while the payout is in flight.
+
+    | Account | Debit | Credit |
+    |---|---|---|
+    | `liability:customer:eu-payco:EUR-KES:USDC:stellar` | 7 USDC | |
+    | `liability:customer_hold:eu-payco:EUR-KES:USDC:stellar` | | 7 USDC |
+
+    Both accounts are `no_overdraft`, so a payout larger than the balance is refused inside the same database transaction.
+  </Step>
+  <Step title="Authenticate and quote">
+    `SepAnchor` fetches the anchor's `stellar.toml`, gets a SEP-10 challenge, **verifies it** (built by the anchor's own `SIGNING_KEY`, naming this vault, on the expected network) and only then signs it. The JWT is cached.
+
+    SEP-38 then gives a firm quote: sell `stellar:USDC:<issuer>`, buy `iso4217:KES`, `context: "sep31"`. The beneficiary amount is known before anything moves.
+  </Step>
+  <Step title="Open the order">
+    `POST /transactions` with the quote, the beneficiary fields and the Corridor Reference in `fields.transaction.reference`. The anchor returns `stellar_account_id` and **its own** `stellar_memo`. The order link is recorded before anything is sent.
+  </Step>
+  <Step title="Fund it, exactly once">
+    A Stellar payment from the treasury vault to the anchor's receiving account, carrying **the anchor's memo** — on this leg Corridor's reference cannot ride in `MEMO_HASH`, so it travels in the SEP-31 fields and the join key is `(anchor, transaction id)`.
+
+    Before sending, the leg asks Horizon whether an identical movement already landed, so a retry after a crash finds the payment instead of sending it again. The funding transaction is then recorded durably.
+  </Step>
+  <Step title="Wait">
+    SEP-31 has no webhook, so the saga polls `GET /transactions/{id}` until the anchor reports `completed`. The anchor pays KES to the beneficiary's account or mobile wallet on its own rail.
+  </Step>
+  <Step title="Book it">
+    | Account | Debit | Credit |
+    |---|---|---|
+    | `liability:customer_hold:eu-payco:EUR-KES:USDC:stellar` | 7 USDC | |
+    | `asset:vault:treasury:USDC:stellar` | | 7 USDC |
+
+    Keyed on `partner_fiat` / `${anchor}:${orderId}`, so it can only be booked once. Anchor rounding is booked as dust held for the customer rather than written off.
+  </Step>
+  <Step title="Reconcile">
+    The Stellar payment is an `Observation` from Horizon; the completed order is an `Observation` from the anchor. Both match the ledger entries keyed by them, and `checkInvariants()` confirms every entry balances per asset.
+  </Step>
+</Steps>
+
+## Net effect
+
+| Account | Change |
+|---|---|
+| Customer available balance | −7 USDC |
+| Customer hold | 0 |
+| Treasury vault on Stellar | −7 USDC |
+| `expense:gas` | + the XLM fee the transaction paid, booked from the transaction |
+| Beneficiary | + KES at the quoted rate |
+
+## If it fails
+
+- **Before funding:** the saga compensates in reverse order. The hold is released and the customer ends exactly where they started. See [Failure and compensation](/flows/failure-and-compensation).
+- **After funding:** the saga stops at `manual_review`. The money is at the anchor until its refund is confirmed, and unwinding Corridor's books before that would describe a sequence that never happened.
+
+## Funded in something other than USDC
+
+A balance in EURC or MGUSD plans as `reserve → stellar.pathPayment → partner.payout`, converting on Stellar's own order books. The planner produces that route; the path-payment leg is [not written yet](/integrations/stellar#on-ledger-fx).
+
+## What has actually run
+
+| Run | Result | Transaction |
+|---|---|---|
+| `pnpm stellar:payout`, 17 Oct 2026 | Route planned, balance reserved, order opened and funded exactly once with a real Stellar payment, every movement booked, no invariant violations | [88074bfa…](https://stellar.expert/explorer/testnet/tx/88074bfac3cead1adeb75209cd9aa685bfda44589397b6990dbc92deccbdc10e) |
+
+The run moves **XLM**, because a funded testnet USDC trustline needs an issuer faucet, and the anchor is a mock. A signed anchor replaces the mock with `SepAnchor` and supplies its own funding address and memo; nothing else changes.
