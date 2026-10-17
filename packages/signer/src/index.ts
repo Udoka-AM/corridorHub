@@ -188,7 +188,7 @@ const N = 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141n;
  * A secp256k1 signer whose key never leaves AWS KMS (key spec
  * ECC_SECG_P256K1). KMS returns DER signatures without a recovery bit and
  * without low-s normalisation; both are fixed here so the result is a valid
- * Ethereum/Tempo signature.
+ * Ethereum signature.
  */
 export function awsKmsSigner(kms: KmsApi, keyId: string): Secp256k1Signer {
   let cached: Hex | undefined;

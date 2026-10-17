@@ -59,7 +59,7 @@ export function tokenDeltas(meta: TokenBalanceMeta, owner: string, cluster: Sola
 
 /**
  * Pseudo-address that Solana fee observations are "paid to", so vault
- * accounting books them to expense:gas the same way it books Tempo's Fee
+ * accounting books them to expense:gas the same way it books the hub's XLM
  * Manager transfers.
  */
 export const SOLANA_FEES = "solana:network-fees";

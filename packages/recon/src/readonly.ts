@@ -7,7 +7,7 @@ import type { Asset, Hex, Observation, Venue } from "@corridor/core";
  * writes, nothing moves.
  *
  * Matching order for each record:
- * 1. by Corridor Reference, when the movement carried one (Tempo memo, Solana memo);
+ * 1. by Corridor Reference, when the movement carried one (Stellar MEMO_HASH, Solana memo);
  * 2. otherwise by venue + asset + counterparty (when the record names one) +
  *    amount, nearest in time within a window.
  */

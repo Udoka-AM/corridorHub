@@ -5,8 +5,9 @@ import type { Accounts, Ledger } from "@corridor/ledger";
  * Vault accounting from the chain's point of view. Memo-tagged movements are
  * booked by the legs that make them; this covers what no leg books:
  *
- *  - gas: Tempo charges fees as a TIP-20 transfer from the payer to the Fee
- *    Manager, so each fee is its own log and is booked against that log;
+ *  - gas: Stellar charges each transaction's fee in XLM to its source
+ *    account, so each fee is observed with the transaction that paid it and
+ *    is booked against it;
  *  - funding: deposits into a vault from an approved funding source (owner
  *    top-ups on mainnet, faucet mints on testnet) are owner equity.
  *
@@ -27,7 +28,7 @@ export interface VaultBookingOptions {
   vaults: VaultRef[];
   /** Addresses whose deposits are owner funding. The zero address covers testnet faucet mints. */
   fundingSources: string[];
-  /** Where fees go on this venue (Tempo's Fee Manager, or a pseudo-address for Solana and Base fees). */
+  /** Where fees go on this venue (a pseudo-address, since Stellar, Solana and Base fees have no payee account). */
   feeCollector: string;
   /** Other costs a vault pays, by pseudo-address → expense name, e.g. Solana account rent. */
   expenses?: Record<string, string>;

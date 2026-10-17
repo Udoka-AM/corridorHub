@@ -11,7 +11,7 @@ beforeEach(async () => {
 });
 afterEach(() => db.close());
 
-/** Customer funds held in a Corridor vault on Tempo. */
+/** Customer funds held in a Corridor vault on the Stellar hub. */
 async function fundedCustomer(amount: bigint) {
   const vault = await ledger.openAccount({ type: "asset", ownerType: "vault", ownerId: "routing", asset: "USDC", venue: "stellar", noOverdraft: true });
   const customer = await ledger.openAccount({ type: "liability", ownerType: "customer", ownerId: "eu-payco", corridor: "EUR-NGN", asset: "USDC", venue: "stellar", noOverdraft: true });
@@ -81,7 +81,7 @@ describe("ledger", () => {
     const { vault, customer } = await fundedCustomer(10_000_000n);
     const routing = await ledger.openAccount({ type: "asset", ownerType: "vault", ownerId: "egress", asset: "USDC", venue: "stellar" });
     const entry = {
-      kind: "tempo.transfer",
+      kind: "stellar.transfer",
       reference: "0xabc",
       external: { venue: "stellar" as const, ref: "0xtxhash:3" },
       lines: [

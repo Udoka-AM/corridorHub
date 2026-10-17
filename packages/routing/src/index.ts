@@ -55,7 +55,8 @@ export interface Edge {
  * - `payout`: the flow's own reference (public lane, collections)
  * - `batch`: only the batch reference, used on the public legs of a shielded
  *   route so the funding leg never reveals individual payouts
- * - `item`: per-recipient references, only ever inside encrypted Zcash memos
+ * - `item`: per-recipient references, for a future confidential lane where
+ *   they never appear in a public memo
  */
 export type ReferenceScope = "payout" | "batch" | "item";
 

@@ -12,7 +12,7 @@ export type BaseNetwork = "base" | "base-sepolia";
 
 /**
  * Pseudo-address that Base fee observations are "paid to", so vault
- * accounting books them to expense:gas exactly like Tempo's Fee Manager
+ * accounting books them to expense:gas exactly like the XLM fee on the hub
  * transfers and Solana's network fees.
  */
 export const BASE_FEES = "base:network-fees";

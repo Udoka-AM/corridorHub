@@ -60,7 +60,7 @@ describe("signer", () => {
 
   it("derives the same address from local and KMS signers", async () => {
     expect(await evmAddress(localSecp256k1Signer(KEY))).toBe(expectedAddress);
-    expect(await evmAddress(awsKmsSigner(fakeKms(KEY), "alias/corridor-tempo-vault"))).toBe(expectedAddress);
+    expect(await evmAddress(awsKmsSigner(fakeKms(KEY), "alias/corridor-evm-vault"))).toBe(expectedAddress);
   });
 
   it("normalises KMS signatures to low-s with the right recovery bit", async () => {
