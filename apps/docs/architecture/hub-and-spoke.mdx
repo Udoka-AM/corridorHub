@@ -1,6 +1,6 @@
 ---
 title: "Hub and spoke"
-description: "Tempo is the settlement hub and every region is a spoke. Every flow is a collection into the hub or a payout out of it, which turns N×N corridors into N integrations."
+description: "Stellar is the settlement hub and every region is a spoke. Because anchors settle on Stellar itself and all speak the same SEPs, N×N corridors become N integrations."
 icon: "git-merge"
 ---
 
@@ -8,30 +8,30 @@ icon: "git-merge"
 
 Every flow on Corridor is one of two things:
 
-- **Collection:** local currency comes in through a ramp partner, becomes USDC, crosses into the hub and is credited to the customer's pathUSD balance.
-- **Payout:** the customer's hub balance goes out to a spoke, either public (a partner pays local currency) or shielded (an Ironwood batch).
+- **Collection:** local currency comes in through an anchor and is credited to the customer's USDC balance on the hub.
+- **Payout:** the customer's balance on Stellar goes out to a spoke, where an anchor pays local currency.
 
-A cross-border payment is a collection followed by a payout. The customer's balance on the hub sits between them, so the two halves can happen at different times, in different amounts, and through different partners.
+A cross-border payment is a collection followed by a payout. The customer's balance on the hub sits between them, so the two halves can happen at different times, in different amounts, and through different anchors.
 
-<Frame caption="Fig. 02 · Every flow is a collection into the Tempo hub or a payout out of it.">
-  <img className="block dark:hidden" src="/images/diagrams/hub-and-spoke-light.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
-  <img className="hidden dark:block" src="/images/diagrams/hub-and-spoke-dark.svg" alt="Hub and spoke network with the Tempo hub at the centre" />
+<Frame caption="Fig. 02 · Every flow is a collection into the Stellar hub or a payout out of it.">
+  <img className="block dark:hidden" src="/images/diagrams/hub-and-spoke-light.svg" alt="Hub and spoke network with the Stellar hub at the centre" />
+  <img className="hidden dark:block" src="/images/diagrams/hub-and-spoke-dark.svg" alt="Hub and spoke network with the Stellar hub at the centre" />
 </Frame>
 
-## Why a hub
+## Why a hub, and why this one
 
 <CardGroup cols={2}>
   <Card title="N, not N²" icon="network">
-    A bilateral network of six regions needs fifteen links. A hub needs six. Every partner added reaches every customer and every other region on day one.
+    A bilateral network of six regions needs fifteen links. A hub needs six. Every anchor added reaches every customer and every other region on day one.
   </Card>
-  <Card title="One place to hold money" icon="vault">
-    Customers keep one balance instead of a float in each country. Pre-funding becomes a forecast on one number.
+  <Card title="Adding a corridor is configuration" icon="plug-zap">
+    Anchors speak the same SEPs, so adding one is a home domain and an asset rather than an integration. A corridor is just a currency pair: `GHS-HKD` works the moment a GHS collector and an HKD payer exist.
   </Card>
-  <Card title="One place to reconcile" icon="scan-search">
-    Every dollar passes through the hub, so every dollar is settled, held and reconciled in one ledger and visible to treasury.
+  <Card title="No bridge on the common path" icon="git-merge">
+    A Stellar anchor settles on the hub itself. The fiat spoke touches the hub directly, so the usual payout is `ledger.reserve → partner.payout` with nothing in between.
   </Card>
-  <Card title="New corridors need no code" icon="plug-zap">
-    A corridor is just a currency pair. `GHS-HKD` works the moment a GHS collector and an HKD payer exist.
+  <Card title="One place to hold and reconcile" icon="scan-search">
+    Customers keep one balance instead of a float in each country, and every movement is settled, held and reconciled in one ledger.
   </Card>
 </CardGroup>
 
@@ -42,20 +42,34 @@ The planner refuses flows that bypass the hub. This is a correctness property, t
 ```ts
 // packages/routing/src/index.ts
 if (purpose === "payout" && !onHub(req.source))
-  throw new NoRouteError("payouts are funded from the customer's balance on the Tempo hub");
+  throw new NoRouteError("payouts are funded from the customer's balance on the Stellar hub");
 if (purpose === "collection" && !onHub(req.destination))
-  throw new NoRouteError("collections settle into the Tempo hub");
+  throw new NoRouteError("collections settle into the Stellar hub");
 ```
+
+See [ADR 0002](/decisions/0002-hub-enforced-by-planner).
 
 ## Priority flows
 
 | Flow | Direction | Example | Payout rail |
 |---|---|---|---|
-| Diaspora and B2B payouts into Africa | Inbound | EUR/GBP/USD → NGN, KES, GHS | Local bank or mobile money |
-| Import payments to China and Hong Kong | Outbound | NGN/KES/GHS → CNY, HKD, USD | Supplier's Hong Kong or offshore USD/HKD account (onshore CNY conversion is restricted) |
-| Import payments to India, UAE, Turkey, SE Asia | Outbound | NGN → INR, AED, TRY, IDR | Local payout partners |
-| Payments to the Americas | Outbound | NGN/KES → USD, BRL, MXN | ACH/wire, Pix, SPEI |
-| Intra-African trade | Both | NGN ↔ KES, GHS, XOF | Local ramps |
+| Diaspora and B2B payouts into Africa | Inbound | EUR/GBP/USD → KES, XOF, TZS | Anchor's local bank or mobile money rail |
+| Import payments to China and Hong Kong | Outbound | KES/GHS → CNY, HKD, USD | Supplier's Hong Kong or offshore USD/HKD account (onshore CNY conversion is restricted) |
+| Import payments to India, UAE, Turkey, SE Asia | Outbound | KES → INR, AED, TRY, IDR | Local anchors |
+| Payments to the Americas | Outbound | KES → USD, BRL, MXN | ACH/wire, Pix, SPEI |
+| Intra-African trade | Both | KES ↔ GHS, XOF, TZS | Local anchors |
+
+Corridors open in this order: **KES**, **XOF** and **TZS** first, then **NGN** through a licensed partner, then Ghana and South Africa. **None of these anchors is signed yet.**
+
+## The naira exception
+
+No licensed naira anchor is live on Stellar, so NGN sits in `OFF_STELLAR_PAYOUT_CURRENCIES` and routes over one CCTP hop to a partner that settles on Solana:
+
+```text
+ledger.reserve → cctp.transfer (Stellar → Solana) → partner.payout
+```
+
+When a Stellar naira anchor exists, removing NGN from that list moves the corridor onto the hub. The `cctp.transfer` leg itself [is not built](/integrations/cctp); on testnet, `bridge.simulated` stands in for it with the same bookings and a real Stellar leg.
 
 ## Regulation of outbound flows
 

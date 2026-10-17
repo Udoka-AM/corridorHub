@@ -1,6 +1,6 @@
 ---
 title: "Security and key management"
-description: "How Corridor handles keys, signatures and secrets: customer-held signing keys, threshold-controlled shielded vaults, signed partner webhooks, exactly-once funding and scoped disclosure."
+description: "How Corridor handles keys, signatures and secrets: customer-held signing keys, a SEP-10 challenge verified before the vault signs it, issuer identity, signed webhooks and exactly-once funding."
 icon: "shield-check"
 ---
 
@@ -8,22 +8,22 @@ icon: "shield-check"
 
 <CardGroup cols={2}>
   <Card title="Corridor never holds the keys" icon="lock">
-    Vaults sign through the customer's own KMS, HSM or MPC provider behind one interface. Corridor sends digests and receives signatures. See [Keys and signers](/architecture/keys-and-signers).
+    Vaults sign through the customer's own KMS, HSM or MPC provider behind one interface. Corridor sends transaction hashes and receives signatures. See [Keys and signers](/architecture/keys-and-signers).
   </Card>
   <Card title="Read-only needs no keys at all" icon="eye">
-    A pilot watches addresses and matches records. Nothing can move.
+    A pilot watches Stellar accounts by id and matches records. Nothing can move.
   </Card>
-  <Card title="No single key moves a shielded vault" icon="key-round">
-    Each vault's spend authority is a FROST group key split three ways. Any two of customer approver, customer finance and Corridor can sign; one alone is refused.
+  <Card title="A challenge is checked before it is signed" icon="badge-check">
+    The SEP-10 challenge must be built by the anchor's own `SIGNING_KEY` and must name this vault, or the vault does not sign it.
   </Card>
-  <Card title="Disclosure is scoped" icon="eye">
-    A viewing key reveals one customer's vault for one period, read-only. It can verify; it cannot spend.
+  <Card title="An asset is its code and its issuer" icon="fingerprint">
+    A look-alike token from another issuer is never booked as USDC, and an unverified issuer is left unset rather than guessed.
   </Card>
-  <Card title="Partner input is authenticated" icon="badge-check">
+  <Card title="Partner input is authenticated" icon="shield">
     Webhooks are HMAC-signed, time-bounded and compared in constant time. Forgeries get a 401 and change nothing.
   </Card>
-  <Card title="Money moves exactly once" icon="fingerprint">
-    Funding, deliveries and broadcasts are recorded durably before and after they happen, so retries find them instead of repeating them.
+  <Card title="Money moves exactly once" icon="scale">
+    Funding and deliveries are recorded durably before and after they happen, so retries find them instead of repeating them.
   </Card>
 </CardGroup>
 
@@ -31,16 +31,30 @@ icon: "shield-check"
 
 | Key | Development and testnet | Production |
 |---|---|---|
-| Tempo vault, Base relay, Solana vaults | `.env.local`, `.keys/` (gitignored), generated locally; every vault signs through `@corridor/signer` | The customer's KMS, HSM or MPC provider, through `@corridor/signer` (AWS KMS and Turnkey adapters built) |
-| Corridor Reference secret (`CORRIDOR_REF_SECRET`) | `.env.local` | Secret manager; rotation by reference version |
-| FROST shares (shielded vaults) | `.keys/frost-treasury/signer-<n>.json`, one per signer | Distributed key generation; each share on its signer's device |
-| Partner API keys and webhook secrets | `.env.local` | Secret manager |
+| Stellar vaults (treasury, escrow) | A Stellar secret seed in `.env.local`, generated on first run and funded by Friendbot | The customer's KMS, HSM or MPC provider, through `@corridor/signer` and `ed25519StellarSigner` |
+| Solana and Base vaults | `.env.local` | The same held key for Solana (Ed25519); AWS KMS or Turnkey for the EVM side |
+| Corridor Reference secret (`CORRIDOR_TAG_SECRET`) | `.env.local` | Secret manager; rotation by reference version |
+| Anchor credentials and webhook secrets | `.env.local` | Secret manager |
 
-Keys are never committed, printed or sent anywhere. The public console snapshot scans its output for every value in `.env.local` and every secret file under `.keys/`, and refuses to publish on a match.
+`.env.local` is gitignored. Keys are never committed, printed or sent anywhere.
+
+## SEP-10, before the vault signs
+
+The vault key is the most valuable thing in the deployment, and SEP-10 asks it to sign a transaction an anchor supplies. `SepAnchor` checks the challenge first:
+
+- it must be built by the anchor's own `SIGNING_KEY`, as published in its `stellar.toml`;
+- it must name **this** vault as the client account;
+- it must be on the expected network.
+
+Only then is it signed, and the JWT that comes back is cached for its lifetime. A stray or hostile endpoint cannot use the handshake to get a vault to sign something else.
+
+## Issuer identity
+
+On Stellar anyone can issue an asset whose code is `USDC`. `assetOf` matches code **and** issuer, so a look-alike is never booked. Issuers Corridor has not verified are left unset: asking for one raises an error that names the missing issuer rather than guessing. A deployment supplies its own with `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>`. See [ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity).
 
 ## Webhook verification
 
-Partner deliveries follow Paj's scheme, which Corridor also uses for its own mock partner:
+SEP-31 has no webhook — the sending anchor polls `GET /transactions/{id}`, which is what the saga's wait loop does. For providers that do deliver webhooks, Corridor verifies them:
 
 ```text
 X-PAJ-Timestamp: <unix seconds>
@@ -53,17 +67,23 @@ X-PAJ-Signature: v1=<hex HMAC-SHA256(secret, "<timestamp>.<raw body>")>
 
 ## Exactly-once funding
 
-A partner payout records its partner order and the funding transaction (`partner_order_links`) durably. If a worker crashes after opening an order, the retry reuses it; if it crashes after funding, the retry sees the funding reference and does not send again. A partner failure **after** funding stops at `manual_review`, because the money is at the partner until its refund is confirmed.
+A payout records its anchor order and the funding transaction (`partner_order_links`) durably. If a worker crashes after opening an order, the retry reuses it; if it crashes after funding, the retry finds the funding payment on Horizon by its memo and does not send again. A failure **after** funding stops at `manual_review`, because the money is at the anchor until its refund is confirmed.
 
-## Shielded vault signing
+Every commit also checks the saga's fencing token, so a worker whose lease lapsed mid-leg can never book or mark a step done. See [Saga engine](/architecture/saga).
 
-`corridor-frost` only signs spends that belong to its vault. For each unsigned Ironwood action in a PCZT it checks that the randomized key `rk` equals `ak + [alpha]G` for the vault's group key `ak`, then runs both FROST rounds **rerandomized by alpha**, aggregates, and verifies the RedPallas signature against `rk` before applying it. A signer set below the threshold is refused. See [FROST](/integrations/frost).
+## Compliance posture
 
-## Current deployment and production hardening
+- Corridor serves licensed payment companies, which own the KYC and KYB of their end customers and hold the licences for each corridor.
+- Corridor runs in the customer's environment and signs only through the customer's signer. It is software, not a custodian or a money transmitter.
+- Fiat touchpoints go through regulated anchors and licensed partners in each corridor.
+- Secrets live outside the repository.
+
+## Production hardening
 
 | Area | Today | Production deployment |
 |---|---|---|
-| FROST keygen | Trusted dealer | Distributed key generation |
-| FROST rounds | Both rounds in one process over separate share files | Each signer on their own device, relaying through `frostd` |
-| Console | Local, unauthenticated | Authenticated, role-based approvals and disclosures |
-| Ledger | PGlite | Managed Postgres with the same triggers |
+| Vault keys | Local seeds on testnet; signer interface on every vault | The customer's KMS or MPC for every vault |
+| Ledger | PGlite | Managed Postgres with the same schema and triggers |
+| Horizon | The public instance | `CORRIDOR_HORIZON_URL` pointing at a private instance |
+| Screening | None | Address screening and a Travel Rule hook before a payout is funded |
+| Audit export | The reconciliation trail and a CSV | Signed, retained exports on a schedule |

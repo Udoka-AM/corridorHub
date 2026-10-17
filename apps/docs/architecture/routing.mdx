@@ -1,6 +1,6 @@
 ---
 title: "Route planner"
-description: "A graph of venue/asset positions and executable legs. The planner finds the cheapest path for each environment, enforces the hub, and decides privacy by the venue a payout ends in."
+description: "A graph of venue/asset positions and executable legs. The planner finds the cheapest path for each environment, enforces the Stellar hub, and refuses a shielded route because no shielded venue exists."
 icon: "route"
 ---
 
@@ -12,59 +12,56 @@ Nodes are positions (`venue` + `asset`). Edges are legs Corridor can execute, ea
 
 ```mermaid
 flowchart LR
-  F["partner_fiat · NGN, KES, EUR…"] -->|partner.collect| SOL["solana · USDC"]
-  SOL -->|partner.payout| F2["partner_fiat · 32 currencies"]
-  BASE["base · USDC"] -->|partner.payout| F3["partner_fiat · NGN GHS KES TZS ZAR"]
-  TUE["tempo · USDC.e"] -->|tempo.dexSwap| HUB(("tempo · pathUSD · HUB"))
-  HUB -->|across.bridge, mainnet| BASE
-  BASE -->|across.bridge, mainnet| SOL
-  SOL -->|across.bridge, mainnet| BASE
-  BASE -->|across.bridge, mainnet| HUB
+  EURC["stellar · EURC"] -->|stellar.pathPayment| HUB(("stellar · USDC · HUB"))
+  MGUSD["stellar · MGUSD"] -->|stellar.pathPayment| HUB
+  HUB -->|stellar.pathPayment| EURC
+  F["partner_fiat · KES XOF TZS GHS ZAR EGP UGX USD EUR GBP CAD"] -->|partner.collect| HUB
+  HUB -->|partner.payout| F2["partner_fiat · 31 currencies"]
+  BASE["base · USDC"] -->|cctp.transfer, mainnet| HUB
+  SOL["solana · USDC"] -->|cctp.transfer, mainnet| HUB
+  HUB -->|cctp.transfer, mainnet| SOL
   HUB -.->|bridge.simulated, testnet| SOL
-  SOL -.->|bridge.simulated, testnet| HUB
-  BASE -->|near.swap, mainnet| Z["zcash_ironwood · ZEC"]
-  HUB -.->|near.swap, testnet| Z
-  Z -->|zcash.shieldedBatch| Z
+  SOL -->|partner.payout| NGN["partner_fiat · NGN"]
 ```
 
 | Leg kind | From → to | Environments |
 |---|---|---|
-| `tempo.dexSwap` | tempo/USDC.e → tempo/pathUSD | both |
-| `across.bridge` | tempo/pathUSD ⇄ base/USDC ⇄ solana/USDC | mainnet |
-| `bridge.simulated` | tempo/pathUSD ⇄ solana/USDC | testnet (Across has no Tempo testnet) |
-| `partner.collect` | `partner_fiat/{11 currencies}` → `solana/USDC` | both |
-| `partner.payout` | `solana/USDC` → `partner_fiat/{32 currencies}` | both |
-| `partner.payout` | `base/USDC` → `partner_fiat/{BASE_PAYOUT_CURRENCIES}` | both; empty today, for partners that settle on Base |
-| `near.swap` | base/USDC → zcash_ironwood/ZEC | mainnet (NEAR Intents has no Tempo market) |
-| `near.swap` | tempo/pathUSD → zcash_ironwood/ZEC | testnet |
-| `zcash.shieldedBatch` | zcash_ironwood/ZEC → zcash_ironwood/ZEC | both, appended to shielded payouts |
+| `partner.payout` | `stellar/USDC` → `partner_fiat/{31 currencies}` | both — the anchor is on the hub, so there is nothing in between |
+| `partner.collect` | `partner_fiat/{11 currencies}` → `stellar/USDC` | both |
+| `stellar.pathPayment` | `stellar/{EURC, MGUSD}` ⇄ `stellar/USDC` | both — on-ledger FX over Stellar's own order books |
+| `cctp.transfer` | `stellar/USDC` ⇄ `base/USDC`, `solana/USDC` | mainnet — **declared, not built** |
+| `bridge.simulated` | `stellar/USDC` ⇄ `solana/USDC` | testnet; the Stellar side is real |
+| `partner.payout` | `solana/USDC` → `partner_fiat/NGN` | both — the one currency whose licensed partner settles off Stellar |
+| `partner.collect` | `partner_fiat/NGN` → `solana/USDC` | both |
+
+`OFF_STELLAR_PAYOUT_CURRENCIES` is the single list that decides which currencies need a hop off the hub. Today it is `["NGN"]`.
 
 ## Planning
 
 ```ts
 planRoute({
-  corridor: "EUR-NGN",
+  corridor: "EUR-KES",
   purpose: "payout",
   privacy: "public",
-  source: { venue: "tempo", asset: "pathUSD" },
-  destination: { venue: "partner_fiat", asset: "NGN" },
-  env: "mainnet",
+  source: { venue: "stellar", asset: "USDC" },
+  destination: { venue: "partner_fiat", asset: "KES" },
+  env: "testnet",
 });
-// ledger.reserve → across.bridge (tempo→base) → partner.payout (base→NGN)
+// ledger.reserve → partner.payout
 ```
 
 <Steps>
   <Step title="Validate">
-    Payouts must be funded from the hub; collections must land on it and are always public; a shielded payout must end in a shielded venue, and a public one must not.
+    Payouts must be funded from the hub; collections must land on it and are always public. A shielded payout is refused outright, because `SHIELDED_VENUES` is empty — *"no shielded venue is available: the confidential lane is not live yet"* ([ADR 0005](/decisions/0005-confidential-lane-deferred)).
   </Step>
   <Step title="Search">
-    Cheapest path over the edges available in the requested environment. The batch leg is excluded from search and appended explicitly.
+    Cheapest path (Dijkstra) over the edges available in the requested environment. Graphs are small, so a linear scan is fine.
   </Step>
   <Step title="Bracket">
-    Payouts start with `ledger.reserve` (move the amount into the customer's hold); collections end with `ledger.credit` (credit the customer's hub balance). Shielded payouts end with `zcash.shieldedBatch`.
+    Payouts start with `ledger.reserve`, which moves the amount into the customer's hold; collections end with `ledger.credit`, which credits the customer's hub balance.
   </Step>
   <Step title="Scope references">
-    Each step gets a reference scope (payout, batch or item), so a shielded batch uses one batch reference on the funding legs and an item reference per recipient output.
+    Each step gets a reference scope (payout, batch or item), so a future batch can use one batch reference on its funding legs and an item reference per recipient.
   </Step>
 </Steps>
 
@@ -72,11 +69,22 @@ planRoute({
 
 | Flow | Testnet | Mainnet |
 |---|---|---|
-| EUR → NGN payout | reserve → bridge.simulated → partner.payout | reserve → across (Tempo→Base) → across (Base→Solana) → partner.payout |
-| NGN → CNY payout | reserve → bridge.simulated → partner.payout | reserve → across (Tempo→Base) → across (Base→Solana) → partner.payout |
-| NGN collection | partner.collect → bridge.simulated → ledger.credit | partner.collect → across (Solana→Base) → across (Base→Tempo) → ledger.credit |
-| Shielded supplier batch | reserve → near.swap → zcash.shieldedBatch | reserve → across (Tempo→Base) → near.swap → zcash.shieldedBatch |
+| EUR → KES payout | `reserve → partner.payout` | `reserve → partner.payout` |
+| Funded in EURC | `reserve → stellar.pathPayment (EURC → USDC) → partner.payout` | same |
+| KES collection | `partner.collect → ledger.credit` | same |
+| EUR → NGN payout | `reserve → bridge.simulated (Stellar → Solana) → partner.payout` | `reserve → cctp.transfer (Stellar → Solana) → partner.payout` |
+| NGN collection | `partner.collect → bridge.simulated (Solana → Stellar) → ledger.credit` | `partner.collect → cctp.transfer → ledger.credit` |
 
 <Note>
-Payouts through partners that settle on Solana, including Paj for naira, take **two hops** through Base, because Across has no direct Tempo ↔ Solana route. A partner that settles on Base would cut that to one hop with a config change.
+The common payout route has **two steps and no bridge**. That is the point of settling where the anchors are: the only corridor that leaves the hub is the one whose licensed partner has not arrived on it yet.
 </Note>
+
+## Hub enforcement is tested
+
+```ts
+// packages/routing/src/routing.test.ts
+expect(() => planRoute({ ...req, source: { venue: "solana", asset: "USDC" } }))
+  .toThrow(NoRouteError);
+```
+
+Eleven tests cover hub enforcement, every route shape above, the shielded refusal and the off-Stellar list. See [ADR 0002](/decisions/0002-hub-enforced-by-planner).

@@ -1,6 +1,6 @@
 ---
 title: "Keys and signers"
-description: "Corridor runs inside the payment company's environment and signs with the company's own keys: one signing interface for Tempo, Base and Solana, with local, AWS KMS and MPC adapters."
+description: "Corridor runs inside the payment company's environment and signs with the company's own keys. Stellar and Solana share Ed25519, so one held key serves both, behind one interface with local, AWS KMS and Turnkey adapters."
 icon: "key-square"
 ---
 
@@ -8,10 +8,10 @@ Corridor never needs to hold a customer's money or keys. A licensed payment comp
 
 <CardGroup cols={2}>
   <Card title="Customer-held keys" icon="lock">
-    Vault keys live in the customer's KMS, HSM or MPC provider. Corridor sends a 32-byte digest and gets a signature back. Key material never enters Corridor's process.
+    Vault keys live in the customer's KMS, HSM or MPC provider. Corridor sends a 32-byte hash and gets a signature back. Key material never enters Corridor's process.
   </Card>
-  <Card title="One interface, every chain" icon="plug">
-    secp256k1 for Tempo and Base, Ed25519 for Solana. Adding a provider is one adapter, not a change to any leg.
+  <Card title="One key for Stellar and Solana" icon="plug">
+    Both use Ed25519. The same held key addresses a Stellar vault in StrKey and a Solana vault in base58, so a deployment needs one key, not two.
   </Card>
 </CardGroup>
 
@@ -19,59 +19,72 @@ Corridor never needs to hold a customer's money or keys. A licensed payment comp
 
 ```ts
 // @corridor/signer
-interface Secp256k1Signer {
-  kind: string;                                  // "local", "aws-kms", "fireblocks", …
-  publicKey(): Promise<Hex>;                     // uncompressed, 65 bytes
-  signDigest(digest: Hex): Promise<{ r: bigint; s: bigint; yParity: 0 | 1 }>;
+interface Ed25519Signer {
+  readonly kind: string;                          // "local", "turnkey", …
+  readonly address: string;                       // base58 Solana address
+  signBytes(message: Uint8Array): Promise<Uint8Array>;
 }
 
-interface Ed25519Signer {
-  kind: string;
-  address: string;                               // base58 Solana address
-  signBytes(message: Uint8Array): Promise<Uint8Array>;
+interface Secp256k1Signer {
+  readonly kind: string;
+  publicKey(): Promise<Hex>;                      // uncompressed, 65 bytes
+  signDigest(digest: Hex): Promise<EcdsaSignature>;
 }
 ```
 
-Adapters turn a signer into what each chain SDK expects:
+`ed25519PublicKeyBytes(signer)` returns the raw 32-byte key, which is all Stellar needs:
 
-| Adapter | Produces | Used for |
-|---|---|---|
-| `tempoAccount(signer)` | A viem/tempo account (secp256k1 key type) | Tempo vaults: transfers with memo, fees in stablecoins |
-| `evmAccount(signer)` | A viem account (transactions, messages, typed data) | The Base relay wallet and Across deposits |
-| `solanaSigner(signer)` | A @solana/kit transaction signer | Solana vaults and partner funding |
+```ts
+// @corridor/chain-stellar
+interface StellarSigner {
+  readonly kind: string;
+  readonly address: string;                       // G… StrKey public key
+  sign(hash: Uint8Array): Promise<Uint8Array>;    // the transaction hash, 32 bytes
+}
+
+const vault = stellarClient({
+  network: "mainnet",
+  signer: ed25519StellarSigner(held, ed25519PublicKeyBytes(held)),
+});
+```
+
+`ed25519StellarSigner` refuses anything that is not a 32-byte public key, encodes it with `StrKey.encodeEd25519PublicKey`, and signs **over the transaction hash** — so the signer never sees transaction semantics.
 
 ## Adapters available
 
 | Adapter | Status | Notes |
 |---|---|---|
-| `localSecp256k1Signer(privateKey)` | Built | Development and testnet. Produces the same signatures as viem's own local accounts. |
-| `awsKmsSigner(kms, keyId)` | Built, tested | Key spec `ECC_SECG_P256K1`. KMS returns DER signatures with no recovery bit and no low-s rule; the adapter normalises `s` and recovers `yParity` against the key's public key, so the result is a valid Tempo and Base signature. |
-| `localEd25519Signer(secretKey)` | Built | Development and testnet Solana keys behind the same interface. |
-| Solana via `solanaSigner` | Interface built | Any Ed25519 signing service (an MPC provider or a KMS with Ed25519 keys) plugs in through `signBytes`. |
-| `turnkeySecp256k1Signer`, `turnkeyEd25519Signer` | Built, tested | Keys in the customer's Turnkey organisation. Raw-payload signing (digest for secp256k1, message for Ed25519), API-key stamped requests, and polling while an activity waits for policy approvals. The secp256k1 public key is recovered from a probe signature, so no read permission is needed. |
-| Fireblocks | Next | Needs a workspace with raw signing enabled, since Fireblocks does not support Tempo's transaction type. |
+| `localStellarSigner(secret)` | Built | Development and testnet. Takes a Stellar secret seed from `.env.local`. |
+| `localEd25519Signer(secretKey)` | Built | Development and testnet keys behind the same interface. |
+| `ed25519StellarSigner(signer, publicKey)` | Built, tested | Any Ed25519 signing service — an MPC provider, or a KMS with Ed25519 keys — reaches Stellar through this. |
+| `turnkeyEd25519Signer`, `turnkeySecp256k1Signer` | Built, tested | Keys in the customer's Turnkey organisation. Raw-payload signing, API-key stamped requests, and polling while an activity waits for policy approvals. The secp256k1 public key is recovered from a probe signature, so no read permission is needed. |
+| `awsKmsSigner(kms, keyId)` | Built, tested | Key spec `ECC_SECG_P256K1`, for the EVM side. KMS returns DER signatures with no recovery bit and no low-s rule; the adapter normalises `s` and recovers `yParity` against the key's public key. |
+| `localSecp256k1Signer(privateKey)` | Built | Development and testnet on the EVM spoke. |
 
 Corridor does not bundle the AWS SDK. Wrap the customer's own `KMSClient`:
 
 ```ts
 import { KMSClient, GetPublicKeyCommand, SignCommand } from "@aws-sdk/client-kms";
-import { awsKmsApi, awsKmsSigner, tempoAccount } from "@corridor/signer";
-import { tempoClient } from "@corridor/chain-tempo";
+import { awsKmsApi, awsKmsSigner } from "@corridor/signer";
 
 const kms = awsKmsApi(new KMSClient({ region: "eu-west-1" }), { GetPublicKeyCommand, SignCommand });
-const vault = tempoClient({
-  network: "mainnet",
-  account: await tempoAccount(awsKmsSigner(kms, "alias/corridor-tempo-vault")),
-});
+const signer = awsKmsSigner(kms, "alias/corridor-evm-relay");
 ```
 
-The runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` with `<KEY_NAME>_KMS_KEY_ID` switches a vault to KMS; `CORRIDOR_SIGNER=turnkey` with `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PRIVATE_KEY` and `<KEY_NAME>_TURNKEY_SIGN_WITH` (or `SOLANA_VAULT_TURNKEY_ADDRESS`) switches to Turnkey; the default is a local key from `.env.local`.
+The runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` with `<KEY_NAME>_KMS_KEY_ID`, or `CORRIDOR_SIGNER=turnkey` with `TURNKEY_ORGANIZATION_ID`, `TURNKEY_API_PRIVATE_KEY` and `<KEY_NAME>_TURNKEY_SIGN_WITH`. The default is a local key from `.env.local`. The same flows run unchanged.
+
+## What the signer is asked to sign
+
+A vault only ever signs two kinds of thing, and both are checked before they reach it:
+
+- **A payment on Stellar**, built by Corridor from the route plan. Signing is over the transaction hash.
+- **A SEP-10 challenge**, which is verified first: the challenge must be built by the anchor's own `SIGNING_KEY` and must name this vault, so a stray endpoint cannot get the vault to sign something else. See [the anchor interface](/integrations/sep-anchors).
 
 ## Evidence
 
-- Unit tests sign Base transactions, messages and Tempo hashes through a KMS stand-in that returns real DER signatures with high-s half the time; every signature recovers to the expected address.
-- Every vault in the testnet runtime signs through the interface: the Tempo treasury and bridge escrow (`tempoAccount`), the Base relay (`evmAccount`) and the Solana vault (`solanaSigner`). A full payout demo on 9 October 2026 ran end to end this way.
-- A live Moderato transfer signed through the interface: [0x0c2b2a85…](https://explore.testnet.tempo.xyz/tx/0x0c2b2a85dc748b99afbbae03bba018184207075fae89e8a4643fd7bd0ec2e117).
+- Unit tests sign through the interface and check the resulting addresses and signatures, including a KMS stand-in that returns real DER signatures with high-s half the time.
+- `ed25519StellarSigner` is covered in `packages/chain-stellar/src/stellar.test.ts`: a held key produces the expected G… address and a valid signature over a transaction hash.
+- Every Stellar testnet run in [Evidence](/status/evidence) signs through `StellarSigner`.
 
 ## Deployment models
 
@@ -80,5 +93,3 @@ The runtime selects the signer from the environment: `CORRIDOR_SIGNER=aws-kms` w
 | Self-hosted | The customer, in its cloud | The customer | Banks and larger licensed operators |
 | Dedicated managed instance | Corridor, one instance per customer | The customer (Corridor calls its KMS or MPC) | Mid-size payout companies |
 | Read-only | Either | Nobody: no keys needed | The first 60 days. See [Read-only pilot](/flows/read-only-pilot). |
-
-The shielded lane keeps its own threshold model: Zcash vaults are FROST 2-of-3 across customer approver, customer finance and an operator key. See [FROST](/integrations/frost).
