@@ -1,12 +1,23 @@
 ---
-title: "Solana: ramp liquidity"
-description: "How Corridor funds and receives from ramp partners on Solana: USDC TransferChecked plus an SPL Memo carrying the Corridor Reference in one transaction, and an observer that reads it back."
+title: "Solana: the one spoke off the hub"
+description: "Naira has no licensed anchor on Stellar yet, so it is reached through a partner that settles on Solana: USDC with an SPL Memo carrying the Corridor Reference, and an observer that reads it back."
 icon: "sun"
 ---
 
 <img src="/images/chains/solana.svg" alt="Solana" width="56" height="56" />
 
-Solana is where most ramp partners hold USDC liquidity. Corridor keeps two vaults there: **egress** (funds partner payouts) and **ingress** (receives collections). Every transfer carries the Corridor Reference.
+Every other corridor settles on the hub. Naira is the exception: no licensed naira anchor is live on Stellar, so NGN sits in `OFF_STELLAR_PAYOUT_CURRENCIES` and is reached through a partner that settles on Solana.
+
+```text
+ledger.reserve → cctp.transfer (Stellar → Solana) → partner.payout   # mainnet; the leg is not built
+ledger.reserve → bridge.simulated (Stellar → Solana) → partner.payout # testnet; the Stellar side is real
+```
+
+Corridor keeps two vaults there: **egress** (funds partner payouts) and **ingress** (receives collections). Every transfer carries the Corridor Reference.
+
+<Note>
+When a licensed naira anchor is live on Stellar, removing `NGN` from `OFF_STELLAR_PAYOUT_CURRENCIES` moves the corridor onto the hub, and this page stops being part of the payout path.
+</Note>
 
 ## The transaction
 
@@ -20,7 +31,7 @@ One `@solana/kit` transaction does three things atomically:
     USDC from the vault to the partner's one-off funding address, amount and decimals checked by the token program.
   </Step>
   <Step title="SPL Memo">
-    `corridor:<hex>`: the 32-byte reference as hex, logged by the Memo program.
+    `corridor:<hex>`: the same 32-byte reference as hex, logged by the Memo program.
   </Step>
 </Steps>
 
@@ -28,16 +39,24 @@ One `@solana/kit` transaction does three things atomically:
 const vault = new SolanaVault(signer, "devnet");
 const signature = await vault.transferWithReference({
   toOwner: fundingAddress,      // partner's one-off deposit address
-  amount: 2_000_000n,           // 2 USDC (6 decimals)
+  amount: 2_000_000n,           // 2 USDC (6 decimals on Solana)
   reference: ref,
 });
 ```
 
 ## Reading it back
 
-RPC signature lists expose each transaction's memo as `[N] corridor:<hex>`. `extractReference` pulls the reference out, so the observer can join Solana movements to ledger entries without decoding instructions.
+RPC signature lists expose each transaction's memo as `[N] corridor:<hex>`. `extractReference` pulls the reference out, so the observer can join Solana movements to ledger entries without decoding instructions — the same join Stellar does on `MEMO_HASH`.
 
 `SolanaWatcher` reads amounts from each transaction's pre- and post-token balances, so it sees the real amount and asset of any stablecoin movement, whichever program made it. It needs only an address, which is what a [read-only pilot](/flows/read-only-pilot) runs on.
+
+## Precision
+
+USDC is **6 decimal places** on Solana and **7** on the hub. `toHubPrecision` and `toSpokePrecision` wrap `rescale`, which refuses any conversion that would drop value: an amount carrying a seventh decimal throws rather than rounding away a stroop ([ADR 0012](/decisions/0012-seven-decimal-ledger)).
+
+## One key for both
+
+Stellar and Solana both sign with **Ed25519**, so a deployment's held KMS or MPC key addresses both: base58 on Solana, StrKey on Stellar. See [Keys and signers](/architecture/keys-and-signers).
 
 ## Stablecoins
 
@@ -48,7 +67,7 @@ RPC signature lists expose each transaction's memo as `[N] corridor:<hex>`. `ext
 | PYUSD | `2b1kV6DkPAnxd5ixfnxCpjxmKwqjjaYmCZfHsFu24GXo` | Token-2022 |
 | EURC | `HzwqbKZw8HxMN6bF2yFZNrht3c2iXXzpKcFu7uBEDKtr` | SPL Token |
 
-Transfers create the recipient's token account and move funds with the mint's own token program, so Token-2022 stablecoins work the same way as SPL ones. The vault signs through any `@solana/kit` transaction signer, including `solanaSigner(...)` from [Keys and signers](/architecture/keys-and-signers).
+Transfers move funds with the mint's own token program, so Token-2022 stablecoins work the same way as SPL ones.
 
 ## Environments
 
@@ -57,8 +76,6 @@ Transfers create the recipient's token account and move funds with the mint's ow
 | Mainnet | `api.mainnet-beta.solana.com` | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
 | Devnet | `api.devnet.solana.com` | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
 
-## Evidence
-
-Partner funding for a EUR → NGN payout on devnet, with the reference in the Memo program logs: [nDGHfRgM…](https://explorer.solana.com/tx/nDGHfRgMgK1Xc8gjE3bqUvgfp5qP13HnP6nTtLQGBSqaLLtdDfg2nXYPEzbHfcwpYjv1xQFedMcRh3KkJyRZicH?cluster=devnet).
-
-When the devnet vault holds USDC, the runtime funds the mock partner with a real transfer; otherwise it records a clearly marked simulated funding reference, so a run never pretends a transfer happened.
+<Warning>
+The Solana package is carried over from Corridor's earlier prototype, where it was the payout venue rather than the exception. Nothing on this page has run as part of a Stellar flow: the only Stellar-side runs so far are in [Evidence](/status/evidence#stellar-testnet), and they do not cross to Solana.
+</Warning>

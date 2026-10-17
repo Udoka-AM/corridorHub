@@ -12,7 +12,7 @@ African payout liquidity is heavily USDT; Western senders and most anchors lean 
 
 **Every stablecoin is a first-class asset.** `DIGITAL_ASSETS` lists USDC, USDT, PYUSD, MGUSD and EURC with the fiat each tracks (`pegOf`: EUR for EURC, USD for the rest). Observers, transfers and the ledger book each in its own asset, and nothing is silently treated as interchangeable.
 
-USDC is the hub's unit of account ([ADR 0001](/decisions/0001-usdc-on-stellar-settlement-unit)), and converting into it is an explicit `stellar.pathPayment` leg over Stellar's own order books, with its own bookings.
+USDC is the hub's unit of account ([ADR 0001](/decisions/0001-usdc-on-stellar-settlement-unit)), and converting into it is an explicit `stellar.pathPayment` leg over Stellar's own order books, with its own bookings. The planner produces that edge; the leg implementation is [not written yet](/integrations/stellar#on-ledger-fx).
 
 ## Consequences
 

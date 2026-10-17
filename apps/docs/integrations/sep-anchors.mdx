@@ -1,0 +1,120 @@
+---
+title: "Anchors: the fiat spokes"
+description: "A Stellar anchor becomes a Corridor spoke over SEP-1, 10, 12, 38 and 31, behind the same partner interface every other provider implements. Adding a corridor is a home domain and an asset."
+icon: "plug"
+---
+
+Anchors are the fiat spokes. They hold the licences, the local rails and the float in each market; Corridor is the ledger and router in front of them.
+
+Because every anchor speaks the same SEPs, **adding a corridor is configuration** — a home domain and an asset — rather than an integration. That is what makes the spokes additive, and what turns N×N corridors into N integrations ([ADR 0006](/decisions/0006-anchors-as-sep-spokes)).
+
+<Frame caption="Fig. 06 · The SEP handshake between a Corridor vault and an anchor, from stellar.toml discovery to a polled SEP-31 payment.">
+  <img className="block dark:hidden" src="/images/diagrams/anchor-seps-light.svg" alt="The SEP handshake between Corridor and a Stellar anchor" />
+  <img className="hidden dark:block" src="/images/diagrams/anchor-seps-dark.svg" alt="The SEP handshake between Corridor and a Stellar anchor" />
+</Frame>
+
+## Configuring one
+
+```ts
+const anchor = new SepAnchor({
+  domain: "anchor.example.com",
+  asset: { code: "USDC", issuer: "GA5ZSEJY…KZVN" },
+  network: "mainnet",
+  payoutCurrencies: ["KES"],
+  signer: vaultSigner,          // answers the SEP-10 challenge
+  senderId, receiverId,         // SEP-12 customer ids, when the anchor knows the parties
+});
+
+registry.register(anchor);
+```
+
+That is the whole integration. `SepAnchor` implements `RampPartner`, so the legs, the webhooks and reconciliation never learn it is an anchor rather than any other provider.
+
+## The SEPs Corridor speaks
+
+| SEP | What Corridor does with it | What it needs from your `stellar.toml` |
+|---|---|---|
+| **SEP-1** | Discovery: which endpoints and currencies you serve | The file itself |
+| **SEP-10** | Authentication: your challenge, signed by the vault key, exchanged for a JWT | `WEB_AUTH_ENDPOINT`, `SIGNING_KEY` |
+| **SEP-12** | Customer records, when you need KYC on sender or receiver | `KYC_SERVER` |
+| **SEP-38** | Indicative prices and a firm quote before anything moves | `ANCHOR_QUOTE_SERVER` |
+| **SEP-31** | The cross-border payment itself | `DIRECT_PAYMENT_SERVER` |
+| **SEP-6** | Collections. **Not implemented** | `TRANSFER_SERVER` |
+
+If an endpoint is missing, Corridor says exactly that — *"anchor.example.com publishes no ANCHOR_QUOTE_SERVER, so it does not serve SEP-38"* — rather than failing somewhere later.
+
+## SEP-10: the challenge is checked before the vault signs it
+
+The vault key is the most valuable thing in a deployment, and SEP-10 asks it to sign a transaction the anchor supplies. `SepAnchor` verifies the challenge first:
+
+- it must be built by the anchor's own `SIGNING_KEY`, as published in its `stellar.toml`;
+- it must name **this** vault as the client account;
+- it must be on the expected network passphrase.
+
+Only then is it signed. The JWT is cached for its lifetime, with a 30-second margin.
+
+## SEP-38 then SEP-31: quote, then pay
+
+```ts
+const order = await anchor.openPayout({
+  currency: "KES",
+  chain: "STELLAR",
+  usdcAmount: 70_000_000n,     // 7 USDC at the hub's 7 dp
+  beneficiary: { bankCode, accountNumber },
+  reference,                   // the 32-byte Corridor Reference
+});
+```
+
+1. **SEP-38** `POST /quote` with `context: "sep31"`, selling `stellar:USDC:GA5Z…` and buying `iso4217:KES`. The rate is held for the life of the quote, so the beneficiary amount is known before anything moves.
+2. **SEP-31** `POST /transactions` with the quote, the beneficiary fields and the Corridor Reference in `fields.transaction.reference`.
+3. The anchor returns `stellar_account_id` and **its own** `stellar_memo`. The funding payment must carry that memo, so Corridor's reference cannot ride in `MEMO_HASH` on this leg — it travels in the SEP-31 fields instead, and the join key becomes `(anchor, transaction id)` ([ADR 0003](/decisions/0003-reference-in-memo-hash)).
+4. The payout leg funds the order **exactly once**: the order and the funding transaction are recorded durably, and a retry finds the payment on Horizon rather than sending again.
+
+## Status, and why there is no webhook
+
+SEP-31 has no webhook. The sending anchor polls `GET /transactions/{id}`, which is exactly what the saga's wait loop does, so:
+
+```ts
+verifyWebhook(): boolean { return false; }
+parseWebhook(): never  { throw new PartnerError("SEP-31 anchors are polled, not pushed"); }
+```
+
+Corridor says so rather than pretending to support a delivery an anchor will never make. Statuses map onto Corridor's four:
+
+| SEP-31 status | Corridor |
+|---|---|
+| `pending_sender` | `open` |
+| `pending_stellar`, `pending_receiver`, `pending_external`, `pending_customer_info_update`, `pending_transaction_info_update` | `processing` |
+| `completed` | `completed` |
+| `refunded`, `expired`, `error` | `failed` |
+
+## What is not built
+
+<Warning>
+**SEP-6 collections are unimplemented.** `openCollection` checks that the anchor publishes a `TRANSFER_SERVER` and then raises — *"SEP-6 collections are not implemented yet"* — rather than guessing at a flow no signed anchor has exercised. Collections are in the route graph and the planner produces them; the anchor-side implementation lands with the first collecting anchor.
+</Warning>
+
+<Warning>
+**No anchor is signed.** Nothing in this page has run against a production anchor, and no real local currency has moved on Stellar. The adapter is covered by eight tests against a stubbed anchor, including the challenge check, the quote, the order and the status mapping.
+</Warning>
+
+## Becoming a spoke
+
+If you run a licensed anchor, what Corridor needs is:
+
+<Steps>
+  <Step title="A published stellar.toml">
+    With `WEB_AUTH_ENDPOINT`, `SIGNING_KEY`, `ANCHOR_QUOTE_SERVER` and `DIRECT_PAYMENT_SERVER`, and the currencies you serve.
+  </Step>
+  <Step title="SEP-38 quotes against the settlement asset">
+    `stellar:USDC:<issuer>` sold for `iso4217:<your currency>`, with `context: "sep31"`.
+  </Step>
+  <Step title="A SEP-31 receiving account and memo per transaction">
+    So every funding payment maps to exactly one order.
+  </Step>
+  <Step title="The reference echoed">
+    Carry the 32-byte Corridor Reference from `fields.transaction.reference` into the bank narration, so a statement line traces back to the payout that caused it.
+  </Step>
+</Steps>
+
+See the [partner interface](/integrations/partner-interface) for the shape every provider is normalised to, and [Payout EUR → KES](/flows/payout-eur-kes) for a full walkthrough.

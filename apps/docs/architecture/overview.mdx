@@ -28,7 +28,7 @@ Everything in that diagram runs in the customer's own environment.
     Runs a plan as durable steps in Postgres. Each leg has `forward` and an optional `compensate`. Steps retry with backoff, a lease keeps one worker per saga, and a failure compensates completed steps in reverse order. Failures after money has left Corridor's control stop at `manual_review` instead. [Saga →](/architecture/saga)
   </Accordion>
   <Accordion title="Legs (packages/legs and chain packages)" icon="puzzle">
-    Each leg kind (`stellar.transfer`, `stellar.pathPayment`, `partner.payout`, `partner.collect`, `ledger.credit`, `bridge.simulated`) moves value on one venue and returns the ledger entries that describe what it did. Legs are idempotent: before sending, they ask the network whether the movement already landed. [Stellar →](/integrations/stellar)
+    Each implemented leg kind (`stellar.transfer`, `partner.payout`, `partner.collect`, `ledger.reserve`, `ledger.credit`, `bridge.simulated`) moves value on one venue and returns the ledger entries that describe what it did. Two more, `stellar.pathPayment` and `cctp.transfer`, are declared in the route graph and not yet written. Legs are idempotent: before sending, they ask the network whether the movement already landed. [Stellar →](/integrations/stellar)
   </Accordion>
   <Accordion title="Ledger (packages/ledger)" icon="book-open">
     Double-entry, append-only journal on Postgres, at Stellar's own 7 decimal places. Postings balance per asset, accounts can be flagged no-overdraft, and each external movement is booked exactly once through a unique `(venue, external_ref)`. [Ledger →](/architecture/ledger)
@@ -69,7 +69,7 @@ Everything in that diagram runs in the customer's own environment.
 | Package | Responsibility |
 |---|---|
 | `@corridor/core` | Venues, 32 fiat currencies with stable one-byte indices, digital assets at 7 dp, `Money` in integer minor units, Corridor Reference codec, `Observation` |
-| `@corridor/chain-stellar` | Horizon client, asset registry by issuer, `transferWithReference`, `StellarObserver`, path payments, trustlines |
+| `@corridor/chain-stellar` | Horizon client, asset registry by issuer, `transferWithReference`, `StellarObserver`, trustlines |
 | `@corridor/routing` | Route graph (`DEFAULT_EDGES`), `planRoute`, hub enforcement |
 | `@corridor/saga` | `SagaEngine`, `Leg`, `NonRetryableError`, `ManualReviewError`, reserve leg |
 | `@corridor/ledger` | Schema, `Ledger.post`, invariants, named `Accounts` |

@@ -82,7 +82,7 @@ await ledger.post({
 
 Seven USDC at the hub's 7 decimal places: the customer's hold is released and the treasury vault is credited out, keyed by the anchor's order so it can only be booked once.
 
-An entry can carry several assets, each balanced in its own: a path payment from EURC into USDC debits and credits both sides through a `clearing` pair, which nets to zero across the flow.
+An entry can carry several assets, each balanced in its own: a conversion from EURC into USDC debits and credits both sides through a `clearing` pair, which nets to zero across the flow.
 
 ## Reconciliation needs to know which side moved
 

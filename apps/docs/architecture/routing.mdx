@@ -28,7 +28,7 @@ flowchart LR
 |---|---|---|
 | `partner.payout` | `stellar/USDC` → `partner_fiat/{31 currencies}` | both — the anchor is on the hub, so there is nothing in between |
 | `partner.collect` | `partner_fiat/{11 currencies}` → `stellar/USDC` | both |
-| `stellar.pathPayment` | `stellar/{EURC, MGUSD}` ⇄ `stellar/USDC` | both — on-ledger FX over Stellar's own order books |
+| `stellar.pathPayment` | `stellar/{EURC, MGUSD}` ⇄ `stellar/USDC` | both — on-ledger FX over Stellar's own order books; **declared, not built** |
 | `cctp.transfer` | `stellar/USDC` ⇄ `base/USDC`, `solana/USDC` | mainnet — **declared, not built** |
 | `bridge.simulated` | `stellar/USDC` ⇄ `solana/USDC` | testnet; the Stellar side is real |
 | `partner.payout` | `solana/USDC` → `partner_fiat/NGN` | both — the one currency whose licensed partner settles off Stellar |
@@ -70,7 +70,7 @@ planRoute({
 | Flow | Testnet | Mainnet |
 |---|---|---|
 | EUR → KES payout | `reserve → partner.payout` | `reserve → partner.payout` |
-| Funded in EURC | `reserve → stellar.pathPayment (EURC → USDC) → partner.payout` | same |
+| Funded in EURC | `reserve → stellar.pathPayment (EURC → USDC) → partner.payout` — plans, does not run | same |
 | KES collection | `partner.collect → ledger.credit` | same |
 | EUR → NGN payout | `reserve → bridge.simulated (Stellar → Solana) → partner.payout` | `reserve → cctp.transfer (Stellar → Solana) → partner.payout` |
 | NGN collection | `partner.collect → bridge.simulated (Solana → Stellar) → ledger.credit` | `partner.collect → cctp.transfer → ledger.credit` |

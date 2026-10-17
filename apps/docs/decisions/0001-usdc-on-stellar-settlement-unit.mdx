@@ -1,7 +1,7 @@
 ---
 title: "ADR 0001: USDC on Stellar as the settlement unit"
 sidebarTitle: "0001 · USDC settlement unit"
-description: "Customer balances, the treasury vault and the clearing accounts are all USDC on Stellar. Every other issued asset is booked in its own asset and converted with an explicit path payment."
+description: "Customer balances, the treasury vault and the clearing accounts are all USDC on Stellar. Every other issued asset is booked in its own asset and converted with an explicit path-payment leg."
 ---
 
 ## Context
@@ -12,7 +12,7 @@ On Stellar every issued asset — USDC, EURC, MGUSD, PYUSD, USDT — is a classi
 
 ## Decision
 
-**USDC on Stellar is the hub's unit of account.** Customer balances, the treasury vault and the clearing accounts are USDC. Other issued assets are first-class but are converted to USDC with an explicit `stellar.pathPayment` leg before a payout is funded.
+**USDC on Stellar is the hub's unit of account.** Customer balances, the treasury vault and the clearing accounts are USDC. Other issued assets are first-class but are converted to USDC with an explicit `stellar.pathPayment` leg before a payout is funded — an edge the planner produces, whose leg implementation is [not written yet](/integrations/stellar#on-ledger-fx).
 
 `HUB` in `@corridor/routing` is literally `{ venue: "stellar", asset: "USDC" }`, and the planner refuses any payout not funded from it ([ADR 0002](/decisions/0002-hub-enforced-by-planner)).
 

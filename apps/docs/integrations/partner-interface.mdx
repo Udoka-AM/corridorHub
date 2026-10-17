@@ -1,19 +1,21 @@
 ---
 title: "Partner interface"
-description: "How a ramp or payout provider becomes a spoke: six methods, a normalised order lifecycle and a signed webhook. One integration reaches every customer and every other region."
+description: "The one shape every fiat spoke is normalised to: six methods and a normalised order lifecycle, so a Stellar anchor and an off-Stellar partner are interchangeable to the legs."
 icon: "plug"
 ---
 
-A partner is a spoke. Implement this interface once and every customer on Corridor can collect from or pay out to your currencies, and every other region can reach them through the hub.
+A spoke is whatever pays local currency. Most of them are Stellar anchors, reached over [the SEPs](/integrations/sep-anchors); one of them, for now, is a licensed partner that settles on Solana. Both implement this interface, so the legs, the webhooks and reconciliation never depend on which.
 
 ## The interface
 
 ```ts
+type PartnerChain = "STELLAR" | "SOLANA" | "BASE";
+
 interface RampPartner {
   readonly id: string;
   readonly payoutCurrencies: readonly Fiat[];
   readonly collectionCurrencies: readonly Fiat[];
-  readonly chains: readonly ("SOLANA" | "BASE")[];
+  readonly chains: readonly PartnerChain[];
 
   rates(currency: Fiat): Promise<Rates>;
   openPayout(req: PayoutRequest): Promise<PartnerOrder>;          // offramp
@@ -25,57 +27,71 @@ interface RampPartner {
 }
 ```
 
+`SepAnchor` implements it over SEP-1/10/12/38/31 and declares `chains: ["STELLAR"]`. `PajPartner` implements it over a REST API and declares `["SOLANA"]`. `MockPartner` implements it for tests and testnet runs, on whichever chain it is given.
+
 ## The order
 
 Every provider is normalised to one lifecycle: `open → processing → completed | failed`.
 
 <ResponseField name="PartnerOrder" type="object">
   <Expandable title="fields">
-    <ResponseField name="id" type="string">The partner's order id.</ResponseField>
+    <ResponseField name="partner" type="string">Which spoke this order belongs to.</ResponseField>
+    <ResponseField name="id" type="string">The provider's own order id.</ResponseField>
     <ResponseField name="kind" type="'payout' | 'collection'" />
     <ResponseField name="status" type="'open' | 'processing' | 'completed' | 'failed'" />
-    <ResponseField name="partnerStatus" type="string">The partner's own status string, kept for audit.</ResponseField>
-    <ResponseField name="chain" type="'SOLANA' | 'BASE'" />
+    <ResponseField name="partnerStatus" type="string">The provider's own status string, kept for audit.</ResponseField>
+    <ResponseField name="chain" type="'STELLAR' | 'SOLANA' | 'BASE'" />
     <ResponseField name="currency" type="Fiat" />
-    <ResponseField name="usdcAmount" type="bigint">USDC in base units (6 decimals).</ResponseField>
+    <ResponseField name="usdcAmount" type="bigint">USDC in base units.</ResponseField>
     <ResponseField name="fiatAmount" type="bigint">Local currency in minor units.</ResponseField>
     <ResponseField name="rate" type="number">Local currency per USD at pricing time.</ResponseField>
-    <ResponseField name="fundingAddress" type="string">Payout: where to send USDC. One-off, valid only for this order.</ResponseField>
+    <ResponseField name="fundingAddress" type="string">Payout: where to send the funding payment. One-off, valid only for this order.</ResponseField>
+    <ResponseField name="fundingMemo" type="string">Payout: the memo the receiving anchor requires. When set, the funding payment carries **this** rather than the Corridor Reference.</ResponseField>
+    <ResponseField name="fundingMemoType" type="'hash' | 'text' | 'id'" />
     <ResponseField name="virtualAccount" type="object">Collection: the bank account the payer sends local currency to.</ResponseField>
-    <ResponseField name="txSignature" type="string">On-chain signature of the partner's leg, when known.</ResponseField>
-    <ResponseField name="reference" type="Hex">The Corridor Reference echoed back from a free-text field.</ResponseField>
+    <ResponseField name="recipient" type="string">Collection: the wallet the provider delivers to.</ResponseField>
+    <ResponseField name="txSignature" type="string">On-chain reference of the provider's leg, when known.</ResponseField>
+    <ResponseField name="reference" type="Hex">The Corridor Reference, echoed back where the provider carries it.</ResponseField>
   </Expandable>
 </ResponseField>
 
-## Requirements
+<Note>
+`fundingMemo` is the honest part of the interface. A SEP-31 anchor assigns the memo for the funding payment, so Corridor's own reference cannot ride in `MEMO_HASH` on that leg. The funding code uses `fundingMemo` when it is set and the reference otherwise, and the join key becomes `(anchor, transaction id)` — which the saga already records to make funding exactly-once.
+</Note>
+
+## What Corridor needs from a spoke
 
 <Steps>
-  <Step title="Settle in USDC on Solana or Base">
-    Corridor funds payouts and receives collections in USDC on the chain you name.
+  <Step title="Settle in a stablecoin on a chain Corridor reaches">
+    Stellar for an anchor. A provider that settles elsewhere needs a cross-chain hop, and today only the naira corridor has one.
   </Step>
-  <Step title="One-off addresses">
-    A fresh funding address per payout (or a deposit memo) and a fresh virtual account per collection, so every movement maps to exactly one order.
+  <Step title="One-off addresses or memos">
+    A fresh funding address or memo per payout, and a fresh virtual account per collection, so every movement maps to exactly one order.
   </Step>
   <Step title="Echo the reference">
-    Carry the 32-byte Corridor Reference in a free-text field and return it on webhooks.
+    Carry the 32-byte Corridor Reference in a field you return, and into the bank narration where you can. A statement line should trace back to the payout that caused it.
   </Step>
-  <Step title="Signed webhooks">
-    HMAC over a timestamp and the raw body, verified in constant time within a 5-minute window. Paj's scheme works as-is.
+  <Step title="A status Corridor can poll or receive">
+    Either a polled endpoint (what SEP-31 gives) or HMAC-signed webhooks over a timestamp and the raw body, verified in constant time within a five-minute window.
   </Step>
 </Steps>
 
 ## How Corridor uses it
 
-- A `PartnerRegistry` picks the partner per (currency, direction, chain).
-- **Exactly-once funding:** the payout leg records the order and the funding transaction durably, so retries reuse them.
-- **Failure after funding** stops at `manual_review`; Corridor never unwinds its own books while the money is at the partner.
+- A `PartnerRegistry` picks the provider per (currency, direction, chain).
+- **Exactly-once funding:** the payout leg records the order and the funding transaction durably, so retries reuse them rather than paying twice.
+- **Failure after funding** stops at `manual_review`; Corridor never unwinds its own books while the money is at the provider.
+- **Anchor rounding** is booked as dust held for the customer, not written off.
 - Each completed order becomes an `Observation` (`partner_fiat`, `${partner}:${orderId}`) for [reconciliation](/architecture/reconciliation).
 
-## Candidate partners
+## Candidate spokes
+
+Anchors first, in the order corridors open. None is signed.
 
 | Region | Candidates |
 |---|---|
-| Africa | Paj, FossaPay, Yellow Card, Kotani Pay, Bitnob, HoneyCoin, Busha |
-| China, Hong Kong, Asia | Licensed Hong Kong payment institutions, Nium, Conduit |
-| Americas | Bridge, Bitso Business, Pix partners, Conduit |
-| Global aggregators | BVNK, Conduit, Nium |
+| East Africa | KES and TZS anchors; mobile-money rails |
+| West Africa | XOF anchors; a licensed naira anchor, which would move NGN onto the hub |
+| Southern Africa | ZAR and GHS anchors |
+| Asia and the Middle East | Licensed Hong Kong payment institutions and regional anchors for supplier payments |
+| Americas | USD, BRL and MXN anchors; Pix and SPEI rails |

@@ -1,0 +1,68 @@
+---
+title: "CCTP: cross-chain inflows"
+description: "USDC reaches the hub from Base and Solana by burn-and-mint, so no wrapped asset is ever credited. The edges are in the route graph; the leg is declared and not built."
+icon: "arrow-left-right"
+---
+
+Most of Corridor's work never leaves Stellar: anchors settle on the hub, so the common payout path has no bridge in it. Other chains appear in two places only:
+
+- **Inflows.** A customer already holding USDC on Base or Solana brings it to the hub, so its balance is one balance.
+- **The one corridor whose licensed partner settles elsewhere.** Naira, today.
+
+<Warning>
+**The `cctp.transfer` leg is not built.** It is declared in the route graph and the planner produces routes that use it, but the implementation is not written, so mainnet naira payouts do not run. On testnet, `bridge.simulated` stands in for it: the Stellar side is a **real payment** carrying the reference, and only the far side is simulated.
+</Warning>
+
+## Why CCTP and not a bridge
+
+CCTP burns USDC on the source chain and mints canonical USDC on the destination. There is no wrapped asset, no bridge liquidity to trust and no second representation of the dollar to reconcile — which matters for a ledger whose whole claim is that it matches the chain.
+
+That is also why these edges exist at all. Corridor settles in one asset on one hub; an inflow that arrived as a wrapped token would be a different asset with a different risk, and the ledger would have to say so.
+
+## The edges
+
+```ts
+{ kind: "cctp.transfer", from: { venue: "base",    asset: "USDC" }, to: { venue: "stellar", asset: "USDC" }, env: ["mainnet"] },
+{ kind: "cctp.transfer", from: { venue: "solana",  asset: "USDC" }, to: { venue: "stellar", asset: "USDC" }, env: ["mainnet"] },
+{ kind: "cctp.transfer", from: { venue: "stellar", asset: "USDC" }, to: { venue: "base",    asset: "USDC" }, env: ["mainnet"] },
+{ kind: "cctp.transfer", from: { venue: "stellar", asset: "USDC" }, to: { venue: "solana",  asset: "USDC" }, env: ["mainnet"] },
+```
+
+Both directions, mainnet only. The routes they produce:
+
+| Flow | Mainnet route |
+|---|---|
+| EUR → NGN payout | `reserve → cctp.transfer (Stellar → Solana) → partner.payout` |
+| NGN collection | `partner.collect (→ Solana) → cctp.transfer (Solana → Stellar) → ledger.credit` |
+| USDC inflow from Base | `cctp.transfer (Base → Stellar) → ledger.credit` |
+
+## The testnet stand-in
+
+`bridge.simulated` has the same interface and the same bookings:
+
+- **The Stellar side is real.** USDC (or XLM on a funded-asset-free testnet) moves between the treasury vault and an escrow vault, carrying the flow's Corridor Reference as `MEMO_HASH`.
+- **The far side is simulated**, booked against `sim:${idempotencyKey}` and marked `simulated: true` in the entry's metadata, so no run can be mistaken for a real cross-chain movement.
+- **It compensates.** On failure it sends the value back on Stellar with the same reference and books `bridge.unfill` and `bridge.refund`.
+
+Both sides go through the `usd-peg` clearing pair, which nets to zero across the flow — the same shape the real leg will book.
+
+## Precision at the boundary
+
+USDC is **6 decimal places** on Solana and Base, and **7** on Stellar. Corridor converts through `rescale`:
+
+```ts
+export const toHubPrecision   = (amount: bigint) => rescale(amount, 6, 7);
+export const toSpokePrecision = (amount: bigint) => rescale(amount, 7, 6);
+```
+
+Going up is exact. Going down, an amount carrying a seventh decimal **throws** rather than rounding it away, so a stroop of dust surfaces as an error instead of disappearing ([ADR 0012](/decisions/0012-seven-decimal-ledger)).
+
+## When this goes away
+
+The naira corridor needs this only until a licensed naira anchor is live on Stellar. `OFF_STELLAR_PAYOUT_CURRENCIES` is the single list that decides it, and moving the corridor onto the hub is one line:
+
+```ts
+export const OFF_STELLAR_PAYOUT_CURRENCIES: readonly Fiat[] = ["NGN"];
+```
+
+Inflows from Base and Solana stay useful regardless, for customers whose balances start somewhere else.

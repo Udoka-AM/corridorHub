@@ -1,0 +1,114 @@
+---
+title: "Stellar: the settlement hub"
+description: "How Corridor uses Stellar: payments carrying the 32-byte reference as MEMO_HASH, an asset registry where the issuer is part of identity, a Horizon observer that resumes from a stored cursor, and 7-decimal amounts that never round."
+icon: "zap"
+---
+
+<img src="/images/chains/stellar.svg" alt="Stellar" width="56" height="56" />
+
+Stellar is where Corridor settles. Customer balances, the treasury vault and the clearing accounts are USDC on Stellar, and because anchors settle on Stellar too, the common payout path has no bridge in it at all.
+
+Two properties of the network decide the design:
+
+1. **`MEMO_HASH` is exactly 32 bytes**, which is exactly a Corridor Reference.
+2. **Anchors settle on Stellar itself**, so the fiat spoke touches the hub directly.
+
+## A payment that carries the reference
+
+```ts
+import { stellarClient, transferWithReference, explorerTx } from "@corridor/chain-stellar";
+
+const sent = await transferWithReference(treasury, {
+  asset: "USDC",
+  to: anchorAccount,
+  amount: 70_000_000n,     // 7 USDC at the hub's 7 dp
+  reference,               // 32 bytes
+});
+// → Observation { venue: "stellar", externalRef: `${hash}:0`, reference, … }
+```
+
+The reference goes in as `Memo.hash(...)`, so it is part of the signed transaction rather than a separate operation. The call returns the `Observation` that gets booked, including the ledger sequence Horizon reported.
+
+Fees come from Horizon's recent fee stats, falling back to the base fee. The transaction is built, signed through the [customer's signer](/architecture/keys-and-signers) over the transaction hash, and submitted; a `successful: false` result throws rather than being treated as sent.
+
+## Reading it back: the join
+
+```ts
+const found = await findTransfersByReference(client, { account: treasury.address, reference, cursor });
+```
+
+Horizon cannot be asked for a memo network-wide. It does not need to be: Corridor reads the payment stream of an account it already watches and filters on the memo. The stream is per-vault and bounded, a stored paging token makes restarts neither miss nor double-count, and no indexer sits in the path ([ADR 0003](/decisions/0003-reference-in-memo-hash)).
+
+This is also what makes every money-moving leg idempotent: before sending, it asks whether an identical movement — same memo, parties, amount and asset — already landed.
+
+<Warning>
+Horizon's payment endpoint must be called with `join=transactions`, or the memo never arrives. The SDK then turns every `_links` entry into a method, so the joined transaction sits in `transaction_attr` and its ledger sequence in `ledger_attr`. `normalizeRecord` lifts both out and cross-checks the ledger sequence against the operation's TOID (`paging_token >> 32`). Getting this wrong silently loses every memo, so it is covered by tests.
+</Warning>
+
+## Assets, and the issuer as identity
+
+A classic Stellar asset is a code plus an issuing account, and anyone can issue one called `USDC`. `assetOf` matches **code and issuer**, so a look-alike is never booked.
+
+```ts
+export const STELLAR_ISSUERS = {
+  USDC: {
+    mainnet: "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN",
+    testnet: "GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5",
+  },
+  EURC: { mainnet: "GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2" },
+  MGUSD: {}, PYUSD: {}, USDT: {},   // issuer not verified here yet
+};
+```
+
+MGUSD, PYUSD and USDT are **deliberately unset** until each is verified against the issuer's own published `stellar.toml`. Asking for one raises an error that names the missing issuer rather than guessing, and a deployment can supply its own with `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>`. See [ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity).
+
+A **trustline** is what lets an account hold an issued asset; `trustAsset` opens one. Ramp's end users get theirs sponsored, so they can hold USDC without first holding XLM.
+
+## Amounts
+
+Stellar carries amounts as decimal strings with 7 places, and the ledger keeps the same precision, so `toStellarAmount` and `fromStellarAmount` are formatting steps and never rounding ones. A vault's on-chain balance can equal the ledger to the stroop. See [ADR 0012](/decisions/0012-seven-decimal-ledger).
+
+## XLM
+
+XLM is held only as fee float and booked to `expense:gas`. Stellar charges fees in XLM, so each vault keeps a small balance; `create_account` and sponsored reserves are observed and booked from the transaction that paid them ([ADR 0008](/decisions/0008-book-from-the-chain)).
+
+## The observer
+
+```ts
+const observer = observerFor(client, { name: "treasury", accounts: [address], cursors, unreferenced: true });
+const seen = await observer.poll();
+```
+
+`StellarObserver` watches accounts — Corridor's vaults, or a customer's own accounts in [read-only mode](/flows/read-only-pilot) — for payments in and out, resuming from a stored Horizon paging token. With `unreferenced` it also reports account funding, sponsored reserves, plain inbound payments, and the XLM fee each outbound transaction charged.
+
+## On-ledger FX
+
+Converting between two issued assets on Stellar is a path payment over the network's own order books: EURC into USDC with no external venue. The edges are in the route graph and the planner produces them (`reserve → stellar.pathPayment → partner.payout` for a payout funded in EURC).
+
+<Note>
+The `stellar.pathPayment` **leg implementation is not written yet** — like `cctp.transfer`, it is declared and planned for but not executed. A payout funded in a non-settlement asset therefore plans correctly and does not run.
+</Note>
+
+## Environments
+
+| | Mainnet | Testnet |
+|---|---|---|
+| Passphrase and Horizon | Public network | Test network; `CORRIDOR_HORIZON_URL` points either at a private instance |
+| USDC issuer | `GA5ZSEJY…KZVN` | `GBBD47IF…FLA5` |
+| Funding | The customer's own treasury | Friendbot, through `pnpm stellar:wallets` |
+| What has run | Nothing yet | A payment with a reference, and a whole payout through the saga — [Evidence](/status/evidence#stellar-testnet) |
+
+Code paths are identical; the two differ only by passphrase, Horizon URL and issuer.
+
+## Evidence
+
+Both runs on 17 October 2026, on Stellar testnet:
+
+| Run | Result | Transaction |
+|---|---|---|
+| `pnpm stellar:smoke` | A payment with the reference as `MEMO_HASH`, read back off Horizon and decoded whole | [175ad420…](https://stellar.expert/explorer/testnet/tx/175ad4206f85b279831178a5ad896da123105005f265fb5c798ae3d09254781c) |
+| `pnpm stellar:payout` | A whole payout through the saga engine, booked double-entry, no invariant violations | [88074bfa…](https://stellar.expert/explorer/testnet/tx/88074bfac3cead1adeb75209cd9aa685bfda44589397b6990dbc92deccbdc10e) |
+
+Both move **XLM**, because a funded testnet USDC trustline needs an issuer faucet. The USDC path is the same call with a different asset.
+
+Fifteen tests in `packages/chain-stellar/src/stellar.test.ts` cover the reference on a real transaction shape, issuer identity, the held-key signer and the Horizon quirks above.
