@@ -182,6 +182,9 @@ importers:
       '@corridor/core':
         specifier: workspace:*
         version: link:../core
+      '@stellar/stellar-sdk':
+        specifier: ^17.2.1
+        version: 17.2.1
 
   packages/recon:
     dependencies:

@@ -45,6 +45,16 @@ export interface PartnerOrder {
   rate: number;
   /** Payout: where to send USDC. One-off; only valid for this order. */
   fundingAddress?: string;
+  /**
+   * Payout: the memo the receiving anchor requires on the funding payment.
+   *
+   * A SEP-31 anchor assigns its own memo, so on that leg Corridor's own
+   * reference cannot ride in MEMO_HASH: it travels in the SEP-31 fields
+   * instead and the join key becomes (anchor, transaction id). Funding code
+   * must use this memo when it is set, and the reference otherwise.
+   */
+  fundingMemo?: string;
+  fundingMemoType?: "hash" | "text" | "id";
   /** Collection: where the payer sends local currency. */
   virtualAccount?: VirtualAccount;
   /** Collection: wallet the partner delivers USDC to. */
