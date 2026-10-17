@@ -1,23 +1,22 @@
 ---
 title: "Quickstart"
-description: "Install Corridor, run the test suite, and drive payout flows on Tempo, Solana and Zcash testnets from the treasury console. No keys or accounts needed."
+description: "Install Corridor, run 110 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
 icon: "terminal"
 ---
 
-Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FROST signing. The ledger runs on embedded Postgres (PGlite) locally, so there is no database to install, and test keys are generated and funded from the Tempo testnet faucet on first run.
+Corridor is a TypeScript monorepo (pnpm workspaces). The ledger runs on embedded Postgres (PGlite) locally, so there is no database to install, and testnet keys are generated and funded from Friendbot on first run.
 
 ## Prerequisites
 
 - Node.js 22 or later and pnpm 9
-- Rust stable, only for the FROST signer and the Zcash tooling
-- For the shielded lane: [`zcash-devtool`](https://github.com/zcash/zcash-devtool) built locally
+- Nothing else. The test suite touches no network, and the Stellar scripts need only a testnet account, which they create.
 
 ## Run it
 
 <Steps>
   <Step title="Clone and install">
     ```bash
-    cd corridor
+    cd corridorHub
     pnpm install
     ```
   </Step>
@@ -26,72 +25,76 @@ Corridor is a TypeScript monorepo (pnpm workspaces) with one Rust service for FR
     pnpm typecheck
     pnpm test
     ```
-    107 tests cover the ledger invariants, the reference codec, routing and hub enforcement, the saga engine (forced failures, compensation order, lease fencing), the mainnet Across and payout legs (fees, partner rounding, slow fills, crash recovery), signers, partner adapters, webhooks, the Solana memo leg, ZIP-321 batches, NEAR quotes and vault accounting.
+    110 tests cover the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
   </Step>
-  <Step title="A first memo transfer on Tempo">
+  <Step title="Create two testnet vaults">
     ```bash
-    pnpm tempo:smoke
+    pnpm stellar:wallets
     ```
-    Generates testnet keys into `.env.local` on first run, funds them from the Moderato faucet, sends a `transferWithMemo`, finds it again by its indexed memo topic and books it exactly once.
+    Generates keys into `.env.local` on first run and funds them from Friendbot. Keys stay local and the file is gitignored.
   </Step>
-  <Step title="Run the flows">
+  <Step title="A first payment carrying the reference">
     ```bash
-    pnpm payout:demo     # EUR → NGN payout, including a forced partner failure that compensates on-chain
-    pnpm importer:demo   # NGN collected into the hub, then CNY paid to a supplier
-    pnpm zcash:frost     # FROST 2-of-3 shielded batch on Zcash testnet
+    pnpm stellar:smoke
     ```
+    Sends a payment from the treasury vault to the escrow vault with a Corridor Reference as its `MEMO_HASH`, then asks Horizon for that account's payments and finds the movement again by its memo — the join reconciliation uses, with no indexer in the path. It prints the reference, the decoded fields, the explorer link and the ledger sequence.
   </Step>
-  <Step title="Open the treasury console">
+  <Step title="A whole payout through the saga engine">
     ```bash
-    pnpm console        # http://localhost:4400
+    pnpm stellar:payout
     ```
-    Run a payout, a payout with a forced partner failure, and an importer flow from the console, then watch every movement reconcile. The console owns the local ledger, so stop other flows before starting it: the embedded Postgres has a single owner.
+    Plans a EUR → KES route, reserves the customer's balance, opens an anchor order, funds it exactly once with a real Stellar payment, books every movement double-entry and prints the ledger invariants. The anchor is `MockPartner`, so no local currency moves; the route, the saga, the payment and every ledger entry are the real ones.
   </Step>
 </Steps>
+
+<Note>
+Both Stellar scripts move **XLM**, because a funded testnet USDC trustline needs an issuer faucet. The USDC path is the same call with a different asset.
+</Note>
 
 ## Scripts
 
 | Command | What it does |
 |---|---|
-| `pnpm tempo:smoke` | Memo transfer on Moderato, observed and booked once |
-| `pnpm payout:demo` | Public payout saga with compensation |
-| `pnpm importer:demo` | Collection then supplier payout across the hub |
-| `pnpm zcash:batch` | Single-key shielded batch with encrypted memos |
-| `pnpm zcash:frost` | Threshold-controlled shielded batch |
-| `pnpm across:testnet` | Live Across deposit on testnet (Base Sepolia → Solana devnet) |
-| `pnpm watch:report <config>` | Read-only reconciliation of existing wallets against payout records |
-| `pnpm mainnet:wallets` | Create or inspect the mainnet vaults (keys stay local) |
-| `pnpm mainnet:saga` | Mainnet payouts through the saga engine, with an on-chain vs ledger check of every vault |
-| `pnpm console` | Treasury console and JSON API |
-| `pnpm console:snapshot` | Record the running console as the static public replay |
+| `pnpm test` | 110 tests, no network |
+| `pnpm typecheck` | `tsc -b` across every package |
+| `pnpm stellar:wallets` | Create or inspect the testnet vaults (keys stay local) |
+| `pnpm stellar:smoke` | A real payment, with the reference read back off Horizon and decoded |
+| `pnpm stellar:payout` | The whole saga: route, reserve, fund the anchor, book it, check invariants |
+| `CORRIDOR_WATCH=G…,G… pnpm watch:report` | Read-only reconciliation of Stellar accounts you already run |
+
+## Configuration
+
+| Variable | What it does |
+|---|---|
+| `CORRIDOR_NETWORK` | `testnet` (default) or `mainnet` |
+| `CORRIDOR_HORIZON_URL` | Point at a private Horizon instance instead of the public one |
+| `CORRIDOR_WATCH` | Comma-separated Stellar account ids for read-only mode |
+| `CORRIDOR_SIGNER` | `aws-kms` or `turnkey`; the default is a local key from `.env.local` |
+| `CORRIDOR_TAG_SECRET` | Key for the reference's customer tag, so a public memo never identifies the customer |
+| `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>` | Supply an issuer Corridor does not ship ([ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity)) |
 
 <Warning>
-Private keys are written to `.env.local` and `.keys/`, both gitignored. Never commit them. The console snapshot refuses to publish if any value from either location appears in its output.
+Private keys are written to `.env.local`, which is gitignored. Never commit it.
 </Warning>
 
 ## Repository layout
 
 ```text
 packages/
-  core/            Venues, currencies, money, the Corridor Reference codec
+  core/            Venues, currencies, money at 7 dp, the Corridor Reference codec
+  chain-stellar/   The hub: client, asset registry, payments with references, Horizon observer
+  routing/         Route graph and planner; the hub is enforced here
+  saga/            Durable saga engine: leases, fencing, reverse-order compensation
   ledger/          Double-entry ledger with invariants (PGlite / Postgres)
-  routing/         Route graph and planner, hub enforcement
-  saga/            Durable saga engine with leases, fencing and compensation
-  signer/          Signer interface: local, AWS KMS and Turnkey adapters
-  legs/            Leg implementations (Across bridge, partner payout and collection, credit, shielded)
-  chain-tempo/     Tempo client, memo transfers, observer
-  chain-solana/    Stablecoin registry, memo transfers, watcher
-  chain-evm/       Base stablecoins and watcher
-  chain-zcash/     zcash-devtool wallet, ZIP-321, FROST orchestration
-  bridge-across/   Across Swap API: quote, execute, fill tracking
-  swap-near/       NEAR Intents 1Click quotes and status
-  partners/        RampPartner interface, Paj adapter, mock partner
-  webhooks/        Signed partner webhook ingest
-  recon/           Reconciliation and vault accounting
-services/
-  zcash-frost/     corridor-frost: FROST(RedPallas) keygen and signing (Rust)
+  partners/        The anchor interface, the SEP-10/12/31/38 adapter, off-Stellar partners
+  legs/            The leg implementations the saga executes
+  recon/           Reconciliation, read-only mode and vault checks
+  signer/          Signer interfaces: local, AWS KMS, Turnkey
+  webhooks/        Partner event store and webhook verification
+  chain-solana/    The cross-chain spoke for currencies no Stellar anchor serves yet
+  chain-evm/       Base, for USDC inflows
 apps/
-  console/         Treasury console
-  site/            Public website and console replay
+  site/            Public website
   docs/            This documentation
+scripts/           stellar-wallets · stellar-smoke · stellar-payout · watch-report
 ```

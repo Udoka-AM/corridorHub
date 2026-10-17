@@ -1,12 +1,21 @@
 ---
 title: "Reading paths"
-description: "Four routes through the documentation: for investors, engineering leads, chain ecosystem teams and payout partners."
+description: "Five routes through the documentation: for Stellar reviewers, investors, engineering leads, anchors and partners."
 icon: "map"
 ---
 
-Pick the route that matches what you need to decide. Each takes 15 to 30 minutes.
+Pick the route that matches what you need to decide.
 
 <Tabs>
+  <Tab title="Stellar reviewers">
+    You have ten minutes and you want to know whether the Stellar work is real.
+
+    <Card title="Ten-minute review" icon="timer" href="/start/ten-minute-review">
+      Six things to read in order, two commands to run, the three files worth opening, and the whole list of what is deliberately not built.
+    </Card>
+
+    The short version: `MEMO_HASH` is exactly 32 bytes and anchors settle on Stellar itself, and those two facts shape the entire design. The hub is enforced in the planner, the ledger keeps Stellar's 7 decimal places, and reconciliation is a join on a watched account's own payment stream rather than an index.
+  </Tab>
   <Tab title="Investors">
     You want to know whether the market is real, whether the business earns, and whether the team can build it.
 
@@ -18,13 +27,13 @@ Pick the route that matches what you need to decide. Each takes 15 to 30 minutes
         [The global opportunity](/market/global-opportunity): $31.6T of cross-border B2B payments, under 1% on stablecoins; then [First market: Africa](/market/africa-stablecoin-flows), where it starts.
       </Step>
       <Step title="The business">
-        [Business model](/market/business-model): a ledger subscription from the first pilot, a take on routed volume, and revenue scenarios.
+        [Business model](/market/business-model): a ledger subscription from the first pilot, a take on routed volume, and revenue scenarios. Every figure there is a labelled assumption.
       </Step>
       <Step title="The proof">
-        [Evidence](/status/evidence): the live mainnet payout into a Nigerian bank account, every testnet transaction, and the [console replay](https://corridorapp.udokaam.dev/console/).
+        [Evidence](/status/evidence): what has run on Stellar testnet, and the prototype's live mainnet payout, labelled as the prototype's.
       </Step>
       <Step title="What's next">
-        [Roadmap](/status/roadmap): design partners, production custody and the next corridors.
+        [Roadmap](/status/roadmap): a signed anchor, the corridors in order, and what production hardening means.
       </Step>
     </Steps>
   </Tab>
@@ -36,52 +45,49 @@ Pick the route that matches what you need to decide. Each takes 15 to 30 minutes
         [Architecture overview](/architecture/overview) and the [core model](/architecture/core-model).
       </Step>
       <Step title="Money correctness">
-        [Ledger](/architecture/ledger): double-entry, append-only, exactly-once external references, no-overdraft invariants.
+        [Ledger](/architecture/ledger): double-entry, append-only, exactly-once external references, no-overdraft invariants, 7 decimal places.
       </Step>
       <Step title="Failure handling">
         [Saga engine](/architecture/saga) and [failure and compensation](/flows/failure-and-compensation).
       </Step>
       <Step title="Completeness">
-        [Reconciliation](/architecture/reconciliation): three venues, one matcher, and a vault balance check that books gas from the chain.
+        [Reconciliation](/architecture/reconciliation): one matcher, a vault check against the chain, and fees booked from the transaction that paid them.
       </Step>
       <Step title="Why it is built this way">
-        The [architecture decision records](/decisions/index).
+        The [architecture decision records](/decisions/index), twelve of them.
       </Step>
     </Steps>
   </Tab>
-  <Tab title="Chain teams">
-    You want to know how Corridor uses your chain, and whether it uses it well.
-
-    <CardGroup cols={2}>
-      <Card title="Tempo" img="/images/chains/tempo.svg" href="/integrations/tempo">
-        The hub: TIP-20 memos, pathUSD, stablecoin gas via the Fee Manager.
-      </Card>
-      <Card title="Solana" img="/images/chains/solana.svg" href="/integrations/solana">
-        Partner liquidity: USDC with SPL Memo in one transaction.
-      </Card>
-      <Card title="Zcash" img="/images/chains/zcash.svg" href="/integrations/zcash">
-        The shielded lane: Ironwood batches, encrypted memos, scoped viewing keys.
-      </Card>
-      <Card title="Base and Across" img="/images/chains/base.svg" href="/integrations/across">
-        Two-hop bridging out of the hub, and direct partner payouts on Base.
-      </Card>
-    </CardGroup>
-  </Tab>
-  <Tab title="Partners">
-    You run a ramp or a payout rail and want to know what it takes to become a spoke.
+  <Tab title="Anchors">
+    You run a Stellar anchor and want to know what it takes to become a spoke.
 
     <Steps>
       <Step title="The network">
         [Hub and spoke](/architecture/hub-and-spoke): why one integration reaches every region.
       </Step>
+      <Step title="The SEPs Corridor speaks">
+        [SEP anchor interface](/integrations/sep-anchors): SEP-1, 10, 12, 38 and 31, what Corridor checks, and what it needs from your `stellar.toml`.
+      </Step>
+      <Step title="What Corridor sends you">
+        [Partner interface](/integrations/partner-interface): the normalised order lifecycle every provider is mapped to.
+      </Step>
+      <Step title="A full payout">
+        [Payout EUR → KES](/flows/payout-eur-kes), end to end.
+      </Step>
+    </Steps>
+  </Tab>
+  <Tab title="Off-Stellar partners">
+    You run a payout rail that settles somewhere other than Stellar, in a currency no anchor serves yet.
+
+    <Steps>
       <Step title="The interface">
         [Partner interface](/integrations/partner-interface): six methods and a signed webhook.
       </Step>
-      <Step title="A reference implementation">
-        [Paj](/integrations/paj): offramp, onramp and webhooks against Paj's public API v2.
+      <Step title="Where you sit">
+        [Cross-chain inflows](/integrations/cctp): how value reaches a spoke chain, and why the naira corridor is the one that needs it.
       </Step>
-      <Step title="A full payout">
-        [Payout EUR → NGN](/flows/payout-eur-ngn), end to end.
+      <Step title="A reference implementation">
+        [Paj](/integrations/paj): offramp, onramp and webhooks, carried over from the prototype for the naira corridor.
       </Step>
     </Steps>
   </Tab>
