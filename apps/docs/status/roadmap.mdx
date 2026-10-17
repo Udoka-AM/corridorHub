@@ -1,52 +1,71 @@
 ---
 title: "Roadmap"
-description: "What has shipped, what comes next, and how Corridor moves from its first live payouts to production deployments with design partners."
+description: "What is built on Stellar, what is deliberately not, and the order the remaining work has to happen in: a signed anchor first, because everything else is waiting on it."
 icon: "milestone"
 ---
 
-## Shipped
+## Built
 
 <CardGroup cols={2}>
-  <Card title="Live mainnet payout" icon="landmark" href="/status/evidence#live-on-mainnet">
-    Tempo → Base → Solana through Across, paid out by Paj: ₦3,891.48 into a Nigerian bank account 74 seconds after leaving a Tempo vault, with the Corridor Reference in the bank narration.
+  <Card title="Stellar as the settlement hub" icon="zap" href="/integrations/stellar">
+    Payments carrying the 32-byte reference as `MEMO_HASH`, an asset registry where the issuer is part of identity, a Horizon observer that resumes from a stored cursor.
   </Card>
-  <Card title="Mainnet payouts through the saga engine" icon="workflow" href="/flows/payout-eur-ngn">
-    Live `across.bridge` and payout legs, funded from pathUSD or USDC.e, on a mainnet ledger whose opening float is read from the chain and whose vaults are checked on-chain after every run.
+  <Card title="The reference, and the join" icon="fingerprint" href="/architecture/corridor-reference">
+    32 bytes in the signed transaction, read back off a watched account's own payment stream. No indexer in the path.
+  </Card>
+  <Card title="A 7-decimal ledger" icon="scale" href="/decisions/0012-seven-decimal-ledger">
+    Double-entry, append-only, exactly-once per external movement, at Stellar's own precision, so a vault can equal the books to the stroop.
+  </Card>
+  <Card title="Hub-enforced routing" icon="route" href="/architecture/routing">
+    The planner rejects any payout not funded from Stellar and any collection that does not land on it, over 32 currencies.
+  </Card>
+  <Card title="Saga engine with fencing" icon="workflow" href="/architecture/saga">
+    Reverse-order compensation, `manual_review` after money leaves, and a race test proving a lapsed lease writes nothing.
+  </Card>
+  <Card title="The SEP anchor adapter" icon="plug" href="/integrations/sep-anchors">
+    SEP-1, 10, 12, 38 and 31 behind the partner interface, with the challenge verified before the vault signs it.
   </Card>
   <Card title="Customer-held signing" icon="key-square" href="/architecture/keys-and-signers">
-    One signer interface for Tempo, Base and Solana, with AWS KMS and Turnkey adapters. Every vault signs through it.
+    One signer interface; AWS KMS and Turnkey adapters; Stellar and Solana served by one Ed25519 key.
   </Card>
   <Card title="Read-only reconciliation" icon="eye" href="/flows/read-only-pilot">
-    Watch-only observers for Tempo, Solana and Base, matched against the customer's payout records, with an exceptions queue and CSV export.
-  </Card>
-  <Card title="Books from the chain" icon="scale" href="/architecture/reconciliation">
-    Tempo gas, Base gas, Solana fees and account rent, Across fees and partner rounding, each booked from the transaction that caused it.
-  </Card>
-  <Card title="Saga fencing" icon="lock" href="/architecture/saga">
-    Every commit checks a fencing token, so a worker whose lease lapsed mid-leg can never book or mark a step done.
-  </Card>
-  <Card title="Issuer-neutral stablecoins" icon="coins" href="/decisions/0010-issuer-neutral-stablecoins">
-    USDC, USDT, PYUSD (Token-2022), EURC, USDC.e and pathUSD, each booked in its own asset.
-  </Card>
-  <Card title="Shielded supplier payments" icon="shield" href="/flows/shielded-supplier-batch">
-    Ironwood batches on Zcash testnet, approved by FROST 2-of-3 and disclosed through a scoped viewing key.
+    Watch Stellar accounts by id, match the company's own payout records, exceptions queue and CSV. No keys.
   </Card>
 </CardGroup>
 
-## Next
+## Not built, on purpose or not yet
+
+| | Why it is not there | What would change it |
+|---|---|---|
+| **A signed anchor** | Nobody has signed one | A design partner or an anchor agreeing to a testnet integration. Everything below is downstream of this |
+| **SEP-6 collections** | No signed anchor has exercised the flow, so it would be a guess | The first collecting anchor, then the deposit flow behind `openCollection` |
+| **`cctp.transfer`** | Only the naira corridor needs it, and naira is the corridor waiting on an anchor | Writing the leg, or a licensed naira anchor on Stellar, which removes the need |
+| **`stellar.pathPayment`** | The planner produces the edge; the leg is unwritten | Writing it, so a balance in EURC or MGUSD can fund a payout |
+| **MGUSD, PYUSD, USDT issuers** | Unset until each is verified against the issuer's own `stellar.toml` | Verification, or a deployment supplying its own with `CORRIDOR_STELLAR_ISSUER_…` |
+| **A treasury console** | The prototype's read Tempo and was removed rather than left misreporting | The engines already produce the data; it is a user interface |
+| **A mainnet run** | No anchor, no customer, nothing to run | A signed anchor and a design partner |
+| **The confidential lane** | Deferred to Stellar confidential tokens rather than bolted on elsewhere ([ADR 0005](/decisions/0005-confidential-lane-deferred)) | Confidential tokens with auditor keys on Stellar |
+
+## Next, in order
 
 <Steps>
-  <Step title="Design-partner pilots">
-    Read-only first: 60 days on the wallets a licensed payout company already runs, matched against its own payout records. Then routing on the company's own signer.
+  <Step title="A signed anchor on testnet">
+    `SepAnchor` against a real anchor's `stellar.toml` instead of a stub: the SEP-10 handshake, a SEP-38 quote and a SEP-31 order that an anchor actually fills. This is the one step everything else waits on.
   </Step>
-  <Step title="Corridors">
-    EUR → NGN with licensed payout companies first, then KES and GHS, then NGN → CNY and HKD for importers on the same integration.
+  <Step title="A first corridor end to end">
+    EUR → KES: a payout funded from a USDC balance on Stellar and paid out in shillings by a licensed anchor, reconciled from the funding payment to the bank credit.
   </Step>
-  <Step title="Payout partners per region">
-    Additional partners in Africa, Asia and the Americas on the same partner interface, so each new region is reachable from every existing one.
+  <Step title="Design-partner pilots, read-only first">
+    Sixty days watching the Stellar accounts a licensed payout company already runs, matched against its own payout records. Then routing, on the company's own signer.
   </Step>
-  <Step title="Mainnet shielded funding">
-    `near.swap` from Base USDC to ZEC through NEAR Intents, delivered straight to the vault's unified address (NEAR Intents has no Tempo market).
+  <Step title="Collections">
+    SEP-6 deposits behind `openCollection`, which makes the importer flow real rather than half-real.
+  </Step>
+  <Step title="More spokes">
+    XOF and TZS next, then Ghana and South Africa; a licensed naira anchor whenever one exists, which moves NGN onto the hub and makes `cctp.transfer` unnecessary for it.
+  </Step>
+  <Step title="A console">
+    The data already exists in the ledger, the saga tables and the matcher. What is missing is the interface over it.
   </Step>
 </Steps>
 
@@ -55,26 +74,26 @@ icon: "milestone"
 | Area | Today | Production |
 |---|---|---|
 | Ledger | PGlite (embedded Postgres) | Managed Postgres, same schema and triggers |
-| Custody | Signer interface on every vault; AWS KMS and Turnkey adapters | The customer's KMS or MPC for every vault; a Fireblocks adapter (raw signing enabled) |
-| Routing | The planner enforces the Tempo hub | Tempo-first, not Tempo-only: direct Solana routes when the sender already holds Solana stablecoins, with measured cost per hop |
-| Stablecoins | Payouts fund from pathUSD or USDC.e; USDC, USDT, PYUSD and EURC watched and reconciled | Swap legs so USDT, PYUSD and EURC fund payouts directly; USDT on Tron for African payout liquidity |
-| Liquidity | Customer float in its own vault | Liquidity providers plugged in as venues |
-| Compliance | Viewing keys for the shielded lane | Address screening (Chainalysis or TRM), a Travel Rule provider hook, audit exports |
-| FROST | Trusted-dealer keygen; both rounds in one process | Distributed key generation; each signer on its own device relaying through `frostd` |
-| Console | Local, without authentication | Authenticated and role-based, with approval and disclosure endpoints behind access control |
-| Gas | Booked from the chain on every venue | Gas paid in stablecoins on every chain (a USDC paymaster on Base, a fee relayer on Solana) and batched bridging per partner |
-| Zcash stack | `zcash-devtool` | Z3 node stack and Zallet |
+| Custody | Signer interface on every vault; AWS KMS and Turnkey adapters | The customer's KMS or MPC for every vault |
+| Horizon | The public instance | `CORRIDOR_HORIZON_URL` at a private instance; observers already resume from a stored cursor |
+| Issuers | USDC and EURC set; three deliberately unset | Each verified against its `stellar.toml`, or supplied per deployment |
+| Stablecoins | USDC funds payouts; the others are booked and reconciled | The path-payment leg, so EURC and MGUSD balances can fund payouts directly |
+| Compliance | The reconciliation trail as audit evidence | Address screening and a Travel Rule hook before a payout is funded; scheduled audit exports |
+| Fees | XLM float per vault, booked from the chain | The same, with alerting on float |
 
 ## Known limitations
 
 <AccordionGroup>
-  <Accordion title="Solana account rent on every Paj payout">
-    Paj issues a one-off deposit address per order, so each payout creates a new token account and costs about 0.002 SOL in rent, more than the network fee. It is booked as `expense:account-rent`. The fix is a reusable deposit address with a memo, or delivery straight from the bridge to the partner.
+  <Accordion title="Testnet runs move XLM, not USDC">
+    A funded testnet USDC trustline needs an issuer faucet. `transferWithReference` is the same call with a different asset, and the asset registry and `trustAsset` are built, but no testnet run has moved USDC itself.
   </Accordion>
-  <Accordion title="No Across deployment on Tempo testnet">
-    Across has no Tempo testnet, and its testnet CCTP relayer did not complete a Base Sepolia → Solana devnet mint. Testnet routes use `bridge.simulated`, which has the same interface and bookings; mainnet uses the live bridge.
+  <Accordion title="The anchor assigns the funding memo">
+    On a SEP-31 leg the Corridor Reference cannot ride in `MEMO_HASH`, because the anchor's own memo must. The reference moves to the SEP-31 fields and the join key becomes the anchor's transaction id, which funding already records — but it is one join key rather than one everywhere.
   </Accordion>
-  <Accordion title="Non-USD gas on Tempo">
-    Tempo accepts USD stablecoins as fee tokens today. Vaults pay gas in pathUSD from the owner's float, so customer balances never fund gas.
+  <Accordion title="Base has no memo">
+    In read-only mode, Base movements match by amount and counterparty rather than by reference. That is weaker, and the pilot's own output shows it.
+  </Accordion>
+  <Accordion title="Precision at a 6 dp spoke">
+    A payout whose amount carries a seventh decimal cannot be paid on Solana or Base and fails at the edge rather than silently losing a stroop. That is the intended behaviour, and it is still a corridor a customer cannot use for that amount.
   </Accordion>
 </AccordionGroup>
