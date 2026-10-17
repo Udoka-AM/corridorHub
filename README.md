@@ -19,7 +19,7 @@ read back 0.1 XLM with the same reference, decoded out of MEMO_HASH
 ledger 5241532 · 2026-10-17T10:00:47Z
 ```
 
-Reproduce it with `pnpm stellar:wallets && pnpm stellar:smoke`, then `pnpm stellar:payout` for the full saga. 110 tests cover the venue, the planner, the ledger, the saga and the SEP anchor adapter.
+Reproduce it with `pnpm stellar:wallets && pnpm stellar:smoke`, then `pnpm stellar:payout` for the full saga. 124 tests cover the venue, the planner, the ledger, the saga and the SEP anchor adapter.
 
 Corridor's earlier prototype settled on Tempo, and paid ₦3,891.48 into a Nigerian bank account 74 seconds after 2.90 USDC.e left a vault on 11 October 2026. That build lives in its own repository; Stellar is Corridor's home from here.
 
@@ -71,7 +71,7 @@ Architecture in depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). What is bui
 
 ```bash
 pnpm install
-pnpm test                 # 110 tests, no network
+pnpm test                 # 124 tests, no network
 pnpm stellar:wallets      # creates and funds two testnet vaults
 pnpm stellar:smoke        # a real payment, with the reference read back off the network
 pnpm stellar:payout       # the whole saga: route, reserve, fund the anchor, book it

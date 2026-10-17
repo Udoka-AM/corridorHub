@@ -22,7 +22,7 @@ Stellar hands over the answer: **`MEMO_HASH` is exactly 32 bytes**, and the memo
 - No customer identity on a public ledger: the customer tag is a keyed hash, so anyone can see that two payments share a tag but only Corridor can say whose it is.
 - A wrong or truncated reference fails its checksum at decode time instead of silently matching nothing.
 - 32 bytes is fixed. New fields need a new version, and decoders reject unknown versions.
-- **One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields, and the join key becomes `(anchor, transaction id)` — which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and funding code uses it when it is set.
+- **One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields, and the join key becomes `(anchor, transaction id)` — which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and `stellarAnchorFunder` uses it when it is set, falling back to the reference. `findTransfersByMemo` matches on whichever memo went out, so the duplicate check that makes funding exactly-once is just as strong on this leg as on any other.
 - Horizon's payment endpoint has to be called with `join=transactions` for the memo to arrive in the same call. Getting that wrong loses every memo silently, so it is covered by tests in `packages/chain-stellar/src/stellar.test.ts`.
 
 ## Alternatives rejected

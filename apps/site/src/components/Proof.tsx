@@ -27,7 +27,7 @@ const STATS = [
   { value: "32", unit: "B", note: "The reference, carried whole in Stellar's MEMO_HASH. No indexer." },
   { value: "7", unit: "dp", note: "The ledger keeps Stellar's precision, so a vault equals the books" },
   { value: "0", unit: "", note: "Customer keys Corridor holds. Your KMS or MPC signs." },
-  { value: "110", unit: "", note: "Tests over the venue, planner, ledger, saga and anchor adapter" },
+  { value: "124", unit: "", note: "Tests over the venue, planner, ledger, saga and anchor adapter" },
 ];
 
 export default function Proof() {

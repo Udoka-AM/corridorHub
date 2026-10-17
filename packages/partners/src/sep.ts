@@ -24,8 +24,18 @@ export interface ChallengeSigner {
 }
 
 export interface SepAnchorOptions {
-  /** The anchor's home domain, e.g. "anchor.example.com". */
+  /**
+   * The anchor's home domain, e.g. "anchor.example.com". This is also the
+   * `home_domain` SEP-10 is asked to sign for, so it stays the domain even
+   * when `baseUrl` points somewhere else.
+   */
   domain: string;
+  /**
+   * Where to fetch `stellar.toml` from. Defaults to `https://{domain}`.
+   * Set it to reach an anchor that is not served over HTTPS at its domain —
+   * a local Anchor Platform on `http://localhost:8080`, or a tunnel.
+   */
+  baseUrl?: string;
   id?: string;
   /** The asset Corridor funds payouts in, as it appears in the anchor's toml. */
   asset?: { code: string; issuer: string };
@@ -89,8 +99,9 @@ export class SepAnchor implements RampPartner {
   /** SEP-1: the anchor's own description of what it serves. */
   async discover(): Promise<StellarToml> {
     if (this.toml) return this.toml;
-    const res = await this.http(`https://${this.opts.domain}/.well-known/stellar.toml`);
-    if (!res.ok) throw new PartnerError(`no stellar.toml at ${this.opts.domain}`, this.id, res.status);
+    const base = (this.opts.baseUrl ?? `https://${this.opts.domain}`).replace(/\/$/, "");
+    const res = await this.http(`${base}/.well-known/stellar.toml`);
+    if (!res.ok) throw new PartnerError(`no stellar.toml at ${base}`, this.id, res.status);
     return (this.toml = parseToml(await res.text()));
   }
 

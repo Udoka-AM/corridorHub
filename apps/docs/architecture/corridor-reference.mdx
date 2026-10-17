@@ -61,7 +61,7 @@ const found = await findTransfersByReference(client, { account: treasury.address
 That stream is per-vault and bounded, a stored paging token makes restarts neither miss nor double-count, and no indexer sits in the path. See [ADR 0003](/decisions/0003-reference-in-memo-hash).
 
 <Warning>
-**One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields and the join key becomes `(anchor, transaction id)`, which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and funding code uses it when it is set.
+**One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields and the join key becomes `(anchor, transaction id)`, which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and `stellarAnchorFunder` uses it when it is set, falling back to the reference. The duplicate check matches on whichever memo went out, so funding stays exactly-once either way.
 </Warning>
 
 ## Codec

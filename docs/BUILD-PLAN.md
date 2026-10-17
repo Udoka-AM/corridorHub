@@ -84,7 +84,7 @@ docs/              ARCHITECTURE.md (authoritative) · this file
 
 ```bash
 pnpm install
-pnpm test                 # 110 tests, 16 files, no network
+pnpm test                 # 124 tests, 16 files, no network
 pnpm typecheck            # tsc -b
 pnpm stellar:wallets      # create and fund two testnet vaults (Friendbot)
 pnpm stellar:smoke        # a real payment, reference read back off Horizon
@@ -108,7 +108,7 @@ Verified by audit on 17 Oct 2026. "Run" means a script exercised it against Stel
 | Account creation and funding, balance reporting | `scripts/stellar-wallets.ts` | Friendbot |
 | Horizon observation of watched accounts, reconciled against the ledger | `recon` · `scripts/watch-report.ts` | Runs; see the caveat in §5 |
 
-### Built and unit-tested (110 tests, 16 files)
+### Built and unit-tested (124 tests, 16 files)
 
 | Capability | Package | Tests |
 |---|---|---|
@@ -141,12 +141,16 @@ Verified by audit on 17 Oct 2026. "Run" means a script exercised it against Stel
 
 Everything below is a real gap. The right-hand column is what it would take.
 
-### A. Defects found in the 17 Oct audit — fix these first
+### A. Defects found in the 17 Oct audit — **fixed 17 Oct**
 
-| # | Defect | Why it matters | Fix |
+| # | Defect | Why it mattered | What landed |
 |---|---|---|---|
-| **D1** | **No code path can honour an anchor's own memo.** `chain-stellar` only ever builds `Memo.hash(...)` (`index.ts:138`). `PartnerOrder.fundingMemo` / `fundingMemoType` are carried through the interface but nothing can send with them. | **This blocks every real SEP-31 payout.** A receiving anchor assigns the memo on the funding payment; without this, funding an anchor order is impossible. `ARCHITECTURE.md` §7 says "funding code uses it when it is set" — today no funding code does. | Add `transferWithMemo(client, { asset, to, amount, memo, memoType })` or extend `transferWithReference` to take a memo override; use it in the `fund` callback when `order.fundingMemo` is set. Half a day including tests. |
-| **D2** | **`SepAnchor.discover()` hardcodes `https://`** (`sep.ts:92`). | Blocks pointing Corridor at a local Anchor Platform on `http://localhost:8080`, which is how we get a real SEP-31 run this week. | Add an optional `baseUrl` to `SepAnchorOptions`, defaulting to `https://${domain}`. An hour. |
+| **D1** ✅ | **No code path could honour an anchor's own memo.** `chain-stellar` only ever built `Memo.hash(...)`. `PartnerOrder.fundingMemo` / `fundingMemoType` were carried through the interface but nothing could send with them. | It blocked **every real SEP-31 payout**: a receiving anchor assigns the memo on the funding payment, so without this, funding an anchor order was impossible. | `transferWithMemo` (hash, text and id) with `transferWithReference` expressed in terms of it; `findTransfersByMemo` so the duplicate check works for any memo; `fundingMemoFor`; and `stellarAnchorFunder` in `legs`, a reusable funder that carries the anchor's memo and stays retry-safe. `MockPartner` now assigns a funding memo on Stellar orders, so the script exercises the real path. Proven on testnet: [`ac025984…`](https://stellar.expert/explorer/testnet/tx/ac025984a302d98edbb771bcf7f39f21fa83134938e10510e76d71ccba33bf89), `memo_type: text`. |
+| **D2** ✅ | **`SepAnchor.discover()` hardcoded `https://`.** | Blocked pointing Corridor at a local Anchor Platform on `http://localhost:8080` — which is how W1 gets a real SEP-31 run. | `baseUrl?: string` on `SepAnchorOptions`, defaulting to `https://{domain}`. `domain` stays the SEP-10 `home_domain`. |
+
+Also corrected while in there: `PartnerOrder.usdcAmount` was documented as 6 dp when every adapter treats it as the hub's 7 dp.
+
+**W1-1 and W1-3 below are therefore already done.** W1 now starts at W1-2.
 
 ### B. Not built
 
@@ -201,9 +205,10 @@ Four tracks. Tracks run in parallel; within a track, order matters.
 
 | Day | W1 · Anchor | W2 · USDC | W3 · Read-only | W4 · Proof |
 |---|---|---|---|---|
-| **Sun 18** | — | — | — | W4-1 CI · W4-2 issuers |
-| **Mon 19** | W1-1 D2 fix · W1-2 Anchor Platform up | W2-1 trustline | — | — |
-| **Tue 20** | W1-3 D1 fix (memo) | W2-2 faucet + USDC smoke | W3-1 `watch:report` v2 | — |
+| ~~Sat 17~~ | ~~W1-1~~ ✅ · ~~W1-3~~ ✅ | — | — | — |
+| **Sun 18** | W1-2 Anchor Platform up | — | — | W4-1 CI · W4-2 issuers |
+| **Mon 19** | W1-2 continues | W2-1 trustline | — | — |
+| **Tue 20** | — | W2-2 faucet + USDC smoke | W3-1 `watch:report` v2 | — |
 | **Wed 21** | W1-4 payout against the platform | W2-3 USDC payout | W3-2 Stellar example data | — |
 | **Thu 22** | W1-5 evidence + docs | — | W3-3 docs + evidence | W4-3 vault accounting |
 | **Fri 23** | — | — | — | W4-4 path payment leg |
@@ -220,11 +225,10 @@ Every task has an ID, a definition of done, and the files it touches. Do not mar
 ### W1 · Make a payout run against a real anchor
 
 > **Goal:** `pnpm stellar:payout` opens a SEP-38 quote and a SEP-31 transaction against a SEP server reached over HTTP, funds it with a real Stellar payment carrying **the anchor's own memo**, and polls it to `completed`.
+>
+> **The funding half of this is done** (W1-1, W1-3). What remains is replacing the stand-in anchor with a real SEP server.
 
-**W1-1 · Let `SepAnchor` reach a non-HTTPS host** *(fixes D2, ~1h)*
-- `packages/partners/src/sep.ts`: add `baseUrl?: string` to `SepAnchorOptions`, default `https://${domain}`; use it in `discover()`.
-- Keep `domain` as the SEP-10 `home_domain` parameter — those are different things and the distinction matters.
-- **Done when:** a test constructs `SepAnchor` with `baseUrl: "http://localhost:8080"` and discovery hits that URL.
+**W1-1 · Let `SepAnchor` reach a non-HTTPS host** *(fixes D2)* — ✅ **done 17 Oct.** `baseUrl?: string` on `SepAnchorOptions`, defaulting to `https://{domain}`; `domain` stays the SEP-10 `home_domain`. Three tests cover the override, the default and the error message.
 
 **W1-2 · Run Stellar's Anchor Platform locally** *(~half a day)*
 - Clone `stellar/anchor-platform`, use its `quick-run/` directory, `./ap_start.sh`. SEP-1 TOML serves at `localhost:8080`.
@@ -234,11 +238,12 @@ Every task has an ID, a definition of done, and the files it touches. Do not mar
 - Commit the compose file and config into `examples/anchor/` with a README so anyone can reproduce the run. Do **not** commit secrets.
 - **Done when:** `curl localhost:8080/.well-known/stellar.toml` returns a TOML naming `WEB_AUTH_ENDPOINT`, `ANCHOR_QUOTE_SERVER` and `DIRECT_PAYMENT_SERVER`.
 
-**W1-3 · Send a payment with the anchor's memo** *(fixes D1, ~half a day)*
-- `packages/chain-stellar/src/index.ts`: add `transferWithMemo(client, { asset, to, amount, memo, memoType })` supporting `hash`, `text` and `id`, and express `transferWithReference` in terms of it.
-- `scripts/stellar-payout.ts`: in the `fund` callback, use `order.fundingAddress`, and `order.fundingMemo` / `order.fundingMemoType` when set, falling back to the reference.
-- The idempotency lookup (`stellarMoveOnce` → `findTransfersByReference`) matches on the memo. When the memo is the anchor's, the reference is not in it — **retry safety must then come from the recorded funding reference** (`partner_order_links`), which `partnerPayoutLeg` already writes. Make sure that path is the one taken, and test it.
-- **Done when:** a test funds a mock order whose `fundingMemo` is a text memo, and a retry after a simulated crash does not send twice.
+**W1-3 · Send a payment with the anchor's memo** *(fixes D1)* — ✅ **done 17 Oct.**
+- `transferWithMemo` supports `hash`, `text` and `id`; `transferWithReference` is a thin wrapper over it.
+- `findTransfersByMemo` generalises the join, so the duplicate check is just as strong when the memo is the anchor's rather than the reference. `findTransfersByReference` is now a wrapper too.
+- `stellarAnchorFunder(opts)` in `@corridor/legs` is the reusable funding function — it picks the memo with `fundingMemoFor`, dedupes on whichever memo went out, and returns the chain ref. A deployment uses it as-is.
+- `MockPartner` takes `stellarAccount` and assigns a text funding memo on Stellar orders, so `pnpm stellar:payout` exercises the anchor-memo path rather than a shortcut.
+- Five tests, including a crash between sending and recording. Verified on testnet: [`ac025984…`](https://stellar.expert/explorer/testnet/tx/ac025984a302d98edbb771bcf7f39f21fa83134938e10510e76d71ccba33bf89) carries `memo_type: text`, `memo: mock-8313e798`.
 
 **W1-4 · The run** *(~half a day)*
 - Point `stellar-payout.ts` at the local platform through `SepAnchor` instead of `MockPartner`, behind an env switch (`CORRIDOR_ANCHOR_BASE_URL`) so the mock stays the default for `pnpm test`.

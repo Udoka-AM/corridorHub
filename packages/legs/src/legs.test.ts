@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { RefKind, customerTag, encodeRef, money, uuidv7 } from "@corridor/core";
+import { Keypair, Networks, Account as SdkAccount, type Transaction } from "@stellar/stellar-sdk";
+import { RefKind, customerTag, encodeRef, fromStellarMemo, money, uuidv7 } from "@corridor/core";
+import { STELLAR_ISSUERS, localStellarSigner, type PaymentSource, type StellarClient, type StellarPaymentRecord } from "@corridor/chain-stellar";
 import { Accounts, Ledger, openLocalDb } from "@corridor/ledger";
-import { MockPartner, PartnerRegistry } from "@corridor/partners";
+import { MockPartner, PartnerRegistry, type PartnerOrder } from "@corridor/partners";
 import { reconcile } from "@corridor/recon";
 import { planRoute } from "@corridor/routing";
 import { SagaEngine, ledgerReserveLeg, type Leg, type PayoutData } from "@corridor/saga";
 import { PartnerEventStore, handlePartnerWebhook, partnerObservation } from "@corridor/webhooks";
-import { ledgerCreditLeg, partnerCollectLeg, partnerPayoutLeg, type CollectionData } from "./index.ts";
+import { ledgerCreditLeg, partnerCollectLeg, partnerPayoutLeg, stellarAnchorFunder, type CollectionData } from "./index.ts";
 
 const SECRET = "whsec_legs";
 let db: Awaited<ReturnType<typeof openLocalDb>>;
@@ -252,5 +254,99 @@ describe("collection: importer pays naira, customer's hub balance is credited", 
     const balance = await ledger.balance(await accounts.customer("acme-imports", "NGN-CNY", "USDC", "stellar"));
     expect(balance.amount).toBe(100_000_000n); // ₦15,600 at 1,560 = 10 USDC, now spendable on the hub
     expect(await ledger.checkInvariants()).toEqual([]);
+  });
+});
+
+describe("funding an anchor on Stellar", () => {
+  // A SEP-31 anchor assigns the memo on the funding payment, so the Corridor
+  // Reference cannot ride in MEMO_HASH on this leg (ADR 0003). The funder has
+  // to carry the anchor's memo and still be safe to retry.
+  const ANCHOR = Keypair.random().publicKey();
+
+  function fakeTreasury() {
+    const keypair = Keypair.random();
+    const submitted: { memoType: string; memo: string; destination: string; amount: string }[] = [];
+    const seen: StellarPaymentRecord[] = [];
+    let seq = 1n;
+    const client = {
+      network: "testnet",
+      passphrase: Networks.TESTNET,
+      address: keypair.publicKey(),
+      signer: localStellarSigner(keypair.secret()),
+      fee: async () => "100",
+      server: {
+        loadAccount: async (id: string) => new SdkAccount(id, (seq++).toString()),
+        async submitTransaction(tx: Transaction) {
+          const op = tx.operations[0] as { destination: string; amount: string };
+          const value = tx.memo.value as Uint8Array | string | null;
+          submitted.push({
+            memoType: tx.memo.type as string,
+            memo: typeof value === "string" ? value : Buffer.from(value ?? []).toString(tx.memo.type === "hash" ? "base64" : "utf8"),
+            destination: op.destination,
+            amount: op.amount,
+          });
+          return { hash: `tx${submitted.length}`, successful: true, ledger: 500 };
+        },
+      },
+    } as unknown as StellarClient;
+    const source: PaymentSource = { async fetch(_a, cursor) { return cursor ? [] : seen; } };
+    /** What Horizon would show after a payment the treasury already made. */
+    const landed = (over: Partial<StellarPaymentRecord> & { memo: string; memoType: string }) => {
+      const { memo, memoType, ...rest } = over;
+      seen.push({
+        id: "op1", paging_token: "1", type: "payment", transaction_hash: "tx1",
+        created_at: "2026-10-17T09:00:00Z", asset_type: "credit_alphanum4", asset_code: "USDC",
+        asset_issuer: STELLAR_ISSUERS.USDC!.testnet!, from: keypair.publicKey(), to: ANCHOR, amount: "7.0000000",
+        transaction: { memo, memo_type: memoType }, ...rest,
+      });
+    };
+    return { client, submitted, source, landed };
+  }
+
+  const order = (over: Partial<PartnerOrder> = {}): PartnerOrder => ({
+    partner: "anchor", id: "tx-1", kind: "payout", status: "open", partnerStatus: "pending_sender",
+    chain: "STELLAR", currency: "KES", usdcAmount: 70_000_000n, fiatAmount: 90_550n, rate: 129.5,
+    fundingAddress: ANCHOR, createdAt: new Date(), ...over,
+  });
+
+  const fundWith = (t: ReturnType<typeof fakeTreasury>, o: PartnerOrder, reference = ref()) =>
+    stellarAnchorFunder({ treasury: t.client, source: t.source })({ chain: "STELLAR", to: ANCHOR, usdcAmount: 70_000_000n, reference, order: o });
+
+  it("carries the anchor's memo, not the reference", async () => {
+    const t = fakeTreasury();
+    await fundWith(t, order({ fundingMemo: "anchor-7f3a", fundingMemoType: "text" }));
+    expect(t.submitted).toEqual([{ memoType: "text", memo: "anchor-7f3a", destination: ANCHOR, amount: "7.0000000" }]);
+  });
+
+  it("falls back to the reference as MEMO_HASH when the order names no memo", async () => {
+    const t = fakeTreasury();
+    const reference = ref();
+    await fundWith(t, order(), reference);
+    expect(t.submitted[0]!.memoType).toBe("hash");
+    expect(fromStellarMemo(t.submitted[0]!.memo)).toBe(reference);
+  });
+
+  it("does not pay twice when a crash lands between sending and recording", async () => {
+    const t = fakeTreasury();
+    // The first attempt sent the payment; the worker died before the funding
+    // reference was recorded, so the leg calls the funder again.
+    t.landed({ memo: "anchor-7f3a", memoType: "text" });
+    const retry = await fundWith(t, order({ fundingMemo: "anchor-7f3a", fundingMemoType: "text" }));
+    expect(t.submitted).toEqual([]);  // nothing new was sent
+    expect(retry).toBe("tx1:op1");    // the earlier payment is what the leg records
+  });
+
+  it("sends again when the earlier payment carried a different memo", async () => {
+    const t = fakeTreasury();
+    t.landed({ memo: "anchor-OTHER", memoType: "text" });
+    await fundWith(t, order({ fundingMemo: "anchor-7f3a", fundingMemoType: "text" }));
+    expect(t.submitted).toHaveLength(1);
+  });
+
+  it("sends again when an identical memo went to someone else", async () => {
+    const t = fakeTreasury();
+    t.landed({ memo: "anchor-7f3a", memoType: "text", to: Keypair.random().publicKey() });
+    await fundWith(t, order({ fundingMemo: "anchor-7f3a", fundingMemoType: "text" }));
+    expect(t.submitted).toHaveLength(1);
   });
 });

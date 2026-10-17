@@ -166,7 +166,7 @@ bytes 28–31 checksum (first 4 bytes of sha256 over bytes 0–27)
 
 **Reconciliation is a join, not an index.** Horizon cannot be asked for a memo network-wide, the way an indexed event topic can. It does not need to be: Corridor reads the payment stream of the account it already watches and filters on the memo. That stream is per-vault and bounded, a stored paging token makes restarts neither miss nor double-count, and no indexer sits in the path.
 
-**One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields and the join key becomes `(anchor, transaction id)`, which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and funding code uses it when it is set.
+**One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields and the join key becomes `(anchor, transaction id)`, which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and `stellarAnchorFunder` (`packages/legs`) uses it when it is set, falling back to the reference. The duplicate check (`findTransfersByMemo`) matches on whichever memo went out, so funding stays exactly-once either way.
 
 ## 8. Components
 

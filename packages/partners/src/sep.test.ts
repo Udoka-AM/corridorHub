@@ -178,4 +178,61 @@ describe("SEP-31 payout", () => {
     expect(anchor.verifyWebhook()).toBe(false);
     expect(() => anchor.parseWebhook()).toThrow(/polled, not pushed/);
   });
+
+  it("returns the receiving account and the anchor's own memo", async () => {
+    const { anchor } = stubAnchor();
+    const order = await anchor.openPayout({
+      currency: "KES",
+      chain: "STELLAR",
+      usdcAmount: 70_000_000n,
+      beneficiary: { bankCode: "01", accountNumber: "0123456789" },
+      reference: ref(),
+    });
+    // The funding payment has to carry this memo, not the Corridor Reference.
+    expect(order).toMatchObject({ fundingAddress: "GANCHORRECEIVE", fundingMemo: "AAAA", fundingMemoType: "hash" });
+  });
+
+  it("fetches stellar.toml from baseUrl when the anchor is not served over HTTPS at its domain", async () => {
+    // A local Anchor Platform on http://localhost:8080. The home domain stays
+    // the domain, because that is what SEP-10 is asked to sign for.
+    const seen: string[] = [];
+    const http = (async (input: string | URL) => {
+      seen.push(String(input));
+      return new Response(TOML);
+    }) as unknown as typeof fetch;
+    const anchor = new SepAnchor({
+      domain: "anchor.test",
+      baseUrl: "http://localhost:8080/",
+      signer: { address: vault.publicKey(), sign: async (h) => new Uint8Array(vault.sign(Buffer.from(h))) },
+      fetch: http,
+    });
+    await anchor.discover();
+    expect(seen).toEqual(["http://localhost:8080/.well-known/stellar.toml"]);
+  });
+
+  it("defaults to https at the domain", async () => {
+    const seen: string[] = [];
+    const http = (async (input: string | URL) => {
+      seen.push(String(input));
+      return new Response(TOML);
+    }) as unknown as typeof fetch;
+    const anchor = new SepAnchor({
+      domain: "anchor.test",
+      signer: { address: vault.publicKey(), sign: async (h) => new Uint8Array(vault.sign(Buffer.from(h))) },
+      fetch: http,
+    });
+    await anchor.discover();
+    expect(seen).toEqual(["https://anchor.test/.well-known/stellar.toml"]);
+  });
+
+  it("says where it looked when there is no stellar.toml there", async () => {
+    const http = (async () => new Response("nope", { status: 404 })) as unknown as typeof fetch;
+    const anchor = new SepAnchor({
+      domain: "anchor.test",
+      baseUrl: "http://localhost:8080",
+      signer: { address: vault.publicKey(), sign: async (h) => new Uint8Array(vault.sign(Buffer.from(h))) },
+      fetch: http,
+    });
+    await expect(anchor.discover()).rejects.toThrow(/no stellar.toml at http:\/\/localhost:8080/);
+  });
 });

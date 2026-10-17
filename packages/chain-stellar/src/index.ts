@@ -121,21 +121,74 @@ export async function balanceOf(client: StellarClient, asset: Asset, account: st
 }
 
 /**
+ * A transaction memo. Corridor's own payments carry the 32-byte reference as
+ * `MEMO_HASH`, which is what makes reconciliation a join (ADR 0003).
+ *
+ * A receiving SEP-31 anchor assigns the memo for the payment that funds its
+ * order, so on that one leg the memo is the anchor's and the reference
+ * travels in the SEP-31 fields instead. `text` and `id` exist for that case.
+ */
+export type StellarMemo =
+  | { type: "hash"; value: Hex }
+  | { type: "text"; value: string }
+  | { type: "id"; value: string };
+
+function buildMemo(memo: StellarMemo): Memo {
+  switch (memo.type) {
+    case "hash":
+      return Memo.hash(Buffer.from(toStellarMemo(memo.value)));
+    case "text":
+      return Memo.text(memo.value);
+    case "id":
+      return Memo.id(memo.value);
+  }
+}
+
+/** Does a Horizon record carry this memo? Hash memos arrive base64; text and id arrive as-is. */
+export function memoMatches(record: StellarPaymentRecord, memo: StellarMemo): boolean {
+  const tx = record.transaction;
+  if (!tx?.memo) return false;
+  if (memo.type === "hash") return fromStellarMemo(tx.memo, tx.memo_type) === memo.value;
+  return tx.memo_type === memo.type && tx.memo === memo.value;
+}
+
+/** The memo an anchor's order requires, or the flow's own reference when it assigns none. */
+export function fundingMemoFor(order: { fundingMemo?: string; fundingMemoType?: "hash" | "text" | "id" }, reference: Hex): StellarMemo {
+  if (!order.fundingMemo) return { type: "hash", value: reference };
+  return { type: order.fundingMemoType ?? "text", value: order.fundingMemo } as StellarMemo;
+}
+
+/**
  * Move a classic asset with the Corridor Reference as the transaction's
  * MEMO_HASH. The reference is 32 bytes and so is MEMO_HASH, so it travels
  * whole and reconciliation is a join on the memo (ADR 0003).
  */
-export async function transferWithReference(
+export function transferWithReference(
   client: StellarClient,
   args: { asset: Asset; to: string; amount: bigint; reference: Hex },
 ): Promise<Observation & { txHash: string }> {
+  return transferWithMemo(client, { ...args, memo: { type: "hash", value: args.reference } });
+}
+
+/**
+ * Move a classic asset carrying `memo`.
+ *
+ * `reference` is what the movement is booked against in Corridor's ledger. It
+ * is normally also the memo; when a SEP-31 anchor has assigned its own, the
+ * two differ, and the returned observation still names the reference so the
+ * booking is right even though the chain does not carry it.
+ */
+export async function transferWithMemo(
+  client: StellarClient,
+  args: { asset: Asset; to: string; amount: bigint; memo: StellarMemo; reference?: Hex },
+): Promise<Observation & { txHash: string }> {
   const signer = client.signer;
-  if (!signer) throw new Error("transferWithReference needs a signer");
+  if (!signer) throw new Error("transferWithMemo needs a signer");
   const source = await client.server.loadAccount(signer.address);
   const tx = new TransactionBuilder(source, {
     fee: await client.fee(),
     networkPassphrase: client.passphrase,
-    memo: Memo.hash(Buffer.from(toStellarMemo(args.reference))),
+    memo: buildMemo(args.memo),
   })
     .addOperation(
       Operation.payment({
@@ -155,7 +208,7 @@ export async function transferWithReference(
   return {
     venue: "stellar",
     externalRef: `${hash}:0`,
-    reference: args.reference,
+    reference: args.reference ?? (args.memo.type === "hash" ? args.memo.value : null),
     asset: args.asset,
     amount: args.amount,
     from: signer.address,
@@ -186,25 +239,37 @@ export function horizonPayments(server: Horizon.Server): PaymentSource {
  * filters. That stream is per-vault and bounded, which is why the reference
  * is a join key rather than an index (ADR 0003).
  */
-export async function findTransfersByReference(
+export function findTransfersByReference(
   client: StellarClient,
   args: { account: string; reference: Hex; cursor?: string; source?: PaymentSource },
 ): Promise<Observation[]> {
+  return findTransfersByMemo(client, { ...args, memo: { type: "hash", value: args.reference } });
+}
+
+/**
+ * The same join for any memo, so a payment funding a SEP-31 order — which
+ * carries the anchor's memo rather than the reference — is just as safe to
+ * retry. `reference` is what the movements are booked against.
+ */
+export async function findTransfersByMemo(
+  client: StellarClient,
+  args: { account: string; memo: StellarMemo; reference?: Hex; cursor?: string; source?: PaymentSource },
+): Promise<Observation[]> {
   const source = args.source ?? horizonPayments(client.server);
+  const reference = args.reference ?? (args.memo.type === "hash" ? args.memo.value : null);
   const found: Observation[] = [];
   let cursor = args.cursor;
   while (true) {
     const page = await source.fetch(args.account, cursor, 200);
     if (page.length === 0) break;
     for (const record of page) {
-      const memo = record.transaction?.memo;
-      if (!memo || fromStellarMemo(memo, record.transaction?.memo_type) !== args.reference) continue;
+      if (!memoMatches(record, args.memo)) continue;
       const asset = assetOf(record, client.network);
       if (!asset || !record.amount) continue;
       found.push({
         venue: "stellar",
         externalRef: `${record.transaction_hash}:${record.id}`,
-        reference: args.reference,
+        reference,
         asset,
         amount: fromStellarAmount(asset, record.amount),
         from: record.from,

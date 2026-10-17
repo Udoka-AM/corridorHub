@@ -41,11 +41,13 @@ pnpm stellar:wallets && pnpm stellar:smoke
 
 | What | Result | Transaction |
 |---|---|---|
-| Route planned, balance reserved, order opened and funded exactly once, every movement booked | Saga `completed`; `checkInvariants()` clean; customer balance closed to zero | [88074bfa…](https://stellar.expert/explorer/testnet/tx/88074bfac3cead1adeb75209cd9aa685bfda44589397b6990dbc92deccbdc10e) |
+| Route planned, balance reserved, order opened and funded exactly once, every movement booked | Saga `completed`; `checkInvariants()` clean; customer balance closed to zero | [ac025984…](https://stellar.expert/explorer/testnet/tx/ac025984a302d98edbb771bcf7f39f21fa83134938e10510e76d71ccba33bf89) |
 
 ```bash
 pnpm stellar:payout
 ```
+
+The funding payment carries **the anchor's own memo**, not the Corridor Reference — `memo_type: text`, `memo: mock-8313e798`, as Horizon reports it. That is the real SEP-31 shape: a receiving anchor assigns the memo, so the reference travels in the SEP-31 fields and the join key becomes `(anchor, transaction id)` ([ADR 0003](/decisions/0003-reference-in-memo-hash)). An [earlier run](https://stellar.expert/explorer/testnet/tx/88074bfac3cead1adeb75209cd9aa685bfda44589397b6990dbc92deccbdc10e) took the simpler path with the reference in `MEMO_HASH`; both paths are exercised.
 
 <Note>
 Both runs move **XLM**, because a funded testnet USDC trustline needs an issuer faucet. The USDC path is the same call with a different asset. The anchor in the payout run is `MockPartner` with `chains: ["STELLAR"]`: the route, the saga, the Stellar payment and every ledger entry are the real ones, and only the fiat side is simulated.
@@ -55,17 +57,18 @@ Both runs move **XLM**, because a funded testnet USDC trustline needs an issuer 
 
 | Measure | Value |
 |---|---|
-| Tests | **110 passing**, no network |
-| Stellar venue | 15 tests: the reference on a real transaction shape, issuer identity, the held-key signer, and the Horizon quirks that would otherwise lose every memo |
+| Tests | **124 passing**, no network |
+| Stellar venue | 20 tests: the reference on a real transaction shape, issuer identity, the held-key signer, and the Horizon quirks that would otherwise lose every memo |
 | Routing | 11 tests: hub enforcement, every route shape, the shielded refusal, the off-Stellar list |
 | Reference codec | 12 tests: encode, decode, checksum, version rejection, currency pairs |
 | Ledger | 7 tests: balance per asset, no-overdraft, exactly-once external refs, append-only, global invariants |
 | Saga engine | 6 tests: compensation order, `manual_review`, lease fencing under a real race |
-| SEP anchor | 8 tests against a stubbed anchor: discovery, the challenge check, the quote, the order, status mapping |
-| Partners, webhooks, legs, signers, recon | The rest |
+| SEP anchor | 12 tests against a stubbed anchor: discovery over HTTPS or a given base URL, the challenge check, the quote, the order and its funding memo, status mapping |
+| Anchor funding | 5 tests: the anchor's memo is carried, the reference is the fallback, and a retry after a crash finds the payment instead of paying twice |
+| Partners, webhooks, signers, recon | The rest |
 
 ```bash
-pnpm test        # 110 tests
+pnpm test        # 124 tests
 pnpm typecheck   # tsc -b, clean
 ```
 

@@ -3,7 +3,7 @@ import { Keypair, Memo, Networks, Operation, TransactionBuilder, Account as SdkA
 import { RefKind, customerTag, encodeRef, fromStellarMemo, toStellarMemo, uuidv7, type Observation } from "@corridor/core";
 import { STELLAR_ISSUERS, assetOf, fromStellarAmount, stellarAsset, toStellarAmount } from "./assets.ts";
 import { StellarObserver, ledgerOf, normalizeRecord, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
-import { ed25519StellarSigner, localStellarSigner } from "./index.ts";
+import { ed25519StellarSigner, findTransfersByMemo, fundingMemoFor, localStellarSigner } from "./index.ts";
 
 const USDC_ISSUER = STELLAR_ISSUERS.USDC!.testnet!;
 
@@ -248,5 +248,75 @@ describe("Horizon records", () => {
     const observer = new StellarObserver(source, { name: "v", network: "testnet", accounts: ["GVAULT"], cursors: memoryCursors(), pageSize: 2 });
     const [seen] = await observer.poll();
     expect(seen!.blockNumber).toBe(5_241_504n);
+  });
+});
+
+describe("an anchor's own memo", () => {
+  // A receiving SEP-31 anchor assigns the memo on the funding payment, so on
+  // that one leg the Corridor Reference cannot ride in MEMO_HASH (ADR 0003).
+  const client = { network: "testnet" } as Parameters<typeof findTransfersByMemo>[0];
+
+  it("matches a text memo, and does not mistake it for another", async () => {
+    const records = [
+      payment({ id: "op1", paging_token: "1", transaction: { memo: "mock-a1b2c3d4", memo_type: "text" } }),
+      payment({ id: "op2", paging_token: "2", transaction: { memo: "mock-ffffffff", memo_type: "text" } }),
+    ];
+    const found = await findTransfersByMemo(client, {
+      account: "GVAULT",
+      memo: { type: "text", value: "mock-a1b2c3d4" },
+      source: fakeHorizon(records),
+    });
+    expect(found.map((o) => o.externalRef)).toEqual(["abc:op1"]);
+  });
+
+  it("matches an id memo and leaves a hash memo alone", async () => {
+    const records = [
+      payment({ id: "op1", paging_token: "1", transaction: { memo: "90210", memo_type: "id" } }),
+      payment({ id: "op2", paging_token: "2", transaction: { memo: memoOf(reference()), memo_type: "hash" } }),
+    ];
+    const byId = await findTransfersByMemo(client, { account: "GVAULT", memo: { type: "id", value: "90210" }, source: fakeHorizon(records) });
+    expect(byId.map((o) => o.externalRef)).toEqual(["abc:op1"]);
+    // A text memo of the same digits is a different memo.
+    const byText = await findTransfersByMemo(client, { account: "GVAULT", memo: { type: "text", value: "90210" }, source: fakeHorizon(records) });
+    expect(byText).toEqual([]);
+  });
+
+  it("still books the movement against the reference the chain does not carry", async () => {
+    const ref = reference();
+    const records = [payment({ transaction: { memo: "mock-a1b2c3d4", memo_type: "text" } })];
+    const [found] = await findTransfersByMemo(client, {
+      account: "GVAULT",
+      memo: { type: "text", value: "mock-a1b2c3d4" },
+      reference: ref,
+      source: fakeHorizon(records),
+    });
+    // The join key on this leg is (anchor, transaction id); the reference is
+    // what the ledger books it under.
+    expect(found!.reference).toBe(ref);
+    expect(found!.amount).toBe(29_000_000n);
+  });
+
+  it("takes the anchor's memo when the order has one, and the reference otherwise", () => {
+    const ref = reference();
+    expect(fundingMemoFor({ fundingMemo: "mock-a1b2c3d4", fundingMemoType: "text" }, ref)).toEqual({ type: "text", value: "mock-a1b2c3d4" });
+    expect(fundingMemoFor({ fundingMemo: "90210", fundingMemoType: "id" }, ref)).toEqual({ type: "id", value: "90210" });
+    // SEP-31 may name no memo type; text is the one that accepts any string.
+    expect(fundingMemoFor({ fundingMemo: "mock-a1b2c3d4" }, ref)).toEqual({ type: "text", value: "mock-a1b2c3d4" });
+    expect(fundingMemoFor({}, ref)).toEqual({ type: "hash", value: ref });
+  });
+
+  it("builds a transaction carrying each memo type", async () => {
+    const keypair = Keypair.random();
+    const signer = localStellarSigner(keypair.secret());
+    const build = (memo: Memo) =>
+      new TransactionBuilder(new SdkAccount(signer.address, "1"), { fee: "100", networkPassphrase: Networks.TESTNET, memo })
+        .addOperation(Operation.payment({ destination: Keypair.random().publicKey(), asset: stellarAsset("USDC", "testnet"), amount: "7" }))
+        .setTimeout(180)
+        .build();
+    expect(Buffer.from(build(Memo.text("mock-a1b2c3d4")).memo.value as Uint8Array).toString("utf8")).toBe("mock-a1b2c3d4");
+    expect(build(Memo.id("90210")).memo.value).toBe("90210");
+    // 28 bytes is the limit for a text memo; the SDK refuses more, which is
+    // exactly why the reference rides MEMO_HASH instead.
+    expect(() => Memo.text("x".repeat(29))).toThrow();
   });
 });

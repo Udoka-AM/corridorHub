@@ -86,6 +86,6 @@ A balance in EURC or MGUSD plans as `reserve → stellar.pathPayment → partner
 
 | Run | Result | Transaction |
 |---|---|---|
-| `pnpm stellar:payout`, 17 Oct 2026 | Route planned, balance reserved, order opened and funded exactly once with a real Stellar payment, every movement booked, no invariant violations | [88074bfa…](https://stellar.expert/explorer/testnet/tx/88074bfac3cead1adeb75209cd9aa685bfda44589397b6990dbc92deccbdc10e) |
+| `pnpm stellar:payout`, 17 Oct 2026 | Route planned, balance reserved, order opened and funded exactly once with a real Stellar payment, every movement booked, no invariant violations | [ac025984…](https://stellar.expert/explorer/testnet/tx/ac025984a302d98edbb771bcf7f39f21fa83134938e10510e76d71ccba33bf89) |
 
 The run moves **XLM**, because a funded testnet USDC trustline needs an issuer faucet, and the anchor is a mock. A signed anchor replaces the mock with `SepAnchor` and supplies its own funding address and memo; nothing else changes.

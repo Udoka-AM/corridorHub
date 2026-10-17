@@ -9,11 +9,11 @@
  *   pnpm stellar:payout
  */
 import { RefKind, customerTag, encodeRef, formatMoney, money, uuidv7 } from "@corridor/core";
-import { explorerTx, transferWithReference } from "@corridor/chain-stellar";
+import { explorerTx } from "@corridor/chain-stellar";
 import { MockPartner, PartnerRegistry } from "@corridor/partners";
 import { planRoute } from "@corridor/routing";
 import { SagaEngine, ledgerReserveLeg, type PayoutData } from "@corridor/saga";
-import { partnerPayoutLeg } from "@corridor/legs";
+import { partnerPayoutLeg, stellarAnchorFunder } from "@corridor/legs";
 import { PartnerEventStore } from "@corridor/webhooks";
 import { NETWORK, openRuntime, report, vault } from "./runtime.ts";
 
@@ -38,22 +38,37 @@ try {
   });
 
   const events = await PartnerEventStore.open(rt.db);
-  const mock = new MockPartner({ webhookSecret: "whsec_dev", chains: ["STELLAR"] });
+  // The escrow vault stands in for the anchor's receiving account, and the
+  // stand-in assigns its own funding memo the way a SEP-31 anchor does — so
+  // this run exercises the real funding path, not a shortcut.
+  const mock = new MockPartner({ webhookSecret: "whsec_dev", chains: ["STELLAR"], stellarAccount: escrow.address });
   const registry = new PartnerRegistry().register(mock);
+
+  // The real funding path: pay the order's receiving account out of the
+  // treasury, carrying the anchor's memo when the order names one and the
+  // Corridor Reference otherwise. A signed anchor changes only who returns
+  // the account and the memo.
+  let fundingTx = "";
+  const fund = stellarAnchorFunder({
+    treasury,
+    // XLM stands in for USDC on testnet, where a funded USDC trustline needs
+    // an issuer faucet. The same call moves USDC once the vault holds it.
+    asset: "XLM",
+    onSent: (sent, memo) => {
+      fundingTx = sent.externalRef.split(":")[0]!;
+      console.log(`funded ${formatMoney({ asset: sent.asset, amount: sent.amount })} with the anchor's memo (${memo.type}: ${memo.value})`);
+      console.log(`  ${explorerTx(NETWORK, fundingTx)}`);
+    },
+  });
 
   const leg = partnerPayoutLeg({
     partners: registry,
     events,
     pollMs: 500,
-    // A real anchor returns its own receiving account and memo; here the
-    // escrow vault stands in for it, and the payment itself is real.
-    fund: async ({ order, usdcAmount, reference }) => {
-      console.log(`funding order ${order.id} with ${formatMoney({ asset: "XLM", amount: 1_000_000n })} (XLM stands in for USDC on testnet)`);
-      const sent = await transferWithReference(treasury, { asset: "XLM", to: escrow.address, amount: 1_000_000n, reference });
-      console.log(`  ${explorerTx(NETWORK, sent.txHash)}`);
-      void usdcAmount;
-      await mock.observeFunding(order.id, sent.txHash);
-      return sent.txHash;
+    fund: async (args) => {
+      const ref = await fund(args);
+      await mock.observeFunding(args.order.id, fundingTx);
+      return ref;
     },
   });
 

@@ -1,5 +1,5 @@
 import { isFiat, money, rescale, type Asset, type Fiat, type Hex, type Observation, type Venue } from "@corridor/core";
-import { findTransfersByReference, transferWithReference, type StellarClient } from "@corridor/chain-stellar";
+import { findTransfersByMemo, fundingMemoFor, transferWithMemo, type PaymentSource, type StellarClient, type StellarMemo } from "@corridor/chain-stellar";
 import type { Accounts } from "@corridor/ledger";
 import type { PartnerChain, PartnerOrder, PartnerRegistry, RampPartner } from "@corridor/partners";
 import {
@@ -49,20 +49,53 @@ function flowAmount(ctx: LegContext<FlowData>): bigint {
 const sinceCursor = (ctx: LegContext<FlowData>) => ctx.data.stellarCursor as string | undefined;
 
 /**
- * Move an asset on Stellar with the leg's Corridor Reference as MEMO_HASH,
- * unless an identical movement (same memo, parties and amount) already
- * landed. That makes the leg safe to retry after a crash between submitting
- * the transaction and booking it.
+ * Move an asset on Stellar carrying `memo` — the leg's Corridor Reference as
+ * MEMO_HASH by default — unless an identical movement (same memo, parties and
+ * amount) already landed. That makes the leg safe to retry after a crash
+ * between submitting the transaction and booking it.
  */
 async function stellarMoveOnce(
   client: StellarClient,
-  args: { asset: Asset; to: string; amount: bigint; reference: Hex; cursor?: string },
+  args: { asset: Asset; to: string; amount: bigint; reference: Hex; memo?: StellarMemo; cursor?: string; source?: PaymentSource },
 ): Promise<Observation> {
   const from = client.address;
-  const existing = await findTransfersByReference(client, { account: from, reference: args.reference, cursor: args.cursor });
+  const memo: StellarMemo = args.memo ?? { type: "hash", value: args.reference };
+  const existing = await findTransfersByMemo(client, { account: from, memo, reference: args.reference, cursor: args.cursor, source: args.source });
   const done = existing.find((o) => o.from === from && o.to === args.to && o.amount === args.amount && o.asset === args.asset);
   if (done) return done;
-  return transferWithReference(client, { asset: args.asset, to: args.to, amount: args.amount, reference: args.reference });
+  return transferWithMemo(client, { asset: args.asset, to: args.to, amount: args.amount, memo, reference: args.reference });
+}
+
+/**
+ * Funding for an anchor that settles on Stellar: pay the order's receiving
+ * account out of the treasury vault.
+ *
+ * A SEP-31 anchor assigns the memo for this payment, so the Corridor
+ * Reference cannot ride in MEMO_HASH here. `fundingMemoFor` uses the anchor's
+ * memo when the order carries one and the reference otherwise, and the
+ * duplicate check matches on whichever one went out — so a retry after a
+ * crash between sending and recording finds the payment instead of paying
+ * twice.
+ */
+export function stellarAnchorFunder(opts: {
+  treasury: StellarClient;
+  /** The asset the anchor is funded in. Defaults to the hub's unit of account. */
+  asset?: Asset;
+  /** Horizon paging token to scan from when looking for an earlier attempt. */
+  cursor?: () => string | undefined;
+  /** Where to read the account's payments from. Defaults to the client's Horizon. */
+  source?: PaymentSource;
+  onSent?: (sent: Observation, memo: StellarMemo) => void;
+}): NonNullable<PartnerLegOptions["fund"]> {
+  return async ({ to, usdcAmount, reference, order }) => {
+    const asset = opts.asset ?? "USDC";
+    const memo = fundingMemoFor(order, reference);
+    // `usdcAmount` is already at the hub's 7 dp; adapters convert at their own
+    // edge (Paj rescales to Solana's 6 dp, a Stellar anchor does not).
+    const sent = await stellarMoveOnce(opts.treasury, { asset, to, amount: usdcAmount, reference, memo, cursor: opts.cursor?.(), source: opts.source });
+    opts.onSent?.(sent, memo);
+    return sent.externalRef;
+  };
 }
 
 /**

@@ -33,6 +33,18 @@ export interface MockPartnerOptions {
   rates?: Partial<Record<Fiat, { onRamp: number; offRamp: number }>>;
   /** Which chains this stand-in settles on. Defaults to Solana. */
   chains?: readonly PartnerChain[];
+  /**
+   * The account payouts on Stellar are funded to. A SEP-31 anchor returns a
+   * `G…` account; without this the stand-in returns a Solana address, which
+   * Stellar will not accept as a destination.
+   */
+  stellarAccount?: string;
+  /**
+   * Assign a memo to the funding payment, the way a SEP-31 anchor does, so
+   * the funding path has to carry the anchor's memo rather than the Corridor
+   * Reference. Defaults to a text memo on Stellar orders.
+   */
+  fundingMemo?: ((order: { id: string }) => { memo: string; type: "hash" | "text" | "id" } | undefined) | false;
   /** Make payouts fail at PROCESSING (bank rejected), for failure-path tests. */
   failPayouts?: boolean;
 }
@@ -67,11 +79,29 @@ export class MockPartner implements RampPartner {
     return { currency, ...r, at: new Date() };
   }
 
+  /** Where a payout on `chain` is funded, and the memo the order requires. */
+  private funding(chain: PartnerChain, id: string): Pick<PartnerOrder, "fundingAddress" | "fundingMemo" | "fundingMemoType"> {
+    if (chain !== "STELLAR") {
+      // A valid Solana address, so devnet funding can be a real transfer.
+      return { fundingAddress: base58(randomBytes(32)) };
+    }
+    const assign =
+      this.opts.fundingMemo === false
+        ? undefined
+        : (this.opts.fundingMemo ?? ((o: { id: string }) => ({ memo: `mock-${o.id.slice(5, 13)}`, type: "text" as const })))({ id });
+    return {
+      fundingAddress: this.opts.stellarAccount,
+      fundingMemo: assign?.memo,
+      fundingMemoType: assign?.type,
+    };
+  }
+
   async openPayout(req: PayoutRequest): Promise<PartnerOrder> {
     const { offRamp } = await this.rates(req.currency);
+    const id = `mock_${randomUUID()}`;
     const order: PartnerOrder = {
       partner: this.id,
-      id: `mock_${randomUUID()}`,
+      id,
       kind: "payout",
       status: "open",
       partnerStatus: "INIT",
@@ -80,7 +110,7 @@ export class MockPartner implements RampPartner {
       usdcAmount: req.usdcAmount,
       fiatAmount: toMinor(req.currency, (Number(req.usdcAmount) / 10 ** USDC_DP) * offRamp),
       rate: offRamp,
-      fundingAddress: base58(randomBytes(32)), // a valid Solana address, so devnet funding can be a real transfer
+      ...this.funding(req.chain, id),
       reference: req.reference,
       createdAt: new Date(),
     };
