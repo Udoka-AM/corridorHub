@@ -1,6 +1,6 @@
 """
 Corridor architecture diagrams, cloud-architecture style, in the website's brand:
-Tempo black/white, Space Mono (embedded), small radii, single ink, FIG markers.
+black/white, Space Mono (embedded), small radii, single ink, FIG markers.
 Emits <name>-light.svg and <name>-dark.svg per diagram into ../images/diagrams.
 Run: python3 diagrams-src/gen.py   (icons: Lucide, ISC; font: Space Mono, OFL; marks: @web3icons)
 """
@@ -201,11 +201,11 @@ def system():
     d = D("system-architecture", 1200, 860, "Fig. 01 · System architecture", "Corridor system architecture: clients, control plane, execution legs, observers and books")
     X, W = 64, 1072
     rows = [
-        (64, "Clients", "users", [("PSP / B2B API", "quotes · payouts · batches", "plug"), ("Treasury console", "balances · approvals · recon", "layout-dashboard"), ("Auditor", "scoped viewing key", "eye")]),
-        (208, "Control plane", "workflow", [("Route planner", "graph · hub enforced", "route"), ("Saga engine", "leases · retries · undo", "workflow"), ("Approvals", "FROST 2-of-3 gate", "key-round")]),
-        (352, "Execution legs", "zap", [("Tempo legs", "memo · DEX · Fee AMM", "mark:tempo"), ("Across bridge", "Tempo ⇄ Base ⇄ Solana", "arrow-left-right"), ("Solana + partners", "SPL memo · payouts", "mark:solana"), ("Shielded legs", "NEAR · Ironwood", "mark:zcash")]),
-        (496, "Observers", "radio-tower", [("Tempo log watcher", "indexed memo topic", "radio-tower"), ("Partner webhooks", "HMAC · exactly once", "webhook"), ("Viewing-key scanner", "decrypted outputs", "scan-search")]),
-        (640, "Books", "book-open", [("Double-entry ledger", "Postgres · append-only", "database"), ("Reconciliation", "matcher · vault check", "scale")]),
+        (64, "Clients", "users", [("PSP / B2B API", "quotes · payouts · batches", "plug"), ("Read-only watch", "accounts · exceptions · CSV", "eye"), ("Auditor", "reconciliation trail", "file-text")]),
+        (208, "Control plane", "workflow", [("Route planner", "graph · hub enforced", "route"), ("Saga engine", "leases · retries · undo", "workflow"), ("Signer interface", "customer KMS · MPC", "key-round")]),
+        (352, "Execution legs", "zap", [("Stellar legs", "payment + MEMO_HASH", "mark:stellar"), ("Path payment", "on-ledger FX", "arrow-left-right"), ("Anchor legs", "SEP-10/12/31/38", "plug"), ("Cross-chain in", "CCTP · not built", "mark:solana")]),
+        (496, "Observers", "radio-tower", [("Horizon payments", "memo · stored cursor", "radio-tower"), ("Anchor status", "SEP-31 polling", "scan-search"), ("Partner webhooks", "HMAC · exactly once", "webhook")]),
+        (640, "Books", "book-open", [("Double-entry ledger", "Postgres · 7 dp · append-only", "database"), ("Reconciliation", "matcher · vault check", "scale")]),
     ]
     for y, label, ic, nodes in rows:
         d.zone(X, y, W, 116, label, ic)
@@ -213,7 +213,7 @@ def system():
         nw = 236 if n == 4 else 300
         gap = (W - 2 * 28 - n * nw) / (n - 1) if n > 1 else 0
         for i, (ti, sub, icn) in enumerate(nodes):
-            d.node(X + 28 + i * (nw + gap), y + 40, nw, ti, sub, icn)
+            d.node(X + 28 + i * (nw + gap), y + 40, nw, ti, sub, icn, dashed=(ti == "Cross-chain in"))
     labels = ["requests", "planned legs", "on-chain effects", "observations"]
     for i in range(4):
         y0 = rows[i][0] + 116
@@ -224,7 +224,7 @@ def system():
     d.vlabel(1164, 556, "bookings")
     d.arrow([(X, 698), (36, 698), (36, 122), (X, 122)])
     d.vlabel(36, 410, "read model")
-    d.text(600, 820, "One planner, one saga engine, one ledger and one reconciliation engine serve every lane: public and shielded, in and out.", 11, 400, "muted", anchor="middle")
+    d.text(600, 820, "One planner, one saga engine, one ledger, one matcher, every corridor and both directions. All of it runs in the customer's own environment.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
@@ -232,67 +232,63 @@ def system():
 # FIG 02 · Hub and spoke
 # =====================================================================
 def hub():
-    d = D("hub-and-spoke", 1200, 640, "Fig. 02 · Hub and spoke", "Collections flow into the Tempo hub; payouts flow out to four regions and the shielded Zcash spoke")
+    d = D("hub-and-spoke", 1200, 640, "Fig. 02 · Hub and spoke", "Collections flow into the Stellar hub; payouts flow out to four regions, with naira reached through a partner off Stellar")
     d.zone(32, 64, 300, 520, "Collections · in", "arrow-down-to-line")
     d.zone(868, 64, 300, 520, "Payouts · out", "arrow-up-from-line")
-    left = [("Africa", "NGN KES GHS ZAR EGP UGX XOF", "landmark"), ("Americas", "USD CAD", "landmark"), ("Europe", "EUR GBP", "landmark")]
-    right = [("Africa", "11 currencies · bank · mobile", "landmark"), ("Asia & Middle East", "CNY HKD INR AED SGD +5", "landmark"),
-             ("Americas", "USD BRL MXN COP +4", "landmark"), ("Europe", "EUR GBP CHF", "landmark"), ("Shielded", "Zcash Ironwood batches", "mark:zcash")]
+    left = [("Africa", "KES XOF TZS GHS ZAR EGP UGX", "landmark"), ("Americas", "USD CAD", "landmark"), ("Europe", "EUR GBP", "landmark")]
+    right = [("Africa", "KES XOF TZS GHS ZAR +6", "landmark"), ("Asia & Middle East", "CNY HKD INR AED SGD +5", "landmark"),
+             ("Americas", "USD BRL MXN COP +4", "landmark"), ("Europe", "EUR GBP CHF", "landmark"), ("NGN", "partner off Stellar", "banknote")]
     L = []
     for i, (ti, sub, ic) in enumerate(left):
         L.append(d.node(52, 120 + i * 150, 260, ti, sub, ic))
     R = []
     for i, (ti, sub, ic) in enumerate(right):
-        R.append(d.node(888, 104 + i * 94, 260, ti, sub, ic, dashed=(ti == "Shielded")))
+        R.append(d.node(888, 104 + i * 94, 260, ti, sub, ic, dashed=(ti == "NGN")))
     # hub
     d.rect(470, 214, 260, 212, rx=16, inverted=True)
     d.add(lambda t: f'<rect x="570" y="244" width="60" height="60" rx="12" fill="{t["bg"]}"/>')
-    d.icon(584, 258, "mark:tempo", 32, "ink")
-    d.text(600, 340, "TEMPO HUB", 18, 700, "bg", anchor="middle", spacing=1)
-    d.text(600, 364, "pathUSD balances", 11, 400, "faint", anchor="middle")
+    d.icon(584, 258, "mark:stellar", 32, "ink")
+    d.text(600, 340, "STELLAR HUB", 18, 700, "bg", anchor="middle", spacing=1)
+    d.text(600, 364, "USDC balances", 11, 400, "faint", anchor="middle")
     d.text(600, 382, "ledger · saga · recon", 11, 400, "faint", anchor="middle")
-    d.text(600, 404, "0.6 s finality", 11, 400, "faint", anchor="middle")
+    d.text(600, 404, "anchors settle here", 11, 400, "faint", anchor="middle")
     for n in L:
         d.curve((n["r"], n["cy"]), (470, 320), None)
     for n in R:
         d.curve((730, 320), (n["l"], n["cy"]), None, dashed=(n["cy"] > 480))
     d.pill(600, 470, "every flow = collection + payout")
-    d.text(600, 612, "6 regions bilaterally need 15 links. Through one hub they need 6: each new partner reaches every region on day one.", 11, 400, "muted", anchor="middle")
+    d.text(600, 612, "Six regions bilaterally need fifteen links; through one hub, six. Anchors speak the same SEPs, so each is a domain and an asset, not an integration.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
 # =====================================================================
-# FIG 03 · Chain topology
+# FIG 03 · Network topology
 # =====================================================================
 def topology():
-    d = D("chain-topology", 1200, 560, "Fig. 03 · Chain topology (mainnet)", "Tempo hub to Base and Solana via Across, then Paj and ramp partners on Solana, and the NEAR Intents route from Base into Zcash")
+    d = D("chain-topology", 1200, 560, "Fig. 03 · Network topology", "The Stellar hub with anchors settling on it directly, and USDC inflows from Base and Solana over CCTP")
     cols = [40, 280, 520, 760, 980]
-    d.zone(24, 64, 232, 440, "Hub", "zap")
-    d.zone(264, 64, 232, 440, "Bridge", "arrow-left-right")
-    d.zone(504, 64, 232, 440, "Spoke chains", "link")
-    d.zone(744, 64, 220, 440, "Partners", "plug")
+    d.zone(24, 64, 232, 440, "Other chains", "link")
+    d.zone(264, 64, 232, 440, "Inflow", "arrow-left-right")
+    d.zone(504, 64, 232, 440, "Hub", "zap")
+    d.zone(744, 64, 220, 440, "Spokes", "plug")
     d.zone(972, 64, 204, 440, "Destinations", "flag")
     W = 200
-    tempo = d.node(cols[0], 250, W, "Tempo", "pathUSD · memo", "mark:tempo", inverted=True)
-    across = d.node(cols[1], 250, W, "Across", "hop 1 · hop 2", "arrow-left-right")
-    base = d.node(cols[2], 180, W, "Base", "USDC · relay wallet", "mark:base")
-    sol = d.node(cols[2], 340, W, "Solana", "USDC · SPL memo", "mark:solana")
-    near = d.node(cols[3], 100, 190, "NEAR Intents", "Base USDC → ZEC", "mark:near")
-    paj = d.node(cols[3], 270, 190, "Paj", "NGN · from Solana", "banknote")
-    ramps = d.node(cols[3], 400, 190, "Ramp partners", "32 currencies", "plug")
-    zv = d.node(cols[4], 100, 184, "Zcash vault", "FROST 2-of-3", "mark:zcash", dashed=True)
-    bank = d.node(cols[4], 270, 184, "Nigerian bank", "NGN payout", "landmark")
-    rails = d.node(cols[4], 400, 184, "Local rails", "bank · Pix · SPEI", "landmark")
-    d.arrow([(tempo["r"], tempo["cy"]), (across["l"], across["cy"])])
-    d.arrow([(across["r"], across["cy"] - 12), (500, across["cy"] - 12), (500, base["cy"]), (base["l"], base["cy"])])
-    d.arrow([(base["cx"], base["b"]), (sol["cx"], sol["t"])], "hop 2 · ~8 s", lx=base["cx"], ly=(base["b"] + sol["t"]) / 2)
-    d.arrow([(sol["r"], sol["cy"] - 10), (742, sol["cy"] - 10), (742, paj["cy"]), (paj["l"], paj["cy"])])
-    d.arrow([(paj["r"], paj["cy"]), (bank["l"], bank["cy"])])
-    d.arrow([(sol["r"], sol["cy"] + 14), (742, sol["cy"] + 14), (742, ramps["cy"]), (ramps["l"], ramps["cy"])])
-    d.arrow([(ramps["r"], ramps["cy"]), (rails["l"], rails["cy"])])
-    d.arrow([(base["cx"] + 40, base["t"]), (base["cx"] + 40, near["cy"]), (near["l"], near["cy"])], dashed=True)
-    d.arrow([(near["r"], near["cy"]), (zv["l"], zv["cy"])], dashed=True)
-    d.text(600, 536, "Across has no direct Tempo ⇄ Solana route, so Solana is two hops through Base. Paj settles on Solana: naira takes both hops.", 11, 400, "muted", anchor="middle")
+    base = d.node(cols[0], 180, W, "Base", "USDC", "mark:base")
+    sol = d.node(cols[0], 340, W, "Solana", "USDC · SPL memo", "mark:solana")
+    cctp = d.node(cols[1], 250, W, "CCTP", "burn and mint", "arrow-left-right", dashed=True)
+    stellar = d.node(cols[2], 250, W, "Stellar", "USDC · MEMO_HASH", "mark:stellar", inverted=True)
+    anchor = d.node(cols[3], 180, 190, "SEP anchor", "SEP-31 · on the hub", "plug")
+    offchain = d.node(cols[3], 340, 190, "NGN partner", "settles on Solana", "banknote", dashed=True)
+    rails = d.node(cols[4], 180, 184, "Local rails", "bank · mobile money", "landmark")
+    bank = d.node(cols[4], 340, 184, "Nigerian bank", "NGN payout", "landmark", dashed=True)
+    d.arrow([(base["r"], base["cy"]), (cctp["l"], cctp["cy"] - 12)], dashed=True)
+    d.arrow([(sol["r"], sol["cy"]), (cctp["l"], cctp["cy"] + 12)], dashed=True)
+    d.arrow([(cctp["r"], cctp["cy"]), (stellar["l"], stellar["cy"])], dashed=True)
+    d.arrow([(stellar["r"], stellar["cy"] - 12), (742, stellar["cy"] - 12), (742, anchor["cy"]), (anchor["l"], anchor["cy"])])
+    d.arrow([(anchor["r"], anchor["cy"]), (rails["l"], rails["cy"])])
+    d.arrow([(stellar["cx"], stellar["b"]), (stellar["cx"], 452), (offchain["cx"], 452), (offchain["cx"], offchain["b"])], "one CCTP hop", lx=660, ly=452, dashed=True)
+    d.arrow([(offchain["r"], offchain["cy"]), (bank["l"], bank["cy"])], dashed=True)
+    d.text(600, 536, "Anchors settle on the hub itself, so the common payout path has no bridge in it. Dashed: naira, and the cctp.transfer leg, which is not built.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
@@ -300,11 +296,11 @@ def topology():
 # FIG 04 · Corridor Reference
 # =====================================================================
 def reference():
-    d = D("corridor-reference", 1200, 520, "Fig. 04 · Corridor Reference v2 · 32 bytes", "Byte layout of the 32-byte Corridor Reference and the chain fields that carry it")
-    ref = "020128460001a0eb3fe7e57ca994eb596e7f87c87f33d74bd58688d853957c1f"
+    d = D("corridor-reference", 1200, 520, "Fig. 04 · Corridor Reference v2 · 32 bytes", "Byte layout of the 32-byte Corridor Reference and the fields that carry it on Stellar, on Solana and at an anchor")
+    ref = "020114290001a1494e71ec7073bfffc84d758d67d2c6cf255f57adc6fd6cb505"
     bytes_ = [ref[i:i + 2] for i in range(0, 64, 2)]
     cw, x0, y0 = 34, 56, 92
-    groups = [(0, 1, "version"), (1, 1, "kind"), (2, 1, "from"), (3, 1, "to"), (4, 1, "flags"), (5, 16, "payment id · UUIDv7"), (21, 7, "customer tag · keyed hash"), (28, 4, "checksum")]
+    groups = [(0, 1, "version"), (1, 1, "kind"), (2, 1, "from"), (3, 1, "to"), (4, 1, "flags"), (5, 16, "payout id · UUIDv7"), (21, 7, "customer tag · keyed hash"), (28, 4, "checksum")]
     shade = {0: True, 1: False, 2: True, 3: False, 4: True, 5: False, 21: True, 28: False}
     for i, b in enumerate(bytes_):
         g = next(gs for gs in groups if gs[0] <= i < gs[0] + gs[1])
@@ -312,7 +308,7 @@ def reference():
         d.rect(x0 + i * cw, y0, cw - 2, 46, rx=4, inverted=inv)
         d.text(x0 + i * cw + (cw - 2) / 2, y0 + 28, b, 12, 700, "bg" if inv else "ink", anchor="middle")
         d.text(x0 + i * cw + (cw - 2) / 2, y0 + 62, str(i), 9, 400, "faint", anchor="middle")
-    vals = {0: "0x02", 1: "payout", 2: "NGN", 3: "CNY", 4: "public", 5: "01a0eb3f-e7e5-7ca9-…", 21: "no PII on-chain", 28: "sha256[0..4] ✓"}
+    vals = {0: "0x02", 1: "payout", 2: "EUR", 3: "KES", 4: "public", 5: "01a1494e-71ec-7073-…", 21: "no PII on-chain", 28: "sha256[0..4] ✓"}
     for s, n, label in groups:
         gx0 = x0 + s * cw
         gx1 = x0 + (s + n) * cw - 2
@@ -322,34 +318,33 @@ def reference():
         d.text(cx, yb + 22, label, 10.5, 700, "ink", anchor="middle")
         d.text(cx, yb + 37, vals[s], 10, 400, "muted", anchor="middle")
     d.zone(32, 300, 1136, 180, "Carried in each venue's native field", "link")
-    carriers = [("Tempo", "TIP-20 memo · indexed topic", "mark:tempo"), ("Solana", "SPL Memo corridor:<hex>", "mark:solana"),
-                ("Zcash", "encrypted ZIP-302 memo", "mark:zcash"), ("Partner", "free-text field, echoed", "webhook")]
+    carriers = [("Stellar", "MEMO_HASH · 32 bytes exactly", "mark:stellar"), ("Solana", "SPL Memo corridor:<hex>", "mark:solana"),
+                ("Anchor", "SEP-31 fields · bank narration", "webhook")]
     for i, (ti, sub, ic) in enumerate(carriers):
-        n = d.node(56 + i * 278, 352, 258, ti, sub, ic)
+        n = d.node(56 + i * 372, 352, 352, ti, sub, ic)
         d.arrow([(n["cx"], 260 + 30), (n["cx"], n["t"])], head=True)
-    d.text(600, 452, "Reconciliation is a join on these 32 bytes across chain logs, partner webhooks and the ledger: no indexer.", 11, 400, "muted", anchor="middle")
+    d.text(600, 452, "Reconciliation is a join on these 32 bytes across Horizon payments, anchor orders and the ledger: no indexer stands in the path.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
 # =====================================================================
-# FIG 05 · Payout EUR → NGN (sequence)
+# FIG 05 · Payout EUR → KES (sequence)
 # =====================================================================
 def payout():
-    d = D("payout-flow", 1200, 640, "Fig. 05 · Payout EUR → NGN", "Numbered sequence of a EUR to NGN payout across the ledger, Tempo, Solana, the partner and the beneficiary bank")
-    lanes = [("Ledger", "customer balance", "database"), ("Tempo hub", "treasury vault", "mark:tempo"), ("Solana", "egress vault", "mark:solana"),
-             ("Partner", "Paj · NGN", "banknote"), ("Beneficiary", "bank account", "landmark")]
-    xs = [140, 370, 600, 830, 1060]
+    d = D("payout-flow", 1200, 640, "Fig. 05 · Payout EUR → KES", "Numbered sequence of a EUR to KES payout across the ledger, the Stellar hub, the anchor and the beneficiary bank")
+    lanes = [("Ledger", "customer balance", "database"), ("Stellar hub", "treasury vault", "mark:stellar"), ("Anchor", "SEP-31 · KES", "plug"), ("Beneficiary", "bank or mobile money", "landmark")]
+    xs = [170, 470, 770, 1050]
     for (ti, sub, ic), x in zip(lanes, xs):
-        d.node(x - 100, 64, 200, ti, sub, ic, inverted=(ti == "Tempo hub"))
+        d.node(x - 100, 64, 200, ti, sub, ic, inverted=(ti == "Stellar hub"))
         d.vline(x, 128, 600)
     steps = [
         (0, 0, 172, "reserve: available → hold"),
-        (1, 2, 230, "transferWithMemo · 0.6 s"),
-        (2, 3, 288, "openPayout → one-off address"),
-        (2, 3, 346, "USDC + SPL memo (exactly once)"),
-        (3, 4, 404, "₦ paid to the account"),
-        (3, 0, 462, "signed webhook: COMPLETED"),
-        (0, 0, 520, "book + reconcile 3 ways"),
+        (1, 2, 230, "SEP-10 auth · SEP-38 firm quote"),
+        (1, 2, 288, "SEP-31 order → account + memo"),
+        (1, 2, 346, "payment + MEMO_HASH (exactly once)"),
+        (2, 3, 404, "KES paid to the account"),
+        (2, 0, 462, "GET /transactions/{id}: completed"),
+        (0, 0, 520, "book, then join on the memo"),
     ]
     for i, (a, b, y, label) in enumerate(steps, 1):
         if a == b:
@@ -361,41 +356,37 @@ def payout():
             d.arrow([(x0, y), (x1 - (8 if x1 > x0 else -8), y)])
             d.badge(x0 + (16 if x1 > x0 else -16), y, i)
             d.pill((x0 + x1) / 2 + (10 if x1 > x0 else 0), y - 16, label)
-    d.text(600, 624, "Mainnet: two Across hops, Tempo → Base → Solana, then Paj pays naira from Solana. Testnet shown: Solana devnet funding.", 11, 400, "muted", anchor="middle")
+    d.text(600, 624, "Nothing stands between the customer's balance and the beneficiary's currency. The anchor assigns the funding memo, so the reference rides the SEP-31 fields.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
 # =====================================================================
-# FIG 06 · Shielded lane
+# FIG 06 · The anchor handshake
 # =====================================================================
-def shielded():
-    d = D("shielded-lane", 1200, 600, "Fig. 06 · Shielded lane", "Tempo hub funds a FROST-controlled Zcash vault through NEAR Intents; two of three signers approve a batch to suppliers; an auditor reads with a viewing key")
-    hubn = d.node(40, 230, 210, "Tempo hub", "15 pathUSD reserved", "mark:tempo", inverted=True)
-    near = d.node(300, 230, 210, "NEAR Intents", "$15 → 0.0102 ZEC", "mark:near")
-    d.zone(560, 64, 360, 480, "Zcash · Ironwood pool", "shield")
-    vault = d.node(590, 230, 300, "FROST vault", "acme · 2026-10 · ak = group key", "lock", inverted=True, h=72)
-    d.zone(590, 110, 300, 92, "Signers · 2 of 3", "key-round", dashed=False)
-    for i, (num, role, on) in enumerate([("1", "approver", True), ("2", "finance", False), ("3", "Corridor", True)]):
-        x = 606 + i * 94
-        d.rect(x, 136, 84, 54, rx=8, inverted=on)
-        d.icon(x + 8, 142, "key-round", 16, "bg" if on else "muted")
-        d.text(x + 30, 155, num + (" ✓" if on else ""), 13, 700, "bg" if on else "muted")
-        d.text(x + 8, 180, role, 9.5, 400, "faint")
-    d.arrow([(740, 202), (740, 230)], head=True)
-    sup = []
-    for i in range(3):
-        sup.append(d.node(980, 120 + i * 112, 196, f"Supplier {i+1}", f"INV-2026-09-S0{i+1}", "receipt-text"))
-    batch = d.node(590, 352, 300, "One Ironwood transaction", "3 outputs · encrypted memos", "file-text")
-    auditor = d.node(590, 460, 300, "Auditor", "viewing key: one vault, one period", "eye", dashed=True)
-    d.arrow([(hubn["r"], hubn["cy"]), (near["l"], near["cy"])], "memo")
-    d.arrow([(near["r"], near["cy"]), (vault["l"], vault["cy"])], "ZEC to UA")
-    d.arrow([(vault["cx"], vault["b"]), (batch["cx"], batch["t"])], "co-signed by 1 + 3", lx=vault["cx"], ly=(vault["b"] + batch["t"]) / 2)
-    for s in sup:
-        d.curve((batch["r"], batch["cy"]), (s["l"], s["cy"]))
-    d.arrow([(auditor["cx"], auditor["t"]), (batch["cx"], batch["b"])], dashed=True, head=True, lx=None)
-    d.text(40, 340, "The public sees one funding", 11, 400, "muted")
-    d.text(40, 356, "transfer and one shielded tx.", 11, 400, "muted")
-    d.text(40, 372, "No recipients. No amounts.", 11, 400, "muted")
+def anchor_seps():
+    d = D("anchor-seps", 1200, 620, "Fig. 06 · One anchor interface, five SEPs", "The SEP handshake between a Corridor vault and a Stellar anchor, from stellar.toml discovery to a polled SEP-31 payment")
+    lanes = [("Corridor", "vault key · payout leg", "key-round"), ("Anchor", "its own licence and rails", "landmark")]
+    xs = [300, 900]
+    for (ti, sub, ic), x in zip(lanes, xs):
+        d.node(x - 150, 64, 300, ti, sub, ic, inverted=(ti == "Corridor"))
+        d.vline(x, 128, 560)
+    steps = [
+        (0, 1, 176, "SEP-1", "GET /.well-known/stellar.toml"),
+        (1, 0, 228, "SEP-1", "endpoints · SIGNING_KEY · currencies"),
+        (0, 1, 288, "SEP-10", "challenge checked, then signed"),
+        (1, 0, 340, "SEP-10", "JWT, cached for its lifetime"),
+        (0, 1, 400, "SEP-12", "sender and receiver records"),
+        (0, 1, 452, "SEP-38", "firm quote, held for its life"),
+        (0, 1, 504, "SEP-31", "order → receiving account + memo"),
+    ]
+    for i, (a, b, y, sep, label) in enumerate(steps, 1):
+        x0, x1 = xs[a], xs[b]
+        d.arrow([(x0, y), (x1 - (8 if x1 > x0 else -8), y)], dashed=(a == 1))
+        d.badge(x0 + (26 if x1 > x0 else -26), y, i)
+        d.pill((x0 + x1) / 2, y - 16, label)
+        d.text(xs[1] + 170, y + 4, sep, 11, 700, "muted")
+    d.rect(80, 560, 1040, 44, rx=10)
+    d.text(100, 588, "The payment then carries the anchor's own memo, and the saga polls GET /transactions/{id}: SEP-31 has no webhook, and Corridor says so.", 11, 400, "muted")
     d.save()
 
 
@@ -403,8 +394,8 @@ def shielded():
 # FIG 07 · Saga with compensation
 # =====================================================================
 def saga():
-    d = D("saga-compensation", 1200, 480, "Fig. 07 · Saga with compensation", "Forward steps with a failure at the partner, then compensation in reverse order including an on-chain refund")
-    steps = [("ledger.reserve", "available → hold", "book-open"), ("bridge out", "treasury → escrow on Tempo", "mark:tempo"), ("partner.payout", "injected failure", "x")]
+    d = D("saga-compensation", 1200, 480, "Fig. 07 · Saga with compensation", "Forward steps with a failure at the anchor, then compensation in reverse order including an on-chain refund on Stellar")
+    steps = [("ledger.reserve", "available → hold", "book-open"), ("stellar leg", "treasury → escrow, same memo", "mark:stellar"), ("partner.payout", "fails before funding", "x")]
     xs = [80, 460, 840]
     nodes = [d.node(x, 190, 280, ti, sub, ic, dashed=(i == 2)) for i, ((ti, sub, ic), x) in enumerate(zip(steps, xs))]
     # forward
@@ -421,7 +412,6 @@ def saga():
     prev = nodes[2]
     for k, (idx, label) in enumerate(comp):
         n = nodes[idx]
-        y = n["b"] + 30 + k * 0
         d.arrow([(prev["cx"], prev["b"]), (prev["cx"], 300 + 12), (n["cx"], 300 + 12), (n["cx"], n["b"])], label,
                 lx=(prev["cx"] + n["cx"]) / 2, ly=300 + 12 + 18, dashed=True)
         d.badge((prev["cx"] + n["cx"]) / 2 - len(label) * 3.3 - 26, 300 + 30, k + 4)
@@ -434,7 +424,7 @@ def saga():
         d.text(x + 75, 420, s, 11, 700, "bg" if i == 2 else "ink", anchor="middle")
         if i:
             d.arrow([(x - 30, 416), (x - 2, 416)])
-    d.text(600, 462, "Failure after the partner was funded stops at manual_review instead: the money is at the partner until it refunds.", 11, 400, "muted", anchor="middle")
+    d.text(600, 462, "Failure after the anchor was funded stops at manual_review instead: the money is at the anchor until its refund is confirmed.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
@@ -442,19 +432,19 @@ def saga():
 # FIG 08 · Reconciliation
 # =====================================================================
 def recon():
-    d = D("reconciliation", 1200, 560, "Fig. 08 · Reconciliation", "Observers on Tempo, partner webhooks and Zcash feed one observation stream into a matcher against the ledger, plus a vault balance check")
+    d = D("reconciliation", 1200, 560, "Fig. 08 · Reconciliation", "Observers on Horizon, anchor status and partner webhooks feed one observation stream into a matcher against the ledger, plus a vault balance check")
     d.zone(32, 64, 300, 400, "Observers", "radio-tower")
-    obs = [("Tempo", "memo logs · fees · deposits", "mark:tempo"), ("Partners", "signed webhooks", "webhook"), ("Zcash", "viewing-key scan", "mark:zcash")]
+    obs = [("Horizon", "payments · memo · cursor", "mark:stellar"), ("Anchors", "SEP-31 status polling", "scan-search"), ("Partners", "signed webhooks", "webhook")]
     on = [d.node(52, 112 + i * 112, 260, ti, sub, ic) for i, (ti, sub, ic) in enumerate(obs)]
     stream = d.node(392, 224, 220, "Observation", "venue · ref · amount", "radio-tower")
     for n in on:
         d.curve((n["r"], n["cy"]), (stream["l"], stream["cy"]))
     matcher = d.node(672, 224, 200, "Matcher", "join on external ref", "scale", inverted=True)
-    ledger = d.node(672, 360, 200, "Ledger", "bookings", "database")
+    ledger = d.node(672, 360, 200, "Ledger", "bookings · 7 dp", "database")
     d.arrow([(stream["r"], stream["cy"]), (matcher["l"], matcher["cy"])])
     d.arrow([(ledger["cx"], ledger["t"]), (matcher["cx"], matcher["b"])], both=True)
     d.zone(912, 64, 256, 400, "Results", "circle-check")
-    res = [("matched", "45"), ("amount mismatch", "0"), ("unbooked", "0"), ("unreferenced", "0")]
+    res = [("matched", "✓"), ("amount mismatch", "≠"), ("unbooked", "∅"), ("unreferenced", "?")]
     for i, (k, v) in enumerate(res):
         y = 112 + i * 56
         d.rect(932, y, 216, 44, rx=8, inverted=(i == 0))
@@ -464,13 +454,13 @@ def recon():
     # vault check
     d.rect(932, 352, 216, 92, rx=10)
     d.text(948, 376, "VAULT CHECK", 10, 400, "muted", spacing=1.6)
-    d.text(948, 398, "on-chain 1,000,051.994555", 10.5, 400, "ink")
-    d.text(948, 414, "ledger   1,000,051.994555", 10.5, 400, "ink")
-    d.text(948, 434, "Δ 0 · gas booked from chain", 10.5, 700, "ink")
+    d.text(948, 398, "on-chain balance, 7 dp", 10.5, 400, "ink")
+    d.text(948, 414, "ledger balance, 7 dp", 10.5, 400, "ink")
+    d.text(948, 434, "equal to the stroop", 10.5, 700, "ink")
     d.arrow([(ledger["r"], ledger["cy"]), (932, 398)], dashed=True)
-    d.text(600, 520, "Fees are TIP-20 transfers to Tempo's Fee Manager: booked to expense:gas from the log, so the vault matches the books to the unit.", 11, 400, "muted", anchor="middle")
+    d.text(600, 520, "Stellar charges fees in XLM: each outbound transaction's fee is booked to expense:gas from the transaction that paid it, so a vault matches the books exactly.", 11, 400, "muted", anchor="middle")
     d.save()
 
 
-for fn in (system, hub, topology, reference, payout, shielded, saga, recon):
+for fn in (system, hub, topology, reference, payout, anchor_seps, saga, recon):
     fn()
