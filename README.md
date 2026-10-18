@@ -1,4 +1,4 @@
-# Corridor
+# Corridor-hub
 
 **Never lose a cross-border payout.**
 
@@ -34,7 +34,7 @@ Payment companies that use more than one provider run this today with provider d
 - Fees, reserves and rounding pile up as differences nobody can explain.
 - An auditor asks which on-chain payment a bank credit belongs to, and there is no answer.
 
-## What Corridor does
+## What Corridor-hub does
 
 Corridor doesn't hold money, provide liquidity or carry licences. Anchors and licensed operators do that, and Corridor runs payouts across them.
 
