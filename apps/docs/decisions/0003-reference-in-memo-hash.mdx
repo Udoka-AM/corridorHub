@@ -1,0 +1,32 @@
+---
+title: "ADR 0003: The reference rides MEMO_HASH, and reconciliation is a join"
+sidebarTitle: "0003 · Reference in MEMO_HASH"
+description: "One 32-byte Corridor Reference travels in Stellar's MEMO_HASH, which is exactly 32 bytes. Reconciliation is a join on the watched account's own payment stream, with no indexer."
+---
+
+## Context
+
+A payout touches a ledger, a chain and an anchor, each with its own identifier. Matching them by amount and timestamp is fragile, and keeping an off-chain index of transaction hashes per payment creates a second source of truth that can drift from the first.
+
+Stellar hands over the answer: **`MEMO_HASH` is exactly 32 bytes**, and the memo is part of the signed transaction rather than a separate operation. A 32-byte reference fits with no truncation and no encoding games.
+
+## Decision
+
+**Every movement carries the same 32-byte Corridor Reference**, in Stellar's `MEMO_HASH`, in the SPL Memo on a cross-chain spoke, and in the anchor's own SEP-31 fields. The layout encodes version, kind, funding currency, beneficiary currency, flags, a UUIDv7, a keyed customer tag and a checksum.
+
+**Reconciliation is a join, not an index.** Horizon cannot be asked for a memo network-wide, the way an indexed event topic can. It does not need to be: Corridor reads the payment stream of the account it already watches and filters on the memo. That stream is per-vault and bounded, a stored paging token makes restarts neither miss nor double-count, and no indexer sits in the path.
+
+## Consequences
+
+- Reconciliation is the same join on every venue, keyed on 32 bytes.
+- No customer identity on a public ledger: the customer tag is a keyed hash, so anyone can see that two payments share a tag but only Corridor can say whose it is.
+- A wrong or truncated reference fails its checksum at decode time instead of silently matching nothing.
+- 32 bytes is fixed. New fields need a new version, and decoders reject unknown versions.
+- **One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields, and the join key becomes `(anchor, transaction id)` — which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and `stellarAnchorFunder` uses it when it is set, falling back to the reference. `findTransfersByMemo` matches on whichever memo went out, so the duplicate check that makes funding exactly-once is just as strong on this leg as on any other.
+- Horizon's payment endpoint has to be called with `join=transactions` for the memo to arrive in the same call. Getting that wrong loses every memo silently, so it is covered by tests in `packages/chain-stellar/src/stellar.test.ts`.
+
+## Alternatives rejected
+
+- **An indexer keyed by transaction hash:** a second source of truth that must itself be reconciled, and an extra service in the path of every payout.
+- **A text memo:** 28 bytes, not fixed size, not checksummed, and too easy to leak customer data into.
+- **Matching on amount and time:** works until two payouts of the same size land in the same minute.

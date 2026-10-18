@@ -1,0 +1,42 @@
+---
+title: "ADR 0006: Anchors are the spokes, reached over the SEPs"
+sidebarTitle: "0006 · Anchors as SEP spokes"
+description: "Every fiat spoke is a Stellar anchor behind one partner interface, spoken to over SEP-10, 12, 31 and 38. Adding a corridor is a domain and an asset, not an integration."
+---
+
+## Context
+
+In the prototype, every payout rail was a bespoke REST API: its own auth, its own order shape, its own status strings, its own webhook scheme. Each new region was an integration, and the integrations did not resemble each other.
+
+Stellar anchors already have a common interface. SEP-1 publishes what an anchor serves, SEP-10 authenticates a vault against it, SEP-12 carries the customer records, SEP-38 gives a firm quote and SEP-31 is the cross-border payment itself. Anchors hold the licences and the local rails; they are the fiat spokes.
+
+## Decision
+
+**Every fiat spoke is reached through one partner interface, and `SepAnchor` implements that interface over the SEPs.**
+
+```ts
+interface RampPartner {
+  rates(currency): Promise<Rates>;
+  openPayout(req): Promise<PartnerOrder>;
+  openCollection(req): Promise<PartnerOrder>;
+  getOrder(id): Promise<PartnerOrder>;
+  verifyWebhook(rawBody, headers, now?): boolean;
+  parseWebhook(rawBody): PartnerOrder;
+}
+```
+
+Every provider is normalised to `open → processing → completed | failed`, and a `PartnerRegistry` picks the partner per currency, direction and chain. A Stellar anchor and an off-Stellar partner are interchangeable to the legs.
+
+## Consequences
+
+- **Adding a corridor is configuration:** a home domain and an asset. That is what makes the spokes additive ([ADR 0002](/decisions/0002-hub-enforced-by-planner)).
+- The SEP-10 challenge is verified **before** the vault signs it — it must be built by the anchor's own `SIGNING_KEY` and name this vault — so a stray endpoint cannot get the vault to sign something else. The JWT is cached for its lifetime.
+- SEP-31 has no webhook. The sending anchor polls `GET /transactions/{id}`, which is what the saga's wait loop does, so `verifyWebhook` returns false and `parseWebhook` says so rather than pretending.
+- The anchor assigns its own memo on the funding payment, so the Corridor Reference moves to the SEP-31 fields on that leg ([ADR 0003](/decisions/0003-reference-in-memo-hash)).
+- **SEP-6 collections are not built.** `openCollection` checks that the anchor publishes a `TRANSFER_SERVER` and then raises, rather than guessing at a flow no signed anchor has yet exercised.
+- Corridor carries no licence and holds no float. The anchor does both, in its own market.
+
+## Alternatives rejected
+
+- **One bespoke adapter per provider, as in the prototype:** N integrations that each have to be maintained, and no reason for the next one to be cheaper than the last.
+- **A single aggregator in front of every market:** one counterparty risk, one price, and no way to use the anchor a customer already has a contract with.

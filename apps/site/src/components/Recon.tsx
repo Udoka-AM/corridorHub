@@ -2,20 +2,28 @@ import { useEffect, useRef, useState } from "react";
 import { ANY_MOTION, EASE, ScrollTrigger, Words, gsap, prefersReducedMotion, useGSAP } from "../motion";
 import { ChainMark } from "./Chains";
 
-// FROST batch ba4e845b on Zcash testnet: $15 paid to three suppliers in one Ironwood transaction.
+/**
+ * Three payments on a watched Stellar account. Until the memo is decoded they
+ * are 32 opaque bytes; decoded, each one names its corridor and its payout id
+ * and matches a record in the company's own books.
+ *
+ * The first row is the real smoke-test payment of 17 Oct 2026; the others are
+ * the shape the same account's stream takes.
+ */
 const ROWS = [
-  { to: "Supplier 1", amount: "$5.00", memo: "INV-2026-09-S01" },
-  { to: "Supplier 2", amount: "$5.00", memo: "INV-2026-09-S02" },
-  { to: "Supplier 3", amount: "$5.00", memo: "INV-2026-09-S03" },
+  { memo: "0x020114290001a1494e…fd6cb505", open: "EUR-KES payout · 01a1494e", state: "matched" },
+  { memo: "0x020114290001a14951…8b40c7e2", open: "EUR-KES payout · 01a14951", state: "short · fee" },
+  { memo: "0x020129460001a14955…21ce0d14", open: "KES-CNY payout · 01a14955", state: "missing" },
 ];
-const BATCH = "https://testnet.zcashexplorer.app/transactions/ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7";
+const TX = "https://stellar.expert/explorer/testnet/tx/175ad4206f85b279831178a5ad896da123105005f265fb5c798ae3d09254781c";
+const SOURCES = ["payout records", "Horizon payments", "anchor status"];
 const GLYPHS = "▓▒░█▚▞#%&@$0123456789abcdef";
 
 function noise(len: number) {
   return Array.from({ length: len }, () => GLYPHS[(Math.random() * GLYPHS.length) | 0]).join("");
 }
 
-/** A cell that shows ciphertext until the viewing key is applied, then decodes left to right. */
+/** A cell that churns until the reference is decoded, then resolves left to right. */
 function Cell({ text, open }: { text: string; open: boolean }) {
   const [shown, setShown] = useState(() => noise(text.length));
   useEffect(() => {
@@ -42,10 +50,10 @@ function Cell({ text, open }: { text: string; open: boolean }) {
   return <td className={open ? "" : "cipher"}>{shown}</td>;
 }
 
-export default function Shielded() {
+export default function Recon() {
   const root = useRef<HTMLElement>(null);
   const [open, setOpen] = useState(false);
-  const [signed, setSigned] = useState<number[]>([]);
+  const [joined, setJoined] = useState<number[]>([]);
 
   useGSAP(
     () => {
@@ -69,7 +77,7 @@ export default function Shielded() {
           onLeave: () => (el.style.clipPath = ""),
           onLeaveBack: () => (el.style.clipPath = ""),
         });
-        gsap.from(".shielded .reveal .wi", { yPercent: 110, duration: 1.1, ease: EASE, stagger: 0.05, scrollTrigger: { trigger: root.current, start: "top 70%", once: true } });
+        gsap.from(".recon .reveal .wi", { yPercent: 110, duration: 1.1, ease: EASE, stagger: 0.05, scrollTrigger: { trigger: root.current, start: "top 70%", once: true } });
         gsap.from(".vault", {
           y: 80,
           rotateX: 14,
@@ -80,65 +88,65 @@ export default function Shielded() {
           scrollTrigger: { trigger: ".vault", start: "top 85%", once: true },
         });
       });
-      // Two of the three signers approve as the vault comes into view: signer 1, then signer 3.
-      gsap.timeline({ scrollTrigger: { trigger: ".frost", start: "top 85%", once: true } })
-        .call(() => setSigned([1]), [], 0.4)
-        .call(() => setSigned([1, 3]), [], 1.1);
+      // The three sources come in one at a time as the panel arrives.
+      gsap.timeline({ scrollTrigger: { trigger: ".joins", start: "top 85%", once: true } })
+        .call(() => setJoined([0]), [], 0.3)
+        .call(() => setJoined([0, 1]), [], 0.8)
+        .call(() => setJoined([0, 1, 2]), [], 1.3);
     },
     { scope: root },
   );
 
   return (
-    <section className="shielded light" ref={root} id="shielded" aria-label="Shielded supplier payments">
+    <section className="recon light" ref={root} id="reconcile" aria-label="Reconciliation">
       <div className="wrap grid">
         <div>
-          <Words as="h2" className="h2 reveal" text={"Private from the public.\nOpen to the auditor."} />
+          <Words as="h2" className="h2 reveal" text={"Opaque on the ledger.\nExact in your books."} />
           <p className="lede" style={{ marginTop: 28 }}>
-            Importers pay suppliers through Zcash, so competitors never read their prices. Auditors get a key to one customer and one period.
+            Every payment carries a 32-byte reference in Stellar&rsquo;s <code>MEMO_HASH</code>. It names no customer on a public ledger, and it is the join key that
+            matches a Horizon payment to your own payout record — no indexer in the path.
           </p>
-          <div className="frost" aria-label="Signers 1 and 3 of 3 approved the batch">
-            {[1, 2, 3].map((n) => (
-              <div key={n} className={`shard${signed.includes(n) ? " on" : ""}`}>
-                key {n}
+          <div className="joins" aria-label="Three sources joined on one reference">
+            {SOURCES.map((s, i) => (
+              <div key={s} className={`src${joined.includes(i) ? " on" : ""}`}>
+                {s}
               </div>
             ))}
-            <span className="eq">{signed.length >= 2 ? "2 of 3 signed · batch sent" : "awaiting 2 of 3"}</span>
+            <span className="eq">{joined.length >= 3 ? "3 sources · 1 exception raised" : "joining…"}</span>
           </div>
         </div>
 
         <div className="vault">
           <div className="top">
             <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-              <ChainMark name="Zcash" width={22} height={22} /> Ironwood batch · 3 suppliers
+              <ChainMark name="Stellar" width={22} height={22} /> Watched account · testnet
             </span>
-            <a href={BATCH} target="_blank" rel="noreferrer" data-hot>
-              ba4e845b ↗
+            <a href={TX} target="_blank" rel="noreferrer" data-hot>
+              175ad420 ↗
             </a>
           </div>
           <table>
             <thead>
               <tr>
-                <th>Recipient</th>
-                <th>Amount</th>
-                <th>Invoice memo</th>
+                <th>Memo on Stellar</th>
+                <th>Against your record</th>
               </tr>
             </thead>
             <tbody>
               {ROWS.map((r) => (
                 <tr key={r.memo}>
-                  <Cell text={r.to} open={open} />
-                  <Cell text={r.amount} open={open} />
-                  <Cell text={r.memo} open={open} />
+                  <td className={open ? "" : "cipher"}>{open ? r.open : r.memo}</td>
+                  <Cell text={r.state} open={open} />
                 </tr>
               ))}
             </tbody>
           </table>
           <div className="foot">
             <span className="muted" style={{ fontSize: 12 }}>
-              {open ? "Auditor view: one vault, one period, read-only" : "What the public chain shows"}
+              {open ? "Decoded: corridor, payout id, checksum — and what the books say" : "What the ledger shows: 32 bytes"}
             </span>
             <button className="keybtn" aria-pressed={open} onClick={() => setOpen((v) => !v)} data-hot>
-              {open ? "Hide" : "Apply viewing key"}
+              {open ? "Hide" : "Decode the reference"}
             </button>
           </div>
         </div>

@@ -1,17 +1,19 @@
 ---
-title: "Paj: the first ramp partner"
-description: "A reference partner adapter built against Paj's public API v2: offramp orders with one-off funding addresses, onramp orders with one-off virtual accounts, normalised statuses, and signed webhooks."
+title: "Paj: the naira partner"
+description: "The one provider that is not a Stellar anchor: a licensed naira rail that settles on Solana, behind the same partner interface, until a naira anchor is live on Stellar."
 icon: "banknote"
 ---
 
-[Paj](https://paj.cash) converts between USDC and Nigerian naira through a business API. Corridor's adapter (`@corridor/partners`, `PajPartner`) is built against Paj's [public API v2 OpenAPI specification](https://docs.paj.cash/api-reference/openapi.json) and implements the [partner interface](/integrations/partner-interface).
+[Paj](https://paj.cash) converts between USDC and Nigerian naira through a business API. Corridor's adapter (`@corridor/partners`, `PajPartner`) is built against Paj's [public API v2 OpenAPI specification](https://docs.paj.cash/api-reference/openapi.json) and implements the same [partner interface](/integrations/partner-interface) a Stellar anchor does.
 
-## Why Paj
+It is here for one reason: **no licensed naira anchor is live on Stellar**. Until one is, naira is reached through a partner that settles on Solana, and `OFF_STELLAR_PAYOUT_CURRENCIES` is the single list that says so.
+
+## Why it stays
 
 - **Naira both ways:** offramp (USDC → NGN to a bank account) and onramp (NGN into a virtual account → USDC).
-- **Settles on Solana**, where most of its USDC liquidity sits. Base appears in Paj's API but is not live for Corridor yet, and the adapter refuses Base orders rather than send one Paj cannot fill.
-- **Signed webhooks** with a timestamped HMAC scheme.
-- **Zcash on the roadmap:** `ZCASH` already appears in Paj's chain enum (not yet open), a future path for shielded payouts straight to naira.
+- **Settles on Solana**, where its USDC liquidity sits. Base appears in Paj's API but is not live for Corridor, and the adapter refuses Base orders rather than send one Paj cannot fill.
+- **Signed webhooks** with a timestamped HMAC scheme — unlike SEP-31, which has no webhook and is polled.
+- It is the rail the prototype proved against real money, which is why the naira corridor is the one with a working counterparty and the missing piece is the hop to reach it.
 
 ## Mapping
 
@@ -34,28 +36,36 @@ Requests authenticate with an `x-api-key` header. The Corridor Reference rides i
 | `COMPLETED` | `completed` |
 | `ERROR` | `failed` |
 
+Every provider, anchor or not, is normalised to those four, so the legs and the matcher never depend on one provider's vocabulary.
+
+## Precision
+
+Paj settles in **6-decimal USDC** on Solana, and the hub keeps 7. Amounts convert through `rescale`, which refuses an amount carrying a seventh decimal instead of rounding it away — so a payout that cannot be paid to the stroop fails loudly at the edge.
+
 ## The payout lifecycle
 
 ```mermaid
 sequenceDiagram
   participant S as Corridor saga
   participant P as Paj
-  participant V as Corridor vault (Base or Solana)
+  participant V as Corridor vault (Solana egress)
   participant B as Beneficiary bank
   S->>P: POST /pub/v2/offramp (amount, bank, reference)
   P-->>S: order + one-off funding address
   S->>S: record order link (exactly once)
-  S->>V: send USDC to funding address (reference in memo)
+  S->>V: send USDC to the funding address (reference in an SPL Memo)
   S->>S: record funding tx (exactly once)
   P->>B: NGN to the beneficiary account
   P-->>S: webhook COMPLETED (signed)
   S->>S: book partner.payout, observation for recon
 ```
 
+The vault that funds the order depends on where the partner settles: an anchor on the hub is paid out of the Stellar treasury, and a partner that settles elsewhere is paid from the egress vault a cross-chain leg filled — and the customer bears those fees.
+
 ## Mock partner
 
-For testnet, a Paj-shaped mock implements the same lifecycle and signs its webhooks with the same scheme, delivered over real HTTP to Corridor's webhook server. The mock observes real Solana devnet funding when the devnet vault holds USDC.
+For testnet, a Paj-shaped mock implements the same lifecycle and signs its webhooks with the same scheme, delivered over real HTTP to Corridor's webhook server. `pnpm stellar:payout` uses it with `chains: ["STELLAR"]`, so the order lifecycle is the mock's and the Stellar payment is real.
 
 <Info>
-Live since 11 Oct 2026 with Corridor's Paj business key (production only; the key is not valid on Paj's staging host). The first order paid ₦3,891.48 into a Nigerian bank account, and its narration carried the Corridor Reference. See [Evidence](/status/evidence#live-on-mainnet).
+Paj was proven against real money in Corridor's earlier **Tempo prototype**: on 11 October 2026 an order paid ₦3,891.48 into a Nigerian bank account, and its narration carried the Corridor Reference. That run is kept as [evidence of the prototype](/status/evidence#the-prototype-on-tempo). Nothing has run through Paj from the Stellar hub, because the hop to reach it — [`cctp.transfer`](/integrations/cctp) — is not built.
 </Info>

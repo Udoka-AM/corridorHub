@@ -1,51 +1,40 @@
 ---
 title: "Treasury console"
-description: "The operator's view of the network: live mainnet payouts, hub balances, venues, sagas with explorer links, pre-funding forecast, reconciliation, the exceptions queue, shielded batches with FROST approvals, and auditor disclosures."
+description: "Not built for Stellar. The prototype's console read Tempo and Solana and was removed rather than left reporting a chain this build no longer settles on; read-only reporting runs from the command line today."
 icon: "layout-dashboard"
 ---
 
-<Frame caption="The settlement timeline: every saga, every step, and the transaction behind it.">
-  <img src="/images/product/console-timeline.jpg" alt="Settlement timeline in the treasury console" />
-</Frame>
+<Warning>
+**There is no treasury console in the Stellar build.** The console that shipped with Corridor's earlier Tempo prototype read Tempo, Solana and the prototype's shielded lane. Its server was removed when Stellar became the only hub, rather than left reporting a chain this repository no longer settles on.
+</Warning>
 
-The console (`apps/console`) is one Node process that owns the ledger and the runtime (Tempo vaults, partner webhooks, saga engine), serves a JSON API and the dashboard, and runs flows on request.
+## What exists today
+
+The reporting the console fronted runs from the command line, against the Stellar accounts a company already operates:
 
 ```bash
-pnpm console    # http://localhost:4400
+CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
 ```
 
-A public, read-only replay is at [corridorapp.udokaam.dev/console](https://corridorapp.udokaam.dev/console/): its Live on mainnet panel is a real payout, and every other panel is recorded from testnet runs.
+It polls Horizon for each account's payments, matches them against the ledger, and prints a summary and every movement that is not `matched`. Nothing moves and no key is needed. See [Read-only pilot](/flows/read-only-pilot).
 
-## Panels
+`pnpm stellar:payout` prints the saga's steps, the anchor order, the ledger invariants and the customer's closing balance — the same facts a settlement timeline would show, for one run.
 
-| Panel | What it shows | API |
-|---|---|---|
-| KPIs | Hub balances, in flight, settled via partners, saga outcomes, reconciliation rate | `GET /api/overview` |
-| Live on mainnet | Real payouts: amount in and naira credited, end-to-end time, partner status (re-read live), bank narration, explorer links per leg and, for saga runs, the per-vault check | `GET /api/mainnet` |
-| Settlement network | The hub-and-spoke map with live planned routes per corridor and environment | `GET /api/network` |
-| Run a flow | One-click live flows: EUR→NGN payout, payout with forced partner failure, importer ₦→¥, three suppliers paid privately | `POST /api/actions/*` |
-| Settlement timeline | Every saga: steps, status, attempts, FX, and explorer links for each on-chain step | `GET /api/sagas` |
-| Corridor board | Available and held balances per customer and corridor | `GET /api/overview` |
-| Pre-funding forecast | Daily outflow, runway in days and the 7-day top-up per customer | `GET /api/forecast` |
-| Venue balances | Vaults and clearing accounts per venue, with clearing pairs netting to zero | `GET /api/overview` |
-| Reconciliation | Matched / mismatch / unbooked / unreferenced, the vault check and booked gas | `GET /api/reconciliation` |
-| Shielded lane | FROST vault, Ironwood batches with encrypted invoice memos, approval requests | `GET /api/shielded`, `GET/POST /api/approvals` |
-| Exceptions queue | Read-only pilot: the customer's own wallets against its payout records, with short, missing and unexpected movements | `GET /api/readonly` |
-| Disclosures | Export a vault's viewing key with its scope, what it reveals and how to verify | `POST /api/disclosures` |
+## What a console would show
 
-## FROST approvals
+When one is built, these are the panels the engines already produce the data for:
 
-A shielded batch does not broadcast until enough signers approve. The console shows each pending batch with its recipients, USD and ZEC totals and invoice references, and one button per signer (customer approver, customer finance, Corridor). Once the threshold is met, the saga resumes and `corridor-frost` co-signs with exactly the approving signers.
+| Panel | Data it would read |
+|---|---|
+| Corridor board | `Accounts.customer` and `.customerHold` balances per customer and corridor |
+| Settlement timeline | `saga_steps` and `saga_events`, with a stellar.expert link per on-chain step |
+| Venue balances | Vault and clearing balances per venue, with clearing pairs netting to zero |
+| Reconciliation | `summarize(reconcile(...))`, the vault check and booked fees |
+| Exceptions queue | `reconcileReadOnly` statuses: short, over, missing, unexpected |
+| Pre-funding forecast | Daily outflow per customer against the hub balance |
 
-## The public replay
+None of that is built. It is listed here so a reviewer can see the gap is a user interface rather than a missing engine, and the [Roadmap](/status/roadmap) says where it sits.
 
-`pnpm console:snapshot` records every API response from a running console into `apps/site/public/console/`, next to the console page in replay mode:
+## The prototype's console
 
-- Data comes from recorded JSON; no action can move funds.
-- Each flow button opens the recorded run of that flow with its explorer links.
-- The disclosure button exports the recorded testnet viewing key, so anyone can verify the shielded payouts independently.
-- **The snapshot refuses to publish** if any value from `.env.local` or any secret file under `.keys/` appears in the recorded data.
-
-<Warning>
-The local console runs without authentication for development. Its action, approval and disclosure endpoints sit behind authentication and role checks in any hosted deployment.
-</Warning>
+The earlier console is kept as a static replay, as evidence of the prototype: a recording of real Tempo and Solana runs from 11 October 2026. Every figure in it is a Tempo-era run, not a Stellar one, and it is labelled as such. It is not part of this build and nothing in it reflects the Stellar code.

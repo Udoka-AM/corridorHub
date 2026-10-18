@@ -1,8 +1,8 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "maple",
-  "name": "Corridorhub",
-  "description": "The settlement hub for money moving into and out of Africa: stablecoin treasury on Tempo, payouts across four regions, and private supplier payments on Zcash.",
+  "name": "Corridor",
+  "description": "The payment ledger and router licensed payment companies run on their own keys: cross-border stablecoin payouts settled on Stellar, exactly once, with books that match the chain.",
   "colors": {
     "primary": "#050505",
     "light": "#F4F4F0",
@@ -45,12 +45,16 @@
   "navbar": {
     "links": [
       {
-        "label": "Live console",
-        "href": "https://corridorapp.udokaam.dev/console/"
+        "label": "Ten-minute review",
+        "href": "https://corridor.udokaam.dev/start/ten-minute-review"
       },
       {
-        "label": "Read-only pilot",
-        "href": "https://corridor.udokaam.dev/flows/read-only-pilot"
+        "label": "Evidence",
+        "href": "https://corridor.udokaam.dev/status/evidence"
+      },
+      {
+        "label": "GitHub",
+        "href": "https://github.com/Udoka-AM/corridorHub"
       }
     ],
     "primary": {
@@ -70,6 +74,7 @@
             "pages": [
               "index",
               "start/what-corridor-is",
+              "start/ten-minute-review",
               "start/reading-paths",
               "start/quickstart"
             ]
@@ -118,14 +123,14 @@
             "group": "Operations",
             "pages": [
               "architecture/keys-and-signers",
-              "architecture/treasury-console",
-              "architecture/security"
+              "architecture/security",
+              "architecture/treasury-console"
             ]
           }
         ]
       },
       {
-        "tab": "Chains & partners",
+        "tab": "Stellar & anchors",
         "icon": "network",
         "groups": [
           {
@@ -137,30 +142,23 @@
           {
             "group": "Settlement hub",
             "pages": [
-              "integrations/tempo"
+              "integrations/stellar"
             ]
           },
           {
-            "group": "Bridging",
+            "group": "Fiat spokes",
             "pages": [
-              "integrations/across",
-              "integrations/base"
+              "integrations/sep-anchors",
+              "integrations/partner-interface",
+              "integrations/paj"
             ]
           },
           {
-            "group": "Liquidity spokes",
+            "group": "Off the hub",
             "pages": [
+              "integrations/cctp",
               "integrations/solana",
-              "integrations/paj",
-              "integrations/partner-interface"
-            ]
-          },
-          {
-            "group": "Shielded lane",
-            "pages": [
-              "integrations/zcash",
-              "integrations/frost",
-              "integrations/near-intents"
+              "integrations/base"
             ]
           }
         ]
@@ -173,9 +171,8 @@
             "group": "End-to-end walkthroughs",
             "pages": [
               "flows/read-only-pilot",
-              "flows/payout-eur-ngn",
-              "flows/importer-ngn-cny",
-              "flows/shielded-supplier-batch",
+              "flows/payout-eur-kes",
+              "flows/importer-kes-cny",
               "flows/failure-and-compensation"
             ]
           }
@@ -189,17 +186,18 @@
             "group": "Architecture decision records",
             "pages": [
               "decisions/index",
-              "decisions/0001-pathusd-settlement-unit",
+              "decisions/0001-usdc-on-stellar-settlement-unit",
               "decisions/0002-hub-enforced-by-planner",
-              "decisions/0003-reference-in-native-memo",
+              "decisions/0003-reference-in-memo-hash",
               "decisions/0004-saga-over-two-phase-commit",
-              "decisions/0005-privacy-as-a-venue",
-              "decisions/0006-frost-threshold-vaults",
-              "decisions/0007-live-bridge-first",
+              "decisions/0005-confidential-lane-deferred",
+              "decisions/0006-anchors-as-sep-spokes",
+              "decisions/0007-issuer-is-part-of-asset-identity",
               "decisions/0008-book-from-the-chain",
               "decisions/0009-customer-held-keys",
               "decisions/0010-issuer-neutral-stablecoins",
-              "decisions/0011-read-only-first"
+              "decisions/0011-read-only-first",
+              "decisions/0012-seven-decimal-ledger"
             ]
           }
         ]

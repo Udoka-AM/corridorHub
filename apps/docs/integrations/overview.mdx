@@ -1,71 +1,71 @@
 ---
-title: "Chains and partners"
-description: "Each chain does the job it is best at: Tempo settles, Across bridges, Base and Solana carry partner liquidity, Zcash keeps supplier payments private, NEAR Intents funds the shielded lane."
+title: "Stellar and the spokes"
+description: "Stellar settles and anchors pay local currency. Other chains appear only as inflows and for the one corridor whose licensed partner has not arrived on Stellar yet."
 icon: "network"
 ---
 
-Corridor does not pick one chain for everything. It composes chains by role, and every role is reconciled by the same Corridor Reference.
+Corridor settles in one place. **Stellar is the hub**, anchors are the fiat spokes and they settle on the hub itself, so the common payout path has no bridge in it at all. Everything is reconciled by the same 32-byte Corridor Reference.
 
-<Frame caption="Fig. 03 · Mainnet topology: Tempo to Base through Across, then partners on Base and Solana, and NEAR Intents into Zcash.">
-  <img className="block dark:hidden" src="/images/diagrams/chain-topology-light.svg" alt="Chain topology from Tempo through Across to Base, Solana, partners and Zcash" />
-  <img className="hidden dark:block" src="/images/diagrams/chain-topology-dark.svg" alt="Chain topology from Tempo through Across to Base, Solana, partners and Zcash" />
+<Frame caption="Fig. 03 · The Stellar hub with anchors settling on it directly, and USDC inflows from Base and Solana over CCTP.">
+  <img className="block dark:hidden" src="/images/diagrams/chain-topology-light.svg" alt="Network topology: the Stellar hub, anchors, and CCTP inflows" />
+  <img className="hidden dark:block" src="/images/diagrams/chain-topology-dark.svg" alt="Network topology: the Stellar hub, anchors, and CCTP inflows" />
 </Frame>
 
 <CardGroup cols={3}>
-  <Card title="Tempo" img="/images/chains/tempo.svg" href="/integrations/tempo">
-    **Settlement hub.** pathUSD balances, TIP-20 memos as indexed topics, gas in stablecoins, 0.6 s finality.
+  <Card title="Stellar" img="/images/chains/stellar.svg" href="/integrations/stellar">
+    **Settlement hub.** USDC balances, the reference carried whole in `MEMO_HASH`, 7-decimal amounts, a Horizon observer that resumes from a cursor.
   </Card>
-  <Card title="Across" icon="arrow-left-right" href="/integrations/across">
-    **Bridge.** Tempo ⇄ Base ⇄ Solana through the Swap API, seconds per hop, fractions of a cent.
+  <Card title="Anchors" icon="plug" href="/integrations/sep-anchors">
+    **The fiat spokes.** SEP-1, 10, 12, 38 and 31 behind one partner interface. Adding a corridor is a domain and an asset.
   </Card>
-  <Card title="Base" img="/images/chains/base.svg" href="/integrations/base">
-    **Bridge midpoint.** Every hub ⇄ Solana movement passes through Base, and NEAR Intents swaps into Zcash from Base USDC.
-  </Card>
-  <Card title="Solana" img="/images/chains/solana.svg" href="/integrations/solana">
-    **Ramp liquidity.** USDC with an SPL Memo in one transaction; the pattern ramps already read.
-  </Card>
-  <Card title="Zcash" img="/images/chains/zcash.svg" href="/integrations/zcash">
-    **Shielded lane.** Ironwood batches, encrypted invoice memos, viewing keys scoped to a customer and period.
-  </Card>
-  <Card title="NEAR Intents" img="/images/chains/near.svg" href="/integrations/near-intents">
-    **Shielded funding.** USDC → ZEC delivered straight to a vault's unified address.
+  <Card title="Partner interface" icon="arrow-left-right" href="/integrations/partner-interface">
+    **One shape for every provider.** Six methods and a normalised order lifecycle, so an anchor and an off-Stellar partner are interchangeable to the legs.
   </Card>
 </CardGroup>
 
 <CardGroup cols={3}>
-  <Card title="FROST" icon="key-round" href="/integrations/frost">
-    **Threshold control.** 2-of-3 RedPallas signing over Ironwood spends.
+  <Card title="CCTP" icon="arrow-left-right" href="/integrations/cctp">
+    **Inflows.** USDC from Base and Solana by burn-and-mint, so no wrapped asset reaches the hub. Declared, not built.
   </Card>
-  <Card title="Paj" icon="banknote" href="/integrations/paj">
-    **Ramp partner.** NGN offramp and onramp against USDC on Solana.
+  <Card title="Solana" img="/images/chains/solana.svg" href="/integrations/solana">
+    **The one spoke off the hub.** Where the naira partner settles, until a licensed naira anchor is live on Stellar.
   </Card>
-  <Card title="Partner interface" icon="plug" href="/integrations/partner-interface">
-    **Become a spoke.** Six methods and a signed webhook.
+  <Card title="Base" img="/images/chains/base.svg" href="/integrations/base">
+    **An inflow source.** USDC a customer already holds, brought to the hub.
   </Card>
 </CardGroup>
 
+## What settles where
+
+| Role | Venue | Status |
+|---|---|---|
+| Customer balances, treasury, clearing | Stellar, in USDC | Running on testnet |
+| Local currency in and out | Anchors, over SEP-31 | Adapter built; **no anchor signed** |
+| Naira payouts | A licensed partner on Solana | Carried over from the prototype; the hop to reach it is not built |
+| USDC inflows | Base and Solana, over CCTP | Edges declared; **the leg is not built** |
+
 ## Networks and environments
 
-| Leg | Testnet | Mainnet |
+| | Testnet | Mainnet |
 |---|---|---|
-| Tempo | Moderato, chain 42431 | Chain 4217 |
-| Across | Base Sepolia ⇄ Solana devnet (no Tempo testnet deployment) | Tempo ⇄ Base ⇄ Solana |
-| Base | Base Sepolia (84532) | Base (8453) |
-| Solana | Devnet | Mainnet |
-| Zcash | Testnet, Ironwood pool | Mainnet, Ironwood pool |
-| NEAR Intents | Live mainnet quotes; delivery is testnet ZEC | 1Click swaps from Base USDC |
-| Partner | Paj-shaped mock with the same lifecycle and signed webhooks | Paj business API |
+| Stellar | Test network, funded by Friendbot. Payments with references, read back off Horizon | Public network. Code paths identical; **no run yet** |
+| Anchors | `MockPartner` with the same lifecycle and signed webhooks; `SepAnchor` against a stubbed anchor | None signed |
+| CCTP | `bridge.simulated`, whose Stellar side is real | Leg not built |
+| Solana | Devnet | Carried over from the prototype for the naira corridor |
+| Base | Base Sepolia | Carried over from the prototype |
 
-## Addresses and identifiers
+## Issuers and identifiers
 
-| Asset or contract | Value |
-|---|---|
-| Tempo pathUSD | `0x20c0000000000000000000000000000000000000` |
-| Tempo USDC.e (Stargate-bridged) | `0x20C000000000000000000000b9537d11c60E8b50` |
-| Tempo Fee Manager | `0xfeec000000000000000000000000000000000000` |
-| Base USDC | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| Solana USDC | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
-| Solana devnet USDC | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
-| Across chain id for Solana | `34268394551451` |
-| NEAR Intents asset, Base USDC | `nep141:base-0x833589fcd6edb6e08f4c7c32d4f71b54bda02913.omft.near` |
-| NEAR Intents asset, ZEC | `nep141:zec.omft.near` |
+An asset is its code **and** its issuer ([ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity)).
+
+| Asset | Network | Issuer or mint |
+|---|---|---|
+| USDC | Stellar mainnet | `GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` |
+| USDC | Stellar testnet | `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5` |
+| EURC | Stellar mainnet | `GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2` |
+| MGUSD, PYUSD, USDT | Stellar | **Unset on purpose**, until verified against each issuer's own `stellar.toml` |
+| USDC | Base | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| USDC | Solana | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| USDC | Solana devnet | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+
+Supply an issuer Corridor does not ship with `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>`.

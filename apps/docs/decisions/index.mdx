@@ -1,21 +1,26 @@
 ---
 title: "Architecture decision records"
-description: "Every significant design choice in Corridor: the context that forced it, the decision, the consequences accepted, and the alternatives rejected."
+description: "Every significant design choice in Corridor's Stellar build: the context that forced it, the decision, the consequences accepted, and the alternatives rejected."
 icon: "scale"
 ---
 
-Each record states the decision and the reasoning behind it, so a reviewer can disagree with the reasoning rather than guess at it.
+Each record states the decision and the reasoning behind it, so a reviewer can disagree with the reasoning rather than guess at it. These are the decisions the code embodies today; several are cited by number from the source.
 
 | # | Decision | Status |
 |---|---|---|
-| [0001](/decisions/0001-pathusd-settlement-unit) | pathUSD is the settlement unit; any USD TIP-20 at the edges | Accepted |
-| [0002](/decisions/0002-hub-enforced-by-planner) | The Tempo hub is enforced by the route planner | Accepted |
-| [0003](/decisions/0003-reference-in-native-memo) | A 32-byte reference in each chain's native memo, not an indexer | Accepted |
+| [0001](/decisions/0001-usdc-on-stellar-settlement-unit) | USDC on Stellar is the hub's unit of account | Accepted |
+| [0002](/decisions/0002-hub-enforced-by-planner) | The Stellar hub is enforced by the route planner | Accepted |
+| [0003](/decisions/0003-reference-in-memo-hash) | The 32-byte reference rides `MEMO_HASH`; reconciliation is a join, not an index | Accepted |
 | [0004](/decisions/0004-saga-over-two-phase-commit) | A compensating saga rather than two-phase commit | Accepted |
-| [0005](/decisions/0005-privacy-as-a-venue) | Privacy is a venue in the route graph, not a feature flag | Accepted |
-| [0006](/decisions/0006-frost-threshold-vaults) | Shielded vaults are FROST 2-of-3, rerandomized | Accepted |
-| [0007](/decisions/0007-live-bridge-first) | Live Across first; simulation only as a labelled fallback | Accepted |
-| [0008](/decisions/0008-book-from-the-chain) | Gas, funding and deliveries are booked from what the chain shows | Accepted |
+| [0005](/decisions/0005-confidential-lane-deferred) | The confidential lane waits for Stellar confidential tokens | Accepted |
+| [0006](/decisions/0006-anchors-as-sep-spokes) | Anchors are the fiat spokes, reached over the SEPs | Accepted |
+| [0007](/decisions/0007-issuer-is-part-of-asset-identity) | The issuer is part of the asset's identity; unverified issuers stay unset | Accepted |
+| [0008](/decisions/0008-book-from-the-chain) | Fees, reserves and funding are booked from what the chain shows | Accepted |
 | [0009](/decisions/0009-customer-held-keys) | Customers hold the keys; Corridor signs through their KMS or MPC | Accepted |
-| [0010](/decisions/0010-issuer-neutral-stablecoins) | USDC, USDT, PYUSD and EURC are first-class alongside pathUSD | Accepted |
+| [0010](/decisions/0010-issuer-neutral-stablecoins) | USDC, USDT, PYUSD, MGUSD and EURC are each first-class | Accepted |
 | [0011](/decisions/0011-read-only-first) | A customer starts read-only; moving money is the second step | Accepted |
+| [0012](/decisions/0012-seven-decimal-ledger) | The ledger keeps Stellar's seven decimal places | Accepted |
+
+<Note>
+Corridor's earlier prototype settled on Tempo and reached its payout rails through bespoke provider APIs. Numbers are kept where the decision survived the move to Stellar (0002, 0004, 0008, 0009, 0010, 0011); 0001, 0003 and 0005 are the same question answered differently on Stellar, and 0006, 0007 and 0012 are decisions the hub itself forced.
+</Note>

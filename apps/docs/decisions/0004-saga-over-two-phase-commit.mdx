@@ -1,12 +1,12 @@
 ---
 title: "ADR 0004: A compensating saga, not two-phase commit"
 sidebarTitle: "0004 · Saga over 2PC"
-description: "Banks, bridges, partners and blockchains do not take part in distributed transactions, so each payment runs as durable legs with compensations, executed in reverse on failure."
+description: "Banks, anchors and blockchains do not take part in distributed transactions, so each payout runs as durable legs with compensations, executed in reverse on failure."
 ---
 
 ## Context
 
-A cross-border payment moves value on a chain, through a bridge, at a partner and in a ledger. None of these will hold a lock or prepare a commit on Corridor's behalf.
+A cross-border payout moves value on Stellar, at an anchor, sometimes on a second chain, and in a ledger. None of these will hold a lock or prepare a commit on Corridor's behalf.
 
 ## Decision
 
@@ -14,9 +14,10 @@ A cross-border payment moves value on a chain, through a bridge, at a partner an
 
 ## Consequences
 
-- Every intermediate state is a real state, visible in the console with its transactions.
-- Legs must be idempotent: they look for their movement by reference before sending.
-- A lease that expires mid-leg can let a slow worker finish a call; fencing tokens on every commit (bookings, step results, status) refuse anything it tries to write afterwards.
+- Every intermediate state is a real state, with the transaction that caused it recorded against it.
+- Legs must be idempotent. Every external step is recorded before Corridor waits on it, and a leg that moves money first asks the network whether an identical movement — same memo, parties, amount and asset — already landed.
+- Compensation runs last-to-first. Unwinding out of order can leave a balanced ledger describing a sequence that never happened.
+- A lease that expires mid-leg can let a slow worker finish a call, so every commit carries a fencing token: bookings, step results and status changes are all refused if the token has moved on. A test runs exactly that race and checks that only one booking exists.
 
 ## Alternatives rejected
 

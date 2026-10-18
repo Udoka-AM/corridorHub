@@ -4,14 +4,14 @@ import { ChainMark } from "./Chains";
 
 const HubScene = lazy(() => import("./HubScene"));
 
-// Real payouts: the first is the live mainnet payout of 11 Oct 2026; the rest are runs the console recorded.
+// What has actually run, on Stellar testnet on 17 Oct 2026, plus the prototype's
+// one mainnet payout, labelled as the prototype's.
 const FEED = [
-  { pair: "EUR → NGN", amt: "₦3,891.48", state: "credited · 74 s" },
-  { pair: "NGN → CNY", amt: "₦1,560,000", state: "collected" },
-  { pair: "NGN → CNY", amt: "¥7,140", state: "paid out" },
-  { pair: "EUR → NGN", amt: "₦10,710", state: "paid out" },
-  { pair: "USD → ZEC", amt: "3 suppliers", state: "shielded" },
-  { pair: "EUR → NGN", amt: "4 pathUSD", state: "compensated" },
+  { pair: "EUR → KES", amt: "0x020114 29…", state: "reference read back" },
+  { pair: "EUR → KES", amt: "7 USDC", state: "reserved · hold" },
+  { pair: "EUR → KES", amt: "ledger 5241532", state: "funded exactly once" },
+  { pair: "EUR → KES", amt: "Δ 0", state: "invariants clean" },
+  { pair: "EUR → NGN", amt: "₦3,891.48", state: "prototype · 74 s" },
 ];
 
 export default function Hero({ ready }: { ready: boolean }) {
@@ -75,27 +75,27 @@ export default function Hero({ ready }: { ready: boolean }) {
       <div className="wrap copy">
         <Words as="h1" className="display" text={"Never lose a\ncross-border payout."} />
         <p className="lede">
-          Corridor runs your stablecoin payouts across every provider, exactly once, on your own keys, and keeps books that match the chain.
+          Corridor settles your cross-border payouts on Stellar, exactly once, on your own keys, and keeps books that match the chain to the stroop.
         </p>
         <div className="ctas">
           <a className="btn primary" href="#access" data-hot>
             Start a read-only pilot <span className="arr">→</span>
           </a>
-          <a className="btn" href="./console/" data-hot>
-            Open the live console <span className="arr">↗</span>
+          <a className="btn" href="https://corridor.udokaam.dev/start/ten-minute-review" target="_blank" rel="noreferrer" data-hot>
+            Review it in ten minutes <span className="arr">↗</span>
           </a>
         </div>
-        <div className="chains" aria-label="Settles across Tempo, Solana, Base and Zcash">
-          {["Tempo", "Solana", "Base", "Zcash"].map((c) => (
+        <div className="chains" aria-label="Settles on Stellar; reaches Solana and Base for inflows and the one corridor off the hub">
+          {["Stellar", "Solana", "Base"].map((c) => (
             <ChainMark key={c} name={c} />
           ))}
-          <span className="label">Tempo · Solana · Base · Zcash</span>
+          <span className="label">Stellar hub · Solana · Base</span>
         </div>
       </div>
       <div className="hud" aria-live="off">
         <div className="row">
           <span className="live label"><i /> payout feed</span>
-          <span className="label">74 s to a bank account</span>
+          <span className="label">Stellar testnet · 17 Oct 2026</span>
         </div>
         <div className="row tnum" key={tick}>
           <span>{now.pair}</span>

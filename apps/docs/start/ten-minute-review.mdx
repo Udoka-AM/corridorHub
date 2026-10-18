@@ -1,0 +1,69 @@
+---
+title: "Ten-minute review"
+description: "For a Stellar reviewer: six things to read in order, two commands to run, and a short list of what is deliberately not built."
+icon: "timer"
+---
+
+This page exists so a reviewer does not have to guess where the substance is. It is written for someone judging whether the Stellar work is real, in about ten minutes.
+
+## Read, in this order
+
+<Steps>
+  <Step title="What Stellar decides about the design · 2 min">
+    [Architecture overview](/architecture/overview). Two properties of Stellar shape the whole system: `MEMO_HASH` is exactly 32 bytes, and anchors settle on Stellar itself. Everything else follows from those.
+  </Step>
+  <Step title="The reference, and why there is no indexer · 2 min">
+    [Corridor Reference](/architecture/corridor-reference) and [ADR 0003](/decisions/0003-reference-in-memo-hash). 32 bytes, carried whole in the signed transaction. Reconciliation is a join on a watched account's own payment stream, with a stored paging token — not an index. The page also states the one case where the anchor assigns the memo instead.
+  </Step>
+  <Step title="Anchors as the fiat spokes · 2 min">
+    [SEP anchor interface](/integrations/sep-anchors) and [ADR 0006](/decisions/0006-anchors-as-sep-spokes). SEP-1, 10, 12, 38 and 31 behind the same partner interface as any other provider. Note what the SEP-10 adapter checks before the vault signs, and that SEP-6 collections are unimplemented rather than stubbed.
+  </Step>
+  <Step title="What the books guarantee · 2 min">
+    [Ledger](/architecture/ledger) and [ADR 0012](/decisions/0012-seven-decimal-ledger). Double-entry, append-only, exactly-once per external movement, and 7 decimal places so a booked balance can equal an on-chain balance exactly. `rescale` refuses any conversion to a 6 dp spoke that would drop a stroop.
+  </Step>
+  <Step title="What has actually run · 1 min">
+    [Evidence](/status/evidence). Two Stellar testnet runs on 17 October 2026, both on stellar.expert, both reproducible with one command each. The prototype's mainnet payout is there too, labelled as the prototype's.
+  </Step>
+  <Step title="What is not built · 1 min">
+    The list below, and [Roadmap](/status/roadmap).
+  </Step>
+</Steps>
+
+## Run, in this order
+
+```bash
+pnpm install
+pnpm test                 # 128 tests, no network
+pnpm stellar:wallets      # creates and funds two testnet vaults
+pnpm stellar:smoke        # a real payment, reference read back off Horizon
+pnpm stellar:payout       # the whole saga: route, reserve, fund the anchor, book it
+```
+
+For the SEP path against a server Corridor does not control, `./examples/anchor/up.sh` brings up Stellar's own Anchor Platform and the same payout script runs against it.
+
+`stellar:smoke` is the shortest proof that the reference survives a real Stellar transaction: it sends a payment with the reference as `MEMO_HASH`, reads the payment back off Horizon, and decodes the reference out of the memo. `stellar:payout` runs the same thing inside the saga engine, against a mock anchor on the Stellar chain, and prints the ledger invariants at the end.
+
+## The three files worth opening
+
+| File | Why |
+|---|---|
+| `packages/chain-stellar/src/stellar.test.ts` | The reference on a real transaction, issuer identity, and the Horizon quirks that would otherwise lose every memo |
+| `packages/routing/src/routing.test.ts` | Hub enforcement and every route shape, as tests |
+| `packages/partners/src/sep.ts` | The anchor over SEP-1/10/12/38/31, including the challenge check before the vault signs |
+
+## What is not built
+
+This is the whole list, stated plainly so nothing below has to be inferred.
+
+| Not built | What that means |
+|---|---|
+| **No anchor is signed** | No real local currency has moved on Stellar. The SEP path has run end to end against Stellar's own Anchor Platform, run locally ([`examples/anchor`](https://github.com/Udoka-AM/corridorHub/tree/main/examples/anchor)), not against a licensed anchor. |
+| **SEP-6 collections** | `openCollection` checks the anchor publishes a `TRANSFER_SERVER` and then raises, rather than guessing at a flow no signed anchor has exercised. |
+| **The `cctp.transfer` leg** | Declared in the route graph and planned for, but not written, so mainnet naira payouts do not run. Testnet uses `bridge.simulated`, whose Stellar side is real. |
+| **MGUSD, PYUSD and USDT issuers** | Deliberately unset until each is verified against the issuer's own `stellar.toml`. Asking for one raises an error that names the missing issuer. |
+| **The treasury console** | Not built for Stellar. The prototype's console read Tempo and Solana and was removed rather than left reporting a chain this repo no longer settles on. Read-only reporting runs from `pnpm watch:report`. |
+| **A mainnet run** | The code paths are identical; nothing has run on Stellar mainnet. |
+
+## What came before
+
+Corridor's earlier prototype settled on **Tempo** and reached its payout rails through bespoke provider APIs. It paid ₦3,891.48 into a Nigerian bank account 74 seconds after 2.90 USDC.e left a vault, on 11 October 2026. That build lives in its own repository; this one is Stellar-native, and the Tempo, Across, Zcash and NEAR packages were deleted rather than left dormant. The prototype's result is kept on the [Evidence](/status/evidence#the-prototype-on-tempo) page, labelled as the prototype's, because it is where the saga engine, the ledger and the reconciliation matcher were proven against real money.

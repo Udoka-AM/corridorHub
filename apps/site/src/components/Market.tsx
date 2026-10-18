@@ -90,7 +90,7 @@ export default function Market() {
             <div className="chart-head">
               <div>
                 <div className="figure tnum">${Math.round(FIVE_YEARS)}B</div>
-                <p>Where we start: moved on-chain in Sub-Saharan Africa in five years, 43% of it in stablecoins. The rails exist. The ledger licensed companies need to run on them doesn't.</p>
+                <p>Where we start: moved on-chain in Sub-Saharan Africa in five years, 43% of it in stablecoins. The rails exist. The ledger licensed companies need to run on them doesn&rsquo;t.</p>
               </div>
             </div>
             <svg className="flowchart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`On-chain value received in Sub-Saharan Africa: ${FLOWS.map((f) => `${f.y} $${f.v}B`).join(", ")}`}>
@@ -167,7 +167,7 @@ export default function Market() {
               </div>
             </div>
             <p className="note">
-              Routed volume at a 0.30% take; ledger subscriptions come on top. A scenario, not a forecast. {future ? "2028 assumes B2B stablecoin payments grow 40% a year." : "Today's base: $226B a year (2025)."}
+              Routed volume at a 0.30% take; ledger subscriptions come on top. An assumption, not a forecast. {future ? "2028 assumes B2B stablecoin payments grow 40% a year." : "Today's base: $226B a year (2025)."}
             </p>
           </div>
 

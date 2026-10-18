@@ -1,0 +1,85 @@
+# Stellar's own Anchor Platform, configured as a receiving SEP-31 anchor so
+# Corridor's SepAnchor can be run against a real SEP server rather than an
+# in-process stub. Testnet only; never a production configuration.
+#
+# Trimmed from the Anchor Platform's own quick-run compose file: the SEP-24
+# interactive UI is left out, because Corridor is a sending anchor and never
+# uses it.
+
+services:
+  # SEP server (the endpoints Corridor talks to), platform API, event
+  # processor and the Stellar observer, in one process.
+  platform:
+    platform: linux/amd64
+    image: stellar/anchor-platform:latest
+    command: --sep-server --platform-server --event-processor --stellar-observer
+    volumes:
+      - ./config:/config
+    env_file:
+      - ./dev.env
+    environment:
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY:?run ./up.sh, which generates and funds the keys}
+      # SEP-10 signs for the host the client actually reached, so these
+      # follow the published port.
+      SEP10_WEB_AUTH_DOMAIN: localhost:${ANCHOR_SEP_PORT:-8080}
+      SEP10_HOME_DOMAINS: localhost:${ANCHOR_SEP_PORT:-8080}
+    ports:
+      # Host ports are overridable: 8080 is a popular port, and a clash is
+      # invisible to curl (which prefers IPv6 here) but not to an IPv4-first
+      # client like Node. up.sh checks for it.
+      - "${ANCHOR_SEP_PORT:-8080}:8080" # SEP server: SEP-1/10/12/31/38
+      - "${ANCHOR_PLATFORM_PORT:-8085}:8085" # Platform API
+    depends_on:
+      - db
+      - kafka
+      - reference-server
+
+  # The anchor's own business server: prices, fees, and moving the fiat.
+  reference-server:
+    platform: linux/amd64
+    image: stellar/anchor-platform:latest
+    command: "--kotlin-reference-server"
+    volumes:
+      - ./config:/config
+    env_file:
+      - ./dev.env
+    environment:
+      KT_REFERENCE_SERVER_CONFIG: /config/reference-config.yaml
+      SECRET_SEP10_SIGNING_SEED: ${HOST_SEP10_SECRET_KEY:?run ./up.sh}
+    ports:
+      - "${ANCHOR_REFERENCE_PORT:-8091}:8091"
+    depends_on:
+      - reference-db
+
+  kafka:
+    platform: linux
+    image: confluentinc/cp-kafka:7.4.3
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka:29096'
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CLUSTER_ID: 'ciWo7IWazngRchmPES6q5A=='
+      KAFKA_LOG_DIRS: '/tmp/kraft-combined-logs'
+      KAFKA_BROKER_ID: 1
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LISTENERS: "PLAINTEXT://kafka:29092,CONTROLLER://kafka:29096"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:29092"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+  db:
+    image: postgres:15.2-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+
+  reference-db:
+    image: postgres:15.2-alpine
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=password
+    command: -p 5433

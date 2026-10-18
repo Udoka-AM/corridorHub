@@ -5,7 +5,7 @@ import Hero from "./components/Hero";
 import Proof from "./components/Proof";
 import Collapse from "./components/Collapse";
 import Journey from "./components/Journey";
-import Shielded from "./components/Shielded";
+import Recon from "./components/Recon";
 import Product from "./components/Product";
 import Market from "./components/Market";
 import Closing from "./components/Closing";
@@ -34,7 +34,7 @@ export default function App() {
         <Proof />
         <Collapse />
         <Journey />
-        <Shielded />
+        <Recon />
         <Product />
         <Market />
         <Closing />

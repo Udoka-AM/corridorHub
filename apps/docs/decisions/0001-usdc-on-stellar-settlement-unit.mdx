@@ -1,0 +1,30 @@
+---
+title: "ADR 0001: USDC on Stellar as the settlement unit"
+sidebarTitle: "0001 · USDC settlement unit"
+description: "Customer balances, the treasury vault and the clearing accounts are all USDC on Stellar. Every other issued asset is booked in its own asset and converted with an explicit path-payment leg."
+---
+
+## Context
+
+A hub needs one unit of account. Corridor holds no money of its own, so the unit has to be the asset the customer's anchors already quote against, the one with the deepest order books on the hub, and the one a licensed company can explain to its auditor.
+
+On Stellar every issued asset — USDC, EURC, MGUSD, PYUSD, USDT — is a classic asset with an issuer, and the hub can convert between them on its own order books. So the real question is which one the ledger counts in, not which ones it can hold.
+
+## Decision
+
+**USDC on Stellar is the hub's unit of account.** Customer balances, the treasury vault and the clearing accounts are USDC. Other issued assets are first-class but are converted to USDC with an explicit `stellar.pathPayment` leg before a payout is funded — an edge the planner produces, whose leg implementation is [not written yet](/integrations/stellar#on-ledger-fx).
+
+`HUB` in `@corridor/routing` is literally `{ venue: "stellar", asset: "USDC" }`, and the planner refuses any payout not funded from it ([ADR 0002](/decisions/0002-hub-enforced-by-planner)).
+
+## Consequences
+
+- One balance and one forecast per customer, instead of a float in each asset.
+- Converting EURC or MGUSD into the settlement unit is a leg with its own bookings on Stellar's own order books: on-ledger FX, no external venue, no implicit 1:1.
+- XLM is held only as fee float and booked to `expense:gas`. Stellar charges fees in XLM, so every vault keeps a small balance.
+- A trustline is what lets an account hold USDC. Ramp's end users get theirs sponsored, so they can hold USDC without first holding XLM.
+- The issuer is part of the asset's identity, so "USDC" from another issuer is not this unit ([ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity)).
+
+## Alternatives rejected
+
+- **A basket, or a per-customer unit:** fragments balances and forecasts, which is the problem a hub exists to remove.
+- **Settling in whatever the anchor quotes:** pushes conversion to every edge and leaves no single number for treasury to manage.

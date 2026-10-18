@@ -1,0 +1,36 @@
+---
+title: "ADR 0012: The ledger keeps Stellar's seven decimal places"
+sidebarTitle: "0012 · The 7-decimal ledger"
+description: "Every amount is an integer count of minor units at 7 dp, the hub's own precision, so a booked balance can equal an on-chain balance exactly. Spokes with fewer decimals convert through a rescale that refuses to drop value."
+---
+
+## Context
+
+The prototype kept 6 decimal places, because its hub and its spokes were all 6 dp chains. Stellar carries every balance to **7** decimal places as a decimal string. A 6 dp ledger in front of a 7 dp chain cannot represent a stroop, so either the ledger rounds — and a vault can never equal the books exactly — or the rounding error is hidden in a tolerance.
+
+Reconciliation is the product. A tolerance in the comparison is a hole in it.
+
+## Decision
+
+**The ledger keeps 7 decimal places, the hub's own precision.** `DIGITAL_ASSETS` gives USDC, USDT, PYUSD, MGUSD, EURC and XLM 7 dp, amounts are integer minor units of that, and converting a Stellar decimal string into the ledger is formatting rather than rounding.
+
+**Spokes with fewer decimals convert through `rescale`, which refuses any conversion that would drop value:**
+
+```ts
+rescale(amount, from, to)  // 7 dp → 6 dp throws if the seventh decimal is not zero
+```
+
+USDC is 6 dp on Solana and Base, and scales into 7 dp exactly. Going the other way, an amount carrying a seventh decimal surfaces as an error instead of disappearing.
+
+## Consequences
+
+- A vault's on-chain balance can equal the ledger to the stroop, which is what makes the vault check meaningful ([ADR 0008](/decisions/0008-book-from-the-chain)).
+- There are no floats anywhere in monetary code, and `numeric(78,0)` postings are wide enough for any on-chain amount.
+- A payout whose amount cannot be paid on a 6 dp spoke fails loudly at the edge rather than silently losing a stroop of a customer's money. In practice that is a stroop of dust, which is exactly the size of error that is easiest to ignore and hardest to find later.
+- Fiat keeps its own decimals (`FIAT[...].decimals`): 2 for NGN and KES, 0 for XOF and UGX.
+
+## Alternatives rejected
+
+- **Keep 6 dp and round at the Stellar edge:** the books can then never equal the chain, and every reconciliation needs a tolerance.
+- **Decimal strings in the ledger:** invites comparison and arithmetic bugs that integers make impossible.
+- **Round silently on the way to a 6 dp spoke:** the amounts are small, which is why nobody would notice the day it was a bug rather than dust.

@@ -1,0 +1,34 @@
+---
+title: "ADR 0007: The issuer is part of the asset's identity"
+sidebarTitle: "0007 · Issuer is identity"
+description: "On Stellar anyone can issue an asset called USDC. Corridor matches code and issuer together, and an issuer it has not verified is left unset rather than guessed."
+---
+
+## Context
+
+A classic Stellar asset is a code plus an issuing account. Anyone can issue an asset whose code is `USDC`. A ledger that keys on the four-character code alone will happily book a look-alike token as the real thing, and the error surfaces when someone tries to redeem it.
+
+## Decision
+
+**An asset is `(code, issuer)`, and both must match.** `assetOf` turns a Horizon record into a Corridor asset only when the code *and* the issuer match the configured one; anything else returns `null` and is never booked.
+
+**An unverified issuer is left unset.** `STELLAR_ISSUERS` sets USDC on mainnet and testnet and EURC on mainnet. MGUSD, PYUSD and USDT are deliberately empty until each has been checked against the issuer's own published `stellar.toml`. Asking for one raises an error that names the missing issuer:
+
+```text
+no mainnet issuer configured for PYUSD: set CORRIDOR_STELLAR_ISSUER_PYUSD_MAINNET or add it to STELLAR_ISSUERS
+```
+
+A deployment can supply its own through `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>` without waiting for a release.
+
+## Consequences
+
+- A look-alike asset from another issuer cannot be credited to a customer.
+- A corridor that needs MGUSD, PYUSD or USDT stops at configuration with a clear message, instead of running against an issuer nobody checked.
+- Issuer identity is what makes issuer-neutrality safe ([ADR 0010](/decisions/0010-issuer-neutral-stablecoins)): several stablecoins can be first-class precisely because none of them is confusable with another.
+- Each deployment carries the responsibility of verifying its own issuers, which is the right place for it: the customer, not Corridor, holds the relationship with the issuer.
+
+## Alternatives rejected
+
+- **Match on the asset code alone:** one phishing issuer away from booking worthless tokens as dollars.
+- **Ship best-guess issuers for every stablecoin:** a guess in a payments ledger is a defect waiting for someone to trust it.
+- **Accept any issuer the customer has a trustline to:** the trustline says the account can hold it, not that Corridor should count it as the settlement asset.

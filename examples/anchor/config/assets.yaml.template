@@ -1,0 +1,60 @@
+# What this anchor serves. Corridor sells the on-chain asset and buys the
+# local currency, which is the SEP-31 shape: the sending anchor funds in a
+# Stellar asset and the receiving anchor pays the beneficiary in fiat.
+#
+# The on-chain asset here is native XLM, because a funded testnet USDC
+# trustline needs an issuer faucet. Switching to USDC is this file plus a
+# trustline on both the distribution account and Corridor's treasury:
+#
+#   - id: stellar:USDC:GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5
+#
+items:
+  - id: stellar:native
+    distribution_account: ${DISTRIBUTION_ACCOUNT}
+    significant_decimals: 7
+    sep31:
+      enabled: true
+      # Corridor always takes a firm SEP-38 quote before it opens the order,
+      # so the receiving anchor has to accept one.
+      quotes_supported: true
+      quotes_required: true
+      receive:
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - bank_account
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - iso4217:USD
+
+  # USD, because the Anchor Platform's stock reference server prices a fixed
+  # set of pairs and stellar:native → iso4217:USD is one of them. A real
+  # anchor prices its own; see the README for serving another currency.
+  - id: iso4217:USD
+    # 4, because the stock reference server quotes four decimals. A real
+    # anchor declares the precision its own rail actually pays in.
+    significant_decimals: 4
+    sep31:
+      enabled: true
+      # Corridor always takes a firm SEP-38 quote before it opens the order,
+      # so the receiving anchor has to accept one.
+      quotes_supported: true
+      quotes_required: true
+      receive:
+        min_amount: 0
+        max_amount: 1000000
+        methods:
+          - bank_account
+    sep38:
+      enabled: true
+      exchangeable_assets:
+        - stellar:native
+      country_codes:
+        - US
+      sell_delivery_methods:
+        - name: bank_account
+          description: Send the on-chain asset to the anchor's account.
+      buy_delivery_methods:
+        - name: bank_account
+          description: Have the local currency paid into the beneficiary's bank account.

@@ -1,4 +1,4 @@
-/* Corridor landing — Tempo black/white, Accrium Space Mono voice. */
+/* Corridor landing — black/white, Accrium Space Mono voice. */
 
 :root {
   --black: #050505;
@@ -269,9 +269,9 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
   .ref { font-size: 11px; }
 }
 
-/* ---------- shielded (light) ---------- */
-.shielded { padding: clamp(88px, 11vw, 160px) 0; will-change: clip-path; }
-.shielded .grid { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: clamp(40px, 6vw, 96px); align-items: center; }
+/* ---------- reconciliation (light) ---------- */
+.recon { padding: clamp(88px, 11vw, 160px) 0; will-change: clip-path; }
+.recon .grid { display: grid; grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr); gap: clamp(40px, 6vw, 96px); align-items: center; }
 .vault {
   border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: #ffffff; overflow: hidden;
   box-shadow: 0 1px 2px rgb(5 5 5 / 0.06), 0 24px 60px -24px rgb(5 5 5 / 0.25);
@@ -284,12 +284,12 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .vault .foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-top: 1px solid var(--line); }
 .keybtn { display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 0 16px; border-radius: var(--r-sm); background: var(--black); color: var(--white); font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; }
 .keybtn[aria-pressed="true"] { background: transparent; color: var(--black); border: 1px solid var(--black); }
-.frost { display: flex; align-items: center; gap: 14px; margin-top: 40px; }
-.shard { width: 64px; height: 64px; border: 1px solid var(--line-strong); border-radius: var(--r-md); display: grid; place-items: center; font-size: 12px; transition: background-color 300ms var(--ease), color 300ms var(--ease), transform 300ms var(--ease); }
-.shard.on { background: var(--black); color: var(--white); transform: translateY(-4px); }
-.frost .eq { font-size: 13px; color: var(--muted); }
+.joins { display: flex; align-items: center; gap: 14px; margin-top: 40px; }
+.src { width: 64px; height: 64px; border: 1px solid var(--line-strong); border-radius: var(--r-md); display: grid; place-items: center; font-size: 12px; transition: background-color 300ms var(--ease), color 300ms var(--ease), transform 300ms var(--ease); }
+.src.on { background: var(--black); color: var(--white); transform: translateY(-4px); }
+.joins .eq { font-size: 13px; color: var(--muted); }
 @media (max-width: 900px) {
-  .shielded .grid { grid-template-columns: 1fr; }
+  .recon .grid { grid-template-columns: 1fr; }
   .vault { overflow-x: auto; }
 }
 

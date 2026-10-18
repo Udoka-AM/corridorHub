@@ -1,0 +1,34 @@
+# The anchor's own business server: it prices the quote and "pays" the
+# beneficiary. A real anchor's is its own software; this one stands in for it.
+app:
+  version: 0.0.1
+  isTest: true
+  port: 8091
+  horizonEndpoint: https://horizon-testnet.stellar.org
+  rpcEndpoint: https://soroban-testnet.stellar.org
+  platformApiEndpoint: http://platform:8085
+  # Where Corridor sends the funding payment.
+  distributionWallet: ${DISTRIBUTION_ACCOUNT}
+  distributionWalletMemo:
+  distributionWalletMemoType:
+  enableTest: true
+  custodyEnabled: false
+  rpcEnabled: true
+  paymentSigningSeed: ${DISTRIBUTION_ACCOUNT_SECRET_KEY}
+
+auth:
+  type: NONE
+  platformToAnchorSecret:
+  anchorToPlatformSecret:
+  expirationMilliseconds: 30000
+
+# Required by the reference server's config loader even though Corridor, as a
+# sending anchor, never uses SEP-24.
+sep24:
+  interactiveJwtKey: "secret_sep24_interactive_url_jwt_secret"
+
+data:
+  url: reference-db:5433
+  database: postgres
+  user: postgres
+  password: password

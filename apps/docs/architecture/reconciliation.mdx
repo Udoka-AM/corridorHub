@@ -1,12 +1,12 @@
 ---
 title: "Reconciliation"
-description: "Observers on every venue emit one Observation shape; a matcher joins them with ledger bookings, gas and funding are booked from the chain, and each vault's on-chain balance is checked against the books."
+description: "Observers on every venue emit one Observation shape; a matcher joins them with ledger bookings; fees and funding are booked from the chain; and each vault's on-chain balance is checked against the books."
 icon: "scan-search"
 ---
 
-Balanced books are not the same as correct books. A ledger can balance perfectly while missing a movement the chain recorded. Corridor reconciles in both directions: **is everything the chains saw booked?** and **does each vault hold what the books say?**
+Balanced books are not the same as correct books. A ledger can balance perfectly while missing a movement the chain recorded. Corridor reconciles in both directions: **is everything the chain saw booked?** and **does each vault hold what the books say?**
 
-<Frame caption="Fig. 08 · Three observers, one observation shape, one matcher, and a vault check against the chain.">
+<Frame caption="Fig. 08 · Observers, one observation shape, one matcher, and a vault check against the chain.">
   <img className="block dark:hidden" src="/images/diagrams/reconciliation-light.svg" alt="Reconciliation of observations against the ledger" />
   <img className="hidden dark:block" src="/images/diagrams/reconciliation-dark.svg" alt="Reconciliation of observations against the ledger" />
 </Frame>
@@ -15,15 +15,18 @@ Balanced books are not the same as correct books. A ledger can balance perfectly
 
 | Venue | Observer | Observation `externalRef` |
 |---|---|---|
-| Tempo | `TempoObserver`: indexed `TransferWithMemo` logs in and out of the vaults, plus fee transfers to the Fee Manager and plain inbound transfers | `${txHash}:${logIndex}` |
-| Partners | Signed webhooks, stored once per order status | `${partner}:${orderId}` |
-| Zcash | Viewing-key scan of decrypted outputs (the vault's wallet, or an auditor's view-only wallet) | `${txid}:${pool}:${outputIndex}` |
-| Solana | `SolanaWatcher`: stablecoin balance changes of any address, with the memo reference when present | signature, or `${signature}:${asset}` when one transaction moved several stablecoins |
-| Base | `Erc20Watcher`: USDC and EURC `Transfer` logs in and out of any address | `${txHash}:${logIndex}` |
+| Stellar | `StellarObserver`: Horizon payments in and out of the watched accounts, with the memo joined in. With `unreferenced` it also reports account funding, sponsored reserves, plain inbound payments, and the XLM fee each outbound transaction charged | `${txHash}:${operationId}`, and `${txHash}:fee` for the fee |
+| Anchors | SEP-31 status, polled; signed webhooks where a provider has them, stored once per order status | `${partner}:${orderId}` |
+| Solana | Stablecoin balance changes of any address, with the memo reference when present | signature, or `${signature}:${asset}` when one transaction moved several stablecoins |
+| Base | USDC and EURC `Transfer` logs in and out of any address | `${txHash}:${logIndex}` |
 
-In a [read-only pilot](/flows/read-only-pilot) the same observers watch the customer's existing wallets and `reconcileReadOnly` matches them against the customer's own payout records instead of Corridor's ledger.
+The Stellar observer resumes from a **stored Horizon paging token**, so restarts neither miss nor double-count payments.
 
-The Tempo observer resumes from a stored block cursor, so restarts neither miss nor double-count events.
+<Note>
+Horizon's payment endpoint has to be called with `join=transactions` for the memo to arrive in the same call, and the SDK turns every `_links` entry into a method, so the joined transaction arrives as `transaction_attr` and its ledger sequence as `ledger_attr`. `normalizeRecord` lifts both out, and cross-checks the ledger sequence against the operation's TOID (`paging_token >> 32`). Getting this wrong silently loses every memo, so it is covered by tests.
+</Note>
+
+In a [read-only pilot](/flows/read-only-pilot) the same observers watch the customer's own Stellar accounts and `reconcileReadOnly` matches them against the customer's own payout records instead of Corridor's ledger.
 
 ## Matching
 
@@ -35,42 +38,40 @@ summarize(results); // { matched, amount_mismatch, unbooked, unreferenced }
 | Status | Meaning | Action |
 |---|---|---|
 | `matched` | Booked, same amount | None |
-| `amount_mismatch` | Booked, but the ledger amount differs from the chain | Investigate: wrong amount booked or partial fill |
+| `amount_mismatch` | Booked, but the ledger amount differs from the chain | Investigate: wrong amount booked, or a partial delivery |
 | `unbooked` | Carries a Corridor Reference but nothing was booked | Our own movement went unrecorded |
 | `unreferenced` | No reference and not booked | An unidentified deposit: never credited automatically |
+
+The comparison uses `entryTotal(..., { excludeLiabilities: true })`. Now that the hub and its spokes settle in the same asset, a payout debits the customer's hold in USDC *and* moves USDC on the chain, and only the second is what an observer saw.
 
 ## Vault accounting from the chain
 
 Memo-tagged movements are booked by the legs that make them. Two kinds of movement are not, and Corridor books them from the chain:
 
 <CardGroup cols={2}>
-  <Card title="Gas" icon="fuel">
-    Tempo charges each fee as a TIP-20 transfer from the payer to the **Fee Manager** (`0xfeec…0000`). Every fee paid by a vault is booked to `expense:gas`, keyed by that log.
+  <Card title="Fees" icon="fuel">
+    Stellar charges each transaction's fee in **XLM** to its source account. Every fee a vault paid is observed with the transaction that paid it and booked to `expense:gas`, keyed by that transaction.
   </Card>
   <Card title="Funding" icon="banknote">
-    Deposits into a vault from an **approved funding source** (testnet faucet mints from the zero address; owner wallets on mainnet via `CORRIDOR_FUNDING_SOURCES`) are booked to `equity:owner`.
+    Deposits into a vault from an **approved funding source** — owner wallets on mainnet, Friendbot on testnet — are booked to `equity:owner`.
   </Card>
 </CardGroup>
 
-Movements are processed in chain order, so a top-up is booked before the fees it pays for. Anything else without a reference stays `unreferenced`: a deposit sent without a memo may be a customer's money, so it is never credited automatically.
+Movements are processed in chain order, so a top-up is booked before the fees it pays for. Anything else without a reference stays `unreferenced`: a payment sent without a memo may be a customer's money, so it is never credited automatically. See [ADR 0008](/decisions/0008-book-from-the-chain).
 
 ## The vault check
 
 ```ts
-const checks = await checkVaults(accounts, ledger, [{ name: "treasury", address, asset: "pathUSD", venue: "tempo", onchain }]);
+const checks = await checkVaults(accounts, ledger, [
+  { name: "treasury", address, asset: "USDC", venue: "stellar", onchain },
+]);
 // { vault: "treasury", onchain, ledger, diff, status: "balanced" | "drift" }
 ```
 
-To make the check meaningful, the console replays each vault's **whole history** from its first funded block, which it finds by bisecting historical balances (`firstFundedBlock`). The latest recorded run:
+The difference is exact, not approximate, because the ledger keeps Stellar's own 7 decimal places ([ADR 0012](/decisions/0012-seven-decimal-ledger)). A tolerance would be a hole in exactly the check that is meant to catch drift.
 
-| Check | Result |
-|---|---|
-| Tempo treasury | On-chain 1,000,077.994471 pathUSD = ledger, difference **0** |
-| Solana vault | On-chain 0.99402624 SOL = ledger, difference **0**, network fees and account rent booked |
-| Reconciliation | **59 / 59 matched** across Tempo, Solana, partner webhooks and Zcash |
+Alongside it, `checkInvariants()` re-verifies globally that every entry balances per asset and that the balance projection equals a full recompute from the postings. `pnpm stellar:payout` prints it at the end of every run.
 
-On mainnet, `pnpm mainnet:saga` opens a dedicated ledger with each vault's on-chain balance as the owner's float, then checks every vault (Tempo pathUSD and USDC.e, Base USDC and ETH, Solana USDC and SOL) against the ledger after each payout.
+## What this gives an auditor
 
-## The auditor's view
-
-Because the Zcash observer only needs a viewing key, an auditor can run it independently: import the vault's unified full viewing key into a view-only wallet, sync, and reconcile the payouts it sees against the ledger. The key reveals exactly one customer's period and cannot spend.
+Every booked movement names the transaction that caused it, the journal is append-only, and the reference ties a bank credit, an anchor order and a Stellar payment to the same payout. A reviewer can take any reference from the ledger, look it up on an explorer, and see the same amount.

@@ -19,7 +19,7 @@ read back 0.1 XLM with the same reference, decoded out of MEMO_HASH
 ledger 5241532 · 2026-10-17T10:00:47Z
 ```
 
-Reproduce it with `pnpm stellar:wallets && pnpm stellar:smoke`, then `pnpm stellar:payout` for the full saga. 110 tests cover the venue, the planner, the ledger, the saga and the SEP anchor adapter.
+Reproduce it with `pnpm stellar:wallets && pnpm stellar:smoke`, then `pnpm stellar:payout` for the full saga. For the SEP path against a server Corridor does not control, `./examples/anchor/up.sh` brings up Stellar's own Anchor Platform as a receiving SEP-31 anchor and the same payout runs against it. 128 tests cover the venue, the planner, the ledger, the saga and the SEP anchor adapter.
 
 Corridor's earlier prototype settled on Tempo, and paid ₦3,891.48 into a Nigerian bank account 74 seconds after 2.90 USDC.e left a vault on 11 October 2026. That build lives in its own repository; Stellar is Corridor's home from here.
 
@@ -65,16 +65,25 @@ Double-entry ledger ◀─────── observers (Horizon payments · anch
 
 Naira is the exception for now: no licensed naira anchor is live on Stellar, so it goes out over one CCTP hop to a partner that settles on Solana. Moving it back onto the hub is one line in the route graph.
 
-Architecture in depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Architecture in depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). What is built, what is left and what is being worked on this week: [docs/BUILD-PLAN.md](docs/BUILD-PLAN.md).
 
 ## Try it
 
 ```bash
 pnpm install
-pnpm test                 # 110 tests, no network
+pnpm test                 # 128 tests, no network
 pnpm stellar:wallets      # creates and funds two testnet vaults
 pnpm stellar:smoke        # a real payment, with the reference read back off the network
 pnpm stellar:payout       # the whole saga: route, reserve, fund the anchor, book it
+```
+
+Against a real SEP server, brought up locally (needs Docker):
+
+```bash
+./examples/anchor/up.sh
+CORRIDOR_ANCHOR_BASE_URL=http://localhost:8080 \
+CORRIDOR_ANCHOR_PLATFORM_URL=http://localhost:8085/ \
+CORRIDOR_PAYOUT_CURRENCY=USD pnpm stellar:payout
 ```
 
 Read-only mode against accounts you already run:
@@ -101,8 +110,8 @@ CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
 
 ## Status
 
-Built and tested: the Stellar venue, the reference in `MEMO_HASH`, the planner, the saga engine, the ledger, read-only reconciliation, and the SEP anchor adapter against a stubbed anchor.
+Built and tested: the Stellar venue, the reference in `MEMO_HASH`, the planner, the saga engine, the ledger, read-only reconciliation, and the SEP anchor adapter — which has run end to end against Stellar's own Anchor Platform, brought up locally as a receiving SEP-31 anchor.
 
-Not done yet: no anchor is signed, so no real local currency has moved on Stellar; SEP-6 collections are unimplemented; CCTP legs are declared in the route graph but not built; the MGUSD, PYUSD and USDT issuers are unset until each is verified against its own `stellar.toml`; the treasury console and the documentation site still describe the Tempo prototype.
+Not done yet: no anchor is signed, so no real local currency has moved on Stellar; SEP-6 collections are unimplemented; the `cctp.transfer` and `stellar.pathPayment` legs are declared in the route graph but not built; the MGUSD, PYUSD and USDT issuers are unset until each is verified against its own `stellar.toml`; there is no treasury console.
 
 MIT licensed.

@@ -1,34 +1,36 @@
 ---
-title: "Base: the bridge midpoint"
-description: "Base is the first stop out of the hub: the midpoint of every Tempo-to-Solana bridge, the venue for the mainnet shielded on-ramp, and ready for partners that settle on Base."
+title: "Base: an inflow source"
+description: "Base is where a customer's USDC may already sit. It reaches the hub over CCTP, and the watch-only observer reads it for a read-only pilot. Nothing settles here."
 icon: "circle"
 ---
 
 <img src="/images/chains/base.svg" alt="Base" width="56" height="56" />
 
-Base plays three roles in Corridor.
+Base is not part of the payout path. Anchors settle on Stellar, so a payout never passes through an EVM chain. Base appears for one reason: a customer may already hold USDC there.
 
-## 1. The bridge midpoint
+## Inflows
 
-Across has no direct Tempo ↔ Solana route, so every hub ↔ Solana movement is two hops through Base USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`). Between hops, the funds sit in the customer's own **relay wallet** on Base, signed through the customer's signer, so they are never in an unowned address and the ledger always knows where they are.
-
-## 2. Ready for Base-settling partners
-
-Today's naira partner, Paj, settles on **Solana only**, so naira payouts take both hops (Tempo → Base → Solana → Paj). The route graph already supports partners that pay out straight from Base USDC: listing a currency in `BASE_PAYOUT_CURRENCIES` adds a `partner.payout` edge from `base/USDC`, and the planner's cheapest-path search then picks the **one-hop** route automatically:
+USDC on Base reaches the hub over CCTP, which burns on Base and mints canonical USDC on Stellar, so no wrapped asset is ever credited:
 
 ```text
-ledger.reserve → across.bridge (Tempo → Base) → partner.payout (Base → local currency)
+cctp.transfer (Base → Stellar) → ledger.credit
 ```
 
-The list is empty until such a partner is live.
+The edge is in the route graph and the planner produces it; **the `cctp.transfer` leg is not built**. See [CCTP](/integrations/cctp).
 
-## 3. The mainnet shielded on-ramp
+## Read-only
 
-NEAR Intents has no Tempo market, so on mainnet a shielded batch leaves the hub on one Across hop to Base and swaps Base USDC → ZEC through NEAR Intents, delivered to the vault's unified address.
+`Erc20Watcher` reads USDC and EURC `Transfer` logs in and out of any address and emits the same `Observation` shape as every other observer. It needs only an address, so a [read-only pilot](/flows/read-only-pilot) can include a company's Base wallets alongside its Stellar accounts.
 
-```text
-ledger.reserve → across.bridge (Tempo → Base) → near.swap (Base USDC → ZEC) → zcash.shieldedBatch
-```
+Base has no memo field, so Base movements in read-only mode match by amount and counterparty rather than by reference. That gap is visible in the pilot's own output, and it is one of the arguments for settling where a reference can travel.
+
+## Signing
+
+The EVM side signs with secp256k1 rather than Ed25519, through the same signer interface: `awsKmsSigner` for AWS KMS, `turnkeySecp256k1Signer` for Turnkey, `localSecp256k1Signer` for development. See [Keys and signers](/architecture/keys-and-signers).
+
+## Precision
+
+USDC is 6 decimal places on Base and 7 on Stellar. `rescale` converts, and refuses any conversion that would drop value ([ADR 0012](/decisions/0012-seven-decimal-ledger)).
 
 ## Environments
 

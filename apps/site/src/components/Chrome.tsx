@@ -18,9 +18,9 @@ export function Nav() {
       </a>
       <div className="links">
         <a href="#how">How it works</a>
-        <a href="#shielded">Shielded</a>
+        <a href="#reconcile">Reconciliation</a>
         <a href="#economics">Economics</a>
-        <a href="./console/">Console</a>
+        <a href="https://corridor.udokaam.dev/status/evidence" target="_blank" rel="noreferrer">Evidence</a>
         <a href="https://corridor.udokaam.dev" target="_blank" rel="noreferrer">Docs</a>
       </div>
       <a className="btn primary sm" href="#access" data-hot>
@@ -120,10 +120,10 @@ export function Footer() {
   return (
     <footer className="footer">
       <div className="wrap">
-        <span>Corridor · software licensed payment companies run with their own keys. Corridor never holds customer funds.</span>
-        <a href="./console/">Live console</a>
+        <span>Corridor · software licensed payment companies run with their own keys. Corridor never holds customer funds, and is not endorsed by anyone.</span>
         <a href="https://corridor.udokaam.dev" target="_blank" rel="noreferrer">Docs</a>
-        <a href="https://tempo-solana-swap.pages.dev" target="_blank" rel="noreferrer">Tempo ⇌ Solana swap</a>
+        <a href="https://corridor.udokaam.dev/start/ten-minute-review" target="_blank" rel="noreferrer">Ten-minute review</a>
+        <a href="https://github.com/Udoka-AM/corridorHub" target="_blank" rel="noreferrer">Source</a>
         <span className="end">© 2026 Corridor</span>
       </div>
     </footer>

@@ -1,0 +1,32 @@
+---
+title: "ADR 0005: The confidential lane waits for Stellar confidential tokens"
+sidebarTitle: "0005 · Confidential lane deferred"
+description: "Importers have a real need to keep supplier prices off a public ledger, but no shielded venue is configured. The reference reserves a flag, the planner refuses shielded routes with that reason, and nothing pretends otherwise."
+---
+
+## Context
+
+An importer paying suppliers on a public ledger publishes its cost base: a competitor can read exactly what it pays each supplier. That is a real problem, and Corridor's earlier prototype answered it with a shielded venue on another chain, reached through a swap and controlled by threshold signatures.
+
+On Stellar the honest answer is different. Confidential tokens with auditor keys are the native path to the same property — amounts hidden from the public, readable by a scoped auditor key — and they are not something Corridor should reimplement beside the hub. Building a second settlement lane on another chain would mean a second set of books, a second failure mode and a second reconciliation problem, for a property the hub itself is heading towards.
+
+## Decision
+
+**The confidential lane is deferred, and the deferral is visible in the code rather than papered over.**
+
+- The reference reserves flag bit 0 for it, so a confidential payout will carry a reference of the same shape and version.
+- The planner and the ledger already carry the notion of a shielded venue, and `SHIELDED_VENUES` is an **empty set**.
+- `privacy: "shielded"` is refused, with that reason: *"no shielded venue is available: the confidential lane is not live yet"*.
+
+## Consequences
+
+- No shielded payout can be planned or booked today. Asking for one fails loudly at the planner rather than silently routing in the clear.
+- The route graph, the saga engine and the matcher need no change when a confidential venue arrives: it becomes a venue in `SHIELDED_VENUES` and a leg kind, exactly as the public ones are.
+- The `item` reference scope — one reference per recipient, so a batch's funding leg never reveals the individual payouts — is already in the planner and waiting for it.
+- Until then, the privacy Corridor does offer is narrower and should be described as such: the customer tag on a public memo is a keyed hash, so a public ledger carries no customer identity, but amounts and counterparties are visible.
+
+## Alternatives rejected
+
+- **Keep the prototype's shielded venue on another chain:** a second settlement system to reconcile, for a property the hub is adding natively.
+- **Ship a "private" flag that only omits data from Corridor's own reporting:** privacy theatre; the ledger is still public.
+- **Say nothing and leave the flag undocumented:** reviewers find the flag, and then wonder what else is aspirational.

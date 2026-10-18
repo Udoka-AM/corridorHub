@@ -51,16 +51,16 @@ Every import is a payment out of Africa, and every export a payment in. Corridor
 
 <CardGroup cols={2}>
   <Card title="A payments chain exists" icon="zap">
-    Tempo, incubated by Stripe and Paradigm, is built for stablecoin payments: memos on every transfer, gas paid in stablecoins, sub-second finality.
+    Stellar carries a 32-byte `MEMO_HASH` on every transaction, settles in seconds for fractions of a cent, and converts between issued assets on its own order books.
   </Card>
-  <Card title="Bridging is commoditised" icon="arrow-left-right">
-    Across moves USDC between Tempo, Base and Solana in seconds for fractions of a cent, so the hub is never isolated.
+  <Card title="The fiat spokes are already there" icon="arrow-left-right">
+    Anchors settle on Stellar itself, over the same SEPs, so a corridor is a home domain and an asset rather than an integration.
   </Card>
   <Card title="Ramps have APIs" icon="plug">
-    African ramp partners such as Paj expose business APIs with signed webhooks that settle on Solana.
+    Where no anchor serves a currency yet, licensed partners such as Paj expose business APIs with signed webhooks, behind the same interface.
   </Card>
-  <Card title="Privacy is production-grade" icon="shield">
-    Zcash's Ironwood pool, FROST threshold signing and scoped viewing keys make private supplier payments auditable.
+  <Card title="Custody is solvable" icon="shield">
+    KMS and MPC providers sign Ed25519, so a licensed company can route payouts without handing anyone its keys.
   </Card>
 </CardGroup>
 

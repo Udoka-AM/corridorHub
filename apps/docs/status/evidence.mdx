@@ -1,102 +1,153 @@
 ---
 title: "Evidence"
-description: "Every transaction behind Corridor's claims, starting with a live mainnet payout into a Nigerian bank account, linked to its block explorer."
+description: "Every transaction behind Corridor's claims: two Stellar testnet runs on 17 October 2026, both reproducible with one command, plus the prototype's live mainnet payout, labelled as the prototype's."
 icon: "file-check"
 ---
 
-Every claim in this documentation can be checked on-chain. The [console replay](https://corridorapp.udokaam.dev/console/) shows the same runs with live links; this page lists them in one place.
+Every claim in this documentation can be checked. This page lists what has actually run, with the transaction behind it and the command that reproduces it.
 
-## Live on mainnet
+<Warning>
+**Nothing has run on Stellar mainnet, and no anchor is signed**, so no real local currency has moved on Stellar. The runs below are on Stellar testnet with a mock anchor. The one run against real money is the prototype's, on Tempo, and it is labelled as such.
+</Warning>
 
-On 11 October 2026, Corridor moved real money end to end: **2.90 USDC.e on Tempo became ₦3,891.48 in a Nigerian bank account in 74 seconds**. It went Tempo to Base and Base to Solana through Across, then Paj paid out in naira. The payout was funded by the founder and paid into the founder's own account.
+## Stellar testnet
+
+Both runs on **17 October 2026**, on Stellar testnet, signed through the signer interface.
+
+### The reference survives a real transaction
+
+`pnpm stellar:smoke` sends a payment with a Corridor Reference as its `MEMO_HASH`, then asks Horizon for that account's payments and finds the movement again by its memo — the join reconciliation uses, with no indexer in the path.
+
+```text
+reference 0x020114290001a1494e71ec7073bfffc84d758d67d2c6cf255f57adc6fd6cb505
+sent 0.1 XLM   → stellar.expert/explorer/testnet/tx/175ad420…54781c
+read back 0.1 XLM with the same reference, decoded out of MEMO_HASH
+ledger 5241532 · 2026-10-17T10:00:47Z
+```
+
+| What | Result | Transaction |
+|---|---|---|
+| Payment carrying the reference in `MEMO_HASH`, read back off Horizon and decoded whole | Reference matched byte for byte; checksum valid | [175ad420…](https://stellar.expert/explorer/testnet/tx/175ad4206f85b279831178a5ad896da123105005f265fb5c798ae3d09254781c) |
+
+The reference decodes to version 2, kind payout, **EUR → KES**, public lane, payout id `01a1494e-71ec-7073-bfff-c84d758d67d2`, and a valid checksum. See [Corridor Reference](/architecture/corridor-reference#a-real-one-decoded).
+
+```bash
+pnpm stellar:wallets && pnpm stellar:smoke
+```
+
+### A whole payout through the saga engine
+
+`pnpm stellar:payout` plans a EUR → KES route, reserves the customer's balance, opens an anchor order, funds it exactly once with a real Stellar payment, books every movement double-entry, and prints the ledger invariants.
+
+| What | Result | Transaction |
+|---|---|---|
+| Route planned, balance reserved, order opened and funded exactly once, every movement booked | Saga `completed`; `checkInvariants()` clean; customer balance closed to zero | [ac025984…](https://stellar.expert/explorer/testnet/tx/ac025984a302d98edbb771bcf7f39f21fa83134938e10510e76d71ccba33bf89) |
+
+```bash
+pnpm stellar:payout
+```
+
+The funding payment carries **the anchor's own memo**, not the Corridor Reference — `memo_type: text`, `memo: mock-8313e798`, as Horizon reports it. That is the real SEP-31 shape: a receiving anchor assigns the memo, so the reference travels in the SEP-31 fields and the join key becomes `(anchor, transaction id)` ([ADR 0003](/decisions/0003-reference-in-memo-hash)). An [earlier run](https://stellar.expert/explorer/testnet/tx/88074bfac3cead1adeb75209cd9aa685bfda44589397b6990dbc92deccbdc10e) took the simpler path with the reference in `MEMO_HASH`; both paths are exercised.
+
+<Note>
+Both runs move **XLM**, because a funded testnet USDC trustline needs an issuer faucet. The USDC path is the same call with a different asset. The anchor in the payout run is `MockPartner` with `chains: ["STELLAR"]`: the route, the saga, the Stellar payment and every ledger entry are the real ones, and only the fiat side is simulated.
+</Note>
+
+### Against a real SEP server
+
+The hardest thing to show without a signed anchor is that the SEP path works against something Corridor does not control. `examples/anchor` brings up **Stellar's own Anchor Platform**, configured as a receiving SEP-31 anchor, and the same `pnpm stellar:payout` runs against it over the network.
+
+```bash
+./examples/anchor/up.sh
+CORRIDOR_ANCHOR_BASE_URL=http://localhost:8080 \
+CORRIDOR_ANCHOR_PLATFORM_URL=http://localhost:8085/ \
+CORRIDOR_PAYOUT_CURRENCY=USD pnpm stellar:payout
+```
+
+| Step | Result |
+|---|---|
+| SEP-1 | `stellar.toml` discovered over HTTP at a base URL that is not the home domain |
+| SEP-10 | The anchor's challenge **verified before the vault signed it**, and exchanged for a JWT |
+| SEP-38 | A firm quote: 7 `stellar:native` sold for `iso4217:USD` |
+| SEP-31 | Order opened with the quote, the beneficiary fields and the Corridor Reference; the anchor returned its receiving account and memo `13453` |
+| Funding | A real Stellar payment carrying **the anchor's `id` memo** — [`ecc31ac7…`](https://stellar.expert/explorer/testnet/tx/ecc31ac72a77ff5afbb211db2f41a2e96acf83200b484ff6bf87671337666c6e) |
+| The anchor's observer | The anchor saw the payment on-chain by itself and advanced the transaction |
+| Polling | SEP-31 has no webhook, so the saga polled `GET /transactions/{id}` to `completed` |
+| The books | `paid 1538 USD at 2.1978`; invariants clean; the customer's balance closed to zero |
+
+<Note>
+No local currency moved: the anchor is Stellar's reference implementation, run locally, and telling it the beneficiary was paid is a step a real anchor performs itself off its own rail. Everything on Corridor's side of the exchange is real, and nothing in the adapter is stubbed. See [`examples/anchor`](https://github.com/Udoka-AM/corridorHub/tree/main/examples/anchor).
+</Note>
+
+## The test suite
+
+| Measure | Value |
+|---|---|
+| Tests | **128 passing**, no network |
+| Stellar venue | 20 tests: the reference on a real transaction shape, issuer identity, the held-key signer, and the Horizon quirks that would otherwise lose every memo |
+| Routing | 11 tests: hub enforcement, every route shape, the shielded refusal, the off-Stellar list |
+| Reference codec | 12 tests: encode, decode, checksum, version rejection, currency pairs |
+| Ledger | 7 tests: balance per asset, no-overdraft, exactly-once external refs, append-only, global invariants |
+| Saga engine | 6 tests: compensation order, `manual_review`, lease fencing under a real race |
+| SEP anchor | 16 tests against a stubbed anchor: discovery over HTTPS or a given base URL, the challenge check, the quote, the funding method read from the anchor's own `/info`, the receiving account whether it arrives on the POST or the GET, both amount shapes, and the status mapping |
+| Anchor funding | 5 tests: the anchor's memo is carried, the reference is the fallback, and a retry after a crash finds the payment instead of paying twice |
+| Partners, webhooks, signers, recon | The rest |
+
+```bash
+pnpm test        # 128 tests
+pnpm typecheck   # tsc -b, clean
+```
+
+## Read-only reconciliation
+
+`pnpm watch:report` runs the same observers and matcher against Stellar accounts Corridor does not control, with no keys loaded:
+
+```bash
+CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
+```
+
+It is covered by five tests in `packages/recon/src/readonly.test.ts` — reference matching, heuristic matching, short, missing and unexpected — and has not been run against a design partner's production accounts, because there is no design partner yet.
+
+## The prototype, on Tempo
+
+Corridor's earlier prototype settled on **Tempo** and reached its payout rails through bespoke provider APIs. It is a different repository and a different build; its result is kept here because it is where the saga engine, the ledger and the reconciliation matcher were proven against real money.
+
+On **11 October 2026**, the prototype moved real money end to end: **2.90 USDC.e on Tempo became ₦3,891.48 in a Nigerian bank account in 74 seconds**. It went Tempo to Base and Base to Solana through Across, then Paj paid out in naira. The payout was funded by the founder and paid into the founder's own account.
 
 <CardGroup cols={3}>
   <Card title="74 seconds" icon="timer">
-    From the Tempo deposit (07:39:22 UTC) to the OPay credit (07:40:36 UTC).
+    From the deposit (07:39:22 UTC) to the bank credit (07:40:36 UTC).
   </Card>
   <Card title="₦3,891.48 credited" icon="landmark">
     Paj quoted ₦3,911.64 for 2.89 USDC at 1,350.74; ₦20.16 (0.5%) was deducted before delivery.
   </Card>
-  <Card title="Under 1¢ in gas" icon="fuel">
-    0.000362 pathUSD on Tempo and 0.000000996 ETH on Base. Across fees were under 1¢ across both hops.
+  <Card title="The reference in the narration" icon="fingerprint">
+    The bank statement line begins `JIT corridor0201` — the start of the same reference that was on the chain.
   </Card>
 </CardGroup>
 
 | Leg | Result | Transaction |
 |---|---|---|
-| Tempo USDC.e → Base USDC (Across) | 2.90 in, filled in about 1 s | [0x730f513c…](https://explore.tempo.xyz/tx/0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7) → fill [0xb399654d…](https://basescan.org/tx/0xb399654d2790dd247f1d4d4ae5f8e1d87a7e31dc564ca1ecb39e90486211dd34) |
-| Base USDC → Solana USDC (Across, CCTP) | Filled in the vault's own USDC account | [0xa2d52268…](https://basescan.org/tx/0xa2d52268288e288bdf13a253e51c72852b44001a8fa3561d40bb502e6e7e38ff) → fill [s6YKpCJ9…](https://solscan.io/tx/s6YKpCJ9rjTBcjfZRDw6WSttiq6cX4z8m8A3n7uk6HPyPKQ4NvfQLrMmV4UxcEnm1pnBB4Rqh48hkrxBmuAg6mx) |
-| Solana USDC → Paj order | 2.89 USDC to the order's deposit address, with the Corridor Reference in the Memo program | [4sWxGHfG…](https://solscan.io/tx/4sWxGHfGRoi18oHxRsrwyWevMQSeRtGkdD8ZDjfsoJKuWcBsr7Mv4P2PYTMHs36wgvk1KhAh3ZQNKZvx6UPYgUPw) |
-| Paj payout | Order `6acb3d5488922b136a79182a` COMPLETED | Bank credit: ₦3,891.48, narration `JIT corridor0201` |
+| Tempo USDC.e → Base USDC | 2.90 in, filled in about 1 s | [0x730f513c…](https://explore.tempo.xyz/tx/0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7) → fill [0xb399654d…](https://basescan.org/tx/0xb399654d2790dd247f1d4d4ae5f8e1d87a7e31dc564ca1ecb39e90486211dd34) |
+| Base USDC → Solana USDC | Filled in the vault's own USDC account | [0xa2d52268…](https://basescan.org/tx/0xa2d52268288e288bdf13a253e51c72852b44001a8fa3561d40bb502e6e7e38ff) → fill [s6YKpCJ9…](https://solscan.io/tx/s6YKpCJ9rjTBcjfZRDw6WSttiq6cX4z8m8A3n7uk6HPyPKQ4NvfQLrMmV4UxcEnm1pnBB4Rqh48hkrxBmuAg6mx) |
+| Solana USDC → payout order | 2.89 USDC to the order's deposit address, reference in the Memo program | [4sWxGHfG…](https://solscan.io/tx/4sWxGHfGRoi18oHxRsrwyWevMQSeRtGkdD8ZDjfsoJKuWcBsr7Mv4P2PYTMHs36wgvk1KhAh3ZQNKZvx6UPYgUPw) |
+| Payout | Order `6acb3d5488922b136a79182a` COMPLETED | Bank credit: ₦3,891.48, narration `JIT corridor0201` |
 
-The bank narration starts with the Corridor Reference: Paj echoes the order description into the transfer. So a line on a bank statement leads back to the same reference that's on the Solana transfer, `0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb84995221`. That reference decodes to a payout from EUR to NGN on the public lane, with payment id `01a129e6-df26-764e-ac2e-71fbadc2fb0d`.
+The reference was `0x020114280001a129e6df26764eac2e71fbadc2fb0d81d995c61e2bfb84995221`: a payout from EUR to NGN on the public lane, with payout id `01a129e6-df26-764e-ac2e-71fbadc2fb0d`. The public record is in `examples/mainnet/payouts.json`.
 
-How it ran: through `pnpm mainnet:run`, which checkpoints each step so a rerun never sends twice. The saga engine's mainnet legs run on the same adapters and are tested against this route, Across fees and Paj's rounding included; `pnpm mainnet:saga` runs them on a mainnet ledger whose vaults match the chain. The testnet results below show the engine and ledger moving real testnet funds. The public record is in `examples/mainnet/payouts.json`, and the [console replay](https://corridorapp.udokaam.dev/console/) shows it in the **Live on mainnet** panel.
+<Info>
+**What carries over and what does not.** The reference codec, the ledger, the saga engine, the partner interface and the reconciliation matcher are the same code, now on Stellar. The Tempo, Across, Zcash and NEAR packages were deleted rather than left dormant, and the prototype's treasury console was removed rather than left reporting a chain this build no longer settles on. Stellar is Corridor's home from here.
+</Info>
 
-## Testnet results
+## What is not evidenced
 
-<CardGroup cols={3}>
-  <Card title="59 / 59 reconciled" icon="check-check">
-    Every movement across Tempo, Solana, partner webhooks and the Zcash viewing-key scan matched to the ledger. Zero unbooked, zero unreferenced.
-  </Card>
-  <Card title="Every vault balanced" icon="scale">
-    Treasury on-chain **1,000,077.994471 pathUSD** = ledger; Solana vault on-chain **0.99402624 SOL** = ledger.
-  </Card>
-  <Card title="Costs booked from the chain" icon="fuel">
-    Tempo gas, Solana network fees and account rent, each booked to `expense` from the transaction that paid it.
-  </Card>
-</CardGroup>
+Stated here so nothing has to be inferred from an absence.
 
-## Tempo (Moderato testnet)
+- **No signed anchor**, so no real local currency has moved on Stellar. The SEP path has run against Stellar's own Anchor Platform locally, not against a licensed anchor.
+- **No mainnet run.** Code paths are identical; nothing has run on Stellar mainnet.
+- **No SEP-6 collection**, anywhere.
+- **No `cctp.transfer`**, so no Stellar → Solana movement has happened.
+- **No `stellar.pathPayment`**, so no on-ledger FX has run.
+- **No treasury console**, for Stellar.
 
-| Flow | Result | Transaction |
-|---|---|---|
-| Payout EUR → NGN, 2 pathUSD | Completed, partner funded on Solana devnet | [0x43e7f0ba…](https://explore.testnet.tempo.xyz/tx/0x43e7f0bac5488ac23adc9120c988f310f27b4f5ca17dca5bdc0497f8c2109e52) |
-| Payout EUR → NGN, 5 pathUSD | Completed | [0x218d2a96…](https://explore.testnet.tempo.xyz/tx/0x218d2a964c5e43ab741bd7a8b85e2f5cd37f2b9148c3c450228752c9efd5d1b1) |
-| Collection ₦1,560,000 → hub | Completed: 1,000 USDC credited | [0x100fde2c…](https://explore.testnet.tempo.xyz/tx/0x100fde2c5d68f4eeb38e1fb4993abae78960023c1a3ab3f6a2b96289901961b0) |
-| Payout NGN → CNY, 1,000 pathUSD | Completed: ¥7,140 to a Shenzhen supplier | [0x671161f6…](https://explore.testnet.tempo.xyz/tx/0x671161f61c70a0b5b33c6c8de4221c938d86c310958725146ea9f21517957b5e) |
-| Payout with forced partner failure | Compensated: refund in reverse order | [0xb13fd060…](https://explore.testnet.tempo.xyz/tx/0xb13fd06043c4647bbcdeb9e53313f02f845443e8ddcd17a57a468758a8ae229d) → refund [0x67790303…](https://explore.testnet.tempo.xyz/tx/0x6779030377fb90884212fa7f5d3acc681958856b7ce22406862f7d2e0940c944) |
-| Shielded batch funding | Treasury → swap venue, batch reference as memo | [0xbafdbde3…](https://explore.testnet.tempo.xyz/tx/0xbafdbde30386b736fb7151df338ebacc395843575704303fe5e438c17bb760a5) |
-
-The payout to Shenzhen carries the Corridor Reference `0x020128460001a0eb3fe7e57ca994eb596e7f87c87f33d74bd58688d853957c1f` in its `TransferWithMemo` log. It decodes to: version 2, kind payout, NGN → CNY, public lane, payment id `01a0eb3f-e7e5-7ca9-94eb-596e7f87c87f`, and a valid checksum. See [Corridor Reference](/architecture/corridor-reference).
-
-## Solana (devnet)
-
-| Flow | Result | Transaction |
-|---|---|---|
-| Partner funding for EUR → NGN payout | USDC transfer with `corridor:<ref>` in the Memo program logs | [nDGHfRgM…](https://explorer.solana.com/tx/nDGHfRgMgK1Xc8gjE3bqUvgfp5qP13HnP6nTtLQGBSqaLLtdDfg2nXYPEzbHfcwpYjv1xQFedMcRh3KkJyRZicH?cluster=devnet) |
-
-## Zcash (testnet, Ironwood pool)
-
-| Run | Result | Transaction |
-|---|---|---|
-| Single-key shielded batch | One transaction, 3 recipients, encrypted invoice memos; auditor matched 3/3 | [de5d2562…](https://testnet.zcashexplorer.app/transactions/de5d25625a372d6d79d0b071f0727cdcf8a8718c48d69057fd060825c09d4a7b) |
-| FROST 2-of-3 batch | Signer 2 alone refused; signers 1 + 3 co-signed; 3 recipients | [878b44b8…](https://testnet.zcashexplorer.app/transactions/878b44b81d518e5d5333f9d21e5f4d6017c6ce16afbdf484eb7a038b7edd355c) |
-| NEAR Intents delivery into the FROST vault | Real testnet ZEC, sized from a live mainnet quote | [1f05d641…](https://testnet.zcashexplorer.app/transactions/1f05d6415ad694bdc3ecffc06ef57eb9b859b2fbc1c5724601faf5bf806ee720) |
-| Shielded supplier batch through the saga engine | Held at 1 approval; co-signed by signers 1 + 3; $15 to 3 suppliers | [ba4e845b…](https://testnet.zcashexplorer.app/transactions/ba4e845b81b7d6faf350fd01cf967d9d35d717d5bc3eb455eb48ee945b3c38c7) |
-
-The auditor disclosure in the console replay exports the FROST vault's unified full viewing key, so anyone can import it into a view-only wallet and see exactly those three supplier payouts, and nothing else from the treasury.
-
-## Across
-
-| Run | Result | Transaction |
-|---|---|---|
-| Live mainnet run, Tempo → Base → Solana (11 Oct 2026) | Both hops filled; see [Live on mainnet](#live-on-mainnet) | [0x730f513c…](https://explore.tempo.xyz/tx/0x730f513c548447b043d420f2460a96e19aa01b6d17e451e922ded4bf87183be7) |
-| Live testnet deposit, Base Sepolia → Solana devnet | USDC burned and attested by Circle CCTP v2; final mint restricted to Across's testnet relayer, which had not executed | [0x782d8b52…](https://sepolia.basescan.org/tx/0x782d8b52d1278892e5215a7a72bf731fa0e205a9274f38f99e0bcb9992c76e02) |
-
-## Customer-held keys and read-only reconciliation
-
-| Run | Result | Transaction |
-|---|---|---|
-| Tempo transfer signed through `@corridor/signer` (3 Oct 2026) | The account built by `tempoAccount(localSecp256k1Signer(...))` signs a real Moderato transfer; the KMS adapter produces the same address in tests | [0x0c2b2a85…](https://explore.testnet.tempo.xyz/tx/0x0c2b2a85dc748b99afbbae03bba018184207075fae89e8a4643fd7bd0ec2e117) |
-| Payout with every vault on the signer interface (9 Oct 2026) | Tempo treasury and escrow, and Solana devnet funding, all signed through `@corridor/signer`; reconciliation 52/52; treasury on-chain = ledger exactly | [Solana 2CnGSGDg…](https://explorer.solana.com/tx/2CnGSGDg7hppHZJBu88TvMdtFiKKzTX6BugXQoPqDqoKtwbRBtsFj8pSZTZ47FYTJ3h5tvwcm9bJPoKXkePADKCJ?cluster=devnet) |
-| Solana vault accounting from the chain (9 Oct 2026) | 1 SOL faucet funding, 4 network fees (0.00002 SOL) and 4 account-rent payments (0.00595376 SOL) booked; Solana vault on-chain 0.99402624 SOL = ledger; Tempo treasury still balanced | Replay console, reconciliation panel |
-| `pnpm watch:report` on the sample customer's wallets (3 Oct 2026) | 22 stablecoin movements observed on Tempo, Solana and Base; 8 sample records: 6 matched, 1 short, 1 missing, 15 unrecorded | Read-only, nothing moved |
-
-## Code
-
-| Measure | Value |
-|---|---|
-| TypeScript tests | 107 passing |
-| Rust tests (`corridor-frost`) | 3 passing: any 2 of 3 verify under `rk`, 1 of 3 fails, keygen yields a valid Ironwood viewing key and address |
-| License | MIT |
+See [Roadmap](/status/roadmap) for what would change each of those.

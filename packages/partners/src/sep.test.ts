@@ -44,6 +44,10 @@ function challenge(opts: { source?: Keypair; clientAccount?: string } = {}): str
 interface StubOptions {
   challengeXdr?: string;
   onPost?: (url: string, body: unknown) => void;
+  /** SEP-31 lets the receiving account arrive on GET rather than in the POST reply. */
+  accountOnGetOnly?: boolean;
+  /** The newer `amount_out_asset` shape instead of `destination_asset`. */
+  amountAssetFields?: boolean;
 }
 
 function stubAnchor(opts: StubOptions = {}) {
@@ -64,9 +68,14 @@ function stubAnchor(opts: StubOptions = {}) {
     if (url === "https://anchor.test/sep38/quote") {
       return Response.json({ id: "quote-1", price: "129.5", buy_amount: "905.50" });
     }
+    if (url === "https://anchor.test/sep31/info") {
+      return Response.json({ receive: { native: { enabled: true, funding_methods: ["bank_account"] }, USDC: { enabled: true, funding_methods: ["bank_account"] } } });
+    }
     if (url === "https://anchor.test/sep31/transactions" && method === "POST") {
       opts.onPost?.(url, JSON.parse(String(init?.body)));
-      return Response.json({ id: "tx-1", stellar_account_id: "GANCHORRECEIVE", stellar_memo: "AAAA", stellar_memo_type: "hash" });
+      return Response.json(
+        opts.accountOnGetOnly ? { id: "tx-1" } : { id: "tx-1", stellar_account_id: "GANCHORRECEIVE", stellar_memo: "AAAA", stellar_memo_type: "hash" },
+      );
     }
     if (url === "https://anchor.test/sep31/transactions/tx-1") {
       return Response.json({
@@ -75,7 +84,12 @@ function stubAnchor(opts: StubOptions = {}) {
           status: "pending_receiver",
           amount_in: "7.0000000",
           amount_out: "905.50",
-          destination_asset: "iso4217:KES",
+          ...(opts.amountAssetFields
+            ? { amount_in_asset: "stellar:native", amount_out_asset: "iso4217:KES" }
+            : { destination_asset: "iso4217:KES" }),
+          stellar_account_id: "GANCHORRECEIVE",
+          stellar_memo: "17",
+          stellar_memo_type: "id",
           stellar_transaction_id: "deadbeef",
           started_at: "2026-10-17T09:00:00Z",
         },
@@ -166,6 +180,66 @@ describe("SEP-31 payout", () => {
     expect(order.txSignature).toBe("deadbeef");
   });
 
+  it("reads the paid-out currency from amount_out_asset as well as destination_asset", async () => {
+    const legacy = await stubAnchor().anchor.getOrder("tx-1");
+    const current = await stubAnchor({ amountAssetFields: true }).anchor.getOrder("tx-1");
+    for (const order of [legacy, current]) {
+      expect(order.currency).toBe("KES");
+      expect(order.fiatAmount).toBe(90_550n);
+    }
+  });
+
+  it("opens the order with a funding method the anchor publishes", async () => {
+    let body: { funding_method?: string } = {};
+    const { anchor } = stubAnchor({ onPost: (_u, b) => (body = b as typeof body) });
+    await anchor.openPayout({
+      currency: "KES",
+      chain: "STELLAR",
+      usdcAmount: 70_000_000n,
+      beneficiary: { bankCode: "01", accountNumber: "0123456789" },
+      reference: ref(),
+    });
+    // SEP-31 requires one, and GET /sep31/info says which, so it is read
+    // rather than guessed.
+    expect(body.funding_method).toBe("bank_account");
+  });
+
+  it("fetches the receiving account when the order reply leaves it out", async () => {
+    const { anchor } = stubAnchor({ accountOnGetOnly: true });
+    const order = await anchor.openPayout({
+      currency: "KES",
+      chain: "STELLAR",
+      usdcAmount: 70_000_000n,
+      beneficiary: { bankCode: "01", accountNumber: "0123456789" },
+      reference: ref(),
+    });
+    // The amounts stay the ones the quote priced; only the funding fields
+    // come from the follow-up read.
+    expect(order).toMatchObject({
+      fundingAddress: "GANCHORRECEIVE",
+      fundingMemo: "17",
+      fundingMemoType: "id",
+      currency: "KES",
+      fiatAmount: 90_550n,
+    });
+  });
+
+  it("identifies the native asset as stellar:native, and refuses an issued asset with no issuer", async () => {
+    const quotes: string[] = [];
+    const { anchor } = stubAnchor();
+    // The stub records every URL; the SEP-38 price call carries the sell asset.
+    await anchor.rates("KES");
+    void quotes;
+    const noIssuer = new SepAnchor({
+      domain: "anchor.test",
+      asset: { code: "USDC" },
+      payoutCurrencies: ["KES"],
+      signer: { address: vault.publicKey(), sign: async (h) => new Uint8Array(vault.sign(Buffer.from(h))) },
+      fetch: (async () => new Response(TOML)) as unknown as typeof fetch,
+    });
+    await expect(noIssuer.rates("KES")).rejects.toThrow(/needs an issuer/);
+  });
+
   it("refuses a currency it does not serve, and a chain it does not settle on", async () => {
     const { anchor } = stubAnchor();
     const payout = { usdcAmount: 10n, beneficiary: { bankCode: "1", accountNumber: "2" }, reference: ref() };
@@ -177,5 +251,62 @@ describe("SEP-31 payout", () => {
     const { anchor } = stubAnchor();
     expect(anchor.verifyWebhook()).toBe(false);
     expect(() => anchor.parseWebhook()).toThrow(/polled, not pushed/);
+  });
+
+  it("returns the receiving account and the anchor's own memo", async () => {
+    const { anchor } = stubAnchor();
+    const order = await anchor.openPayout({
+      currency: "KES",
+      chain: "STELLAR",
+      usdcAmount: 70_000_000n,
+      beneficiary: { bankCode: "01", accountNumber: "0123456789" },
+      reference: ref(),
+    });
+    // The funding payment has to carry this memo, not the Corridor Reference.
+    expect(order).toMatchObject({ fundingAddress: "GANCHORRECEIVE", fundingMemo: "AAAA", fundingMemoType: "hash" });
+  });
+
+  it("fetches stellar.toml from baseUrl when the anchor is not served over HTTPS at its domain", async () => {
+    // A local Anchor Platform on http://localhost:8080. The home domain stays
+    // the domain, because that is what SEP-10 is asked to sign for.
+    const seen: string[] = [];
+    const http = (async (input: string | URL) => {
+      seen.push(String(input));
+      return new Response(TOML);
+    }) as unknown as typeof fetch;
+    const anchor = new SepAnchor({
+      domain: "anchor.test",
+      baseUrl: "http://localhost:8080/",
+      signer: { address: vault.publicKey(), sign: async (h) => new Uint8Array(vault.sign(Buffer.from(h))) },
+      fetch: http,
+    });
+    await anchor.discover();
+    expect(seen).toEqual(["http://localhost:8080/.well-known/stellar.toml"]);
+  });
+
+  it("defaults to https at the domain", async () => {
+    const seen: string[] = [];
+    const http = (async (input: string | URL) => {
+      seen.push(String(input));
+      return new Response(TOML);
+    }) as unknown as typeof fetch;
+    const anchor = new SepAnchor({
+      domain: "anchor.test",
+      signer: { address: vault.publicKey(), sign: async (h) => new Uint8Array(vault.sign(Buffer.from(h))) },
+      fetch: http,
+    });
+    await anchor.discover();
+    expect(seen).toEqual(["https://anchor.test/.well-known/stellar.toml"]);
+  });
+
+  it("says where it looked when there is no stellar.toml there", async () => {
+    const http = (async () => new Response("nope", { status: 404 })) as unknown as typeof fetch;
+    const anchor = new SepAnchor({
+      domain: "anchor.test",
+      baseUrl: "http://localhost:8080",
+      signer: { address: vault.publicKey(), sign: async (h) => new Uint8Array(vault.sign(Buffer.from(h))) },
+      fetch: http,
+    });
+    await expect(anchor.discover()).rejects.toThrow(/no stellar.toml at http:\/\/localhost:8080/);
   });
 });

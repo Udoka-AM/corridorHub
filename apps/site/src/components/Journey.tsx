@@ -3,30 +3,47 @@ import { DESKTOP_MOTION, EASE, Words, gsap, useGSAP } from "../motion";
 import { ChainMark } from "./Chains";
 
 /**
- * The signature: the real 32-byte Corridor Reference from the testnet payout
- * that paid Shenzhen Brightline ¥7,140, read off its Tempo memo. As the
- * payment travels, the reference decodes one field at a time.
+ * The signature: the real 32-byte Corridor Reference from the Stellar testnet
+ * run of 17 Oct 2026, read back out of the transaction's MEMO_HASH. As the
+ * payout moves, the reference decodes one field at a time.
  */
 const FIELDS = [
   { hex: "02", label: "version 2" },
   { hex: "01", label: "kind · payout" },
-  { hex: "28", label: "from · NGN" },
-  { hex: "46", label: "to · CNY" },
+  { hex: "14", label: "from · EUR" },
+  { hex: "29", label: "to · KES" },
   { hex: "00", label: "flags · public lane" },
-  { hex: "01a0eb3fe7e57ca994eb596e7f87c87f", label: "payment id · UUIDv7" },
-  { hex: "33d74bd58688d8", label: "customer tag · keyed hash, no PII on-chain" },
-  { hex: "53957c1f", label: "checksum · verified" },
+  { hex: "01a1494e71ec7073bfffc84d758d67d2", label: "payout id · UUIDv7" },
+  { hex: "c6cf255f57adc6", label: "customer tag · keyed hash, no PII on the ledger" },
+  { hex: "fd6cb505", label: "checksum · verified" },
 ];
 const REF = FIELDS.map((f) => f.hex).join("");
 
 const STAGES: { step: string; fields: number[]; caption: string }[] = [
-  { step: "Collect", fields: [0, 1, 2, 3, 4], caption: "Corridor and lane, encoded in the first five bytes" },
-  { step: "Settle", fields: [5], caption: "One id from quote to closed books" },
-  { step: "Route", fields: [6], caption: "Which customer, without naming them on a public chain" },
-  { step: "Pay out", fields: [7], caption: "Chain, partner and ledger matched three ways" },
+  { step: "Reserve", fields: [0, 1, 2, 3, 4], caption: "Corridor and lane, encoded in the first five bytes" },
+  { step: "Settle", fields: [5], caption: "One id from the firm quote to closed books" },
+  { step: "Pay out", fields: [6], caption: "Which customer, without naming them on a public ledger" },
+  { step: "Reconcile", fields: [7], caption: "Horizon, the anchor and the ledger matched three ways" },
 ];
 
 const SCRAMBLE = "0123456789abcdef";
+
+/** Lucide "plug" and "landmark", drawn in the page's single ink. */
+function AnchorMark(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M12 22v-5M9 8V2M15 8V2M18 8v4a6 6 0 0 1-6 6 6 6 0 0 1-6-6V8Z" />
+    </svg>
+  );
+}
+
+function BankMark(props: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M3 22h18M6 18v-7M10 18v-7M14 18v-7M18 18v-7M12 2l9 5H3l9-5Z" />
+    </svg>
+  );
+}
 
 function MemoRain() {
   const text = useRef(Array.from({ length: 18 }, () => REF).join(" "));
@@ -122,49 +139,49 @@ export default function Journey() {
           <article className={`panel${stage >= 0 ? " lit" : ""}`}>
             <div>
               <span className="step">01 · {STAGES[0]!.step}</span>
-              <div className="figure tnum">₦1,560,000</div>
-              <p className="cap">Naira from an importer in Lagos, collected through a licensed ramp.</p>
+              <div className="figure tnum">7 USDC</div>
+              <p className="cap">Held out of the customer&rsquo;s own balance on the Stellar hub, so it cannot be spent twice.</p>
             </div>
             <div className="visual">
               <svg className="mark" viewBox="0 0 200 200" aria-hidden="true">
                 <circle cx="100" cy="100" r="92" fill="none" stroke="currentColor" strokeOpacity=".25" />
                 <circle cx="100" cy="100" r="64" fill="none" stroke="currentColor" strokeDasharray="4 6" />
-                <text x="100" y="128" textAnchor="middle" fontSize="84" fontWeight="700" fill="currentColor" fontFamily="Space Mono">₦</text>
+                <text x="100" y="128" textAnchor="middle" fontSize="84" fontWeight="700" fill="currentColor" fontFamily="Space Mono">€</text>
               </svg>
             </div>
           </article>
           <article className={`panel${stage >= 1 ? " lit" : ""}`}>
             <div>
               <span className="step">02 · {STAGES[1]!.step}</span>
-              <div className="figure tnum">0.6 s</div>
-              <p className="cap">1,000 pathUSD settles on Tempo, the reference in its memo.</p>
+              <div className="figure">MEMO_HASH</div>
+              <p className="cap">One payment to the anchor. The reference is 32 bytes and so is the memo, so it travels whole.</p>
             </div>
             <div className="visual">
               <MemoRain />
-              <ChainMark name="Tempo" className="mark" />
+              <ChainMark name="Stellar" className="mark" />
             </div>
           </article>
           <article className={`panel${stage >= 2 ? " lit" : ""}`}>
             <div>
               <span className="step">03 · {STAGES[2]!.step}</span>
-              <div className="figure">Hub → spoke</div>
-              <p className="cap">Bridged to the chain where the local partner settles.</p>
+              <div className="figure">SEP-31</div>
+              <p className="cap">The anchor settles on the hub itself, so nothing stands between the balance and the beneficiary.</p>
             </div>
             <div className="visual">
               <div className="routeviz" aria-hidden="true">
-                <ChainMark name="Tempo" className="chain" />
+                <ChainMark name="Stellar" className="chain" />
                 <span className="wire" />
-                <ChainMark name="Base" className="chain" />
+                <AnchorMark className="chain" />
                 <span className="wire" />
-                <ChainMark name="Solana" className="chain" />
+                <BankMark className="chain" />
               </div>
             </div>
           </article>
           <article className={`panel${stage >= 3 ? " lit" : ""}`}>
             <div>
               <span className="step">04 · {STAGES[3]!.step}</span>
-              <div className="figure tnum">¥7,140</div>
-              <p className="cap">Paid to a supplier in Shenzhen. Books closed by reference.</p>
+              <div className="figure">no indexer</div>
+              <p className="cap">Read back off the account&rsquo;s own payment stream and booked. A join, not an index.</p>
             </div>
             <div className="visual">
               <svg className="mark check" viewBox="0 0 200 200" aria-hidden="true">

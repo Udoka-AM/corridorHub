@@ -1,10 +1,10 @@
 ---
 title: "Ledger"
-description: "A double-entry, append-only journal on Postgres: postings balance per asset, no-overdraft accounts cannot go negative, and every external movement is booked exactly once."
+description: "A double-entry, append-only journal on Postgres at Stellar's own 7 decimal places: postings balance per asset, no-overdraft accounts cannot go negative, and every external movement is booked exactly once."
 icon: "book-open"
 ---
 
-The ledger (`@corridor/ledger`) is the system of record. Chains and partners are evidence; the ledger is what Corridor says happened, and reconciliation proves the two agree.
+The ledger (`@corridor/ledger`) is the system of record. The chain and the anchors are evidence; the ledger is what Corridor says happened, and reconciliation proves the two agree.
 
 ## Accounts
 
@@ -13,22 +13,26 @@ An account is identified by its type and owner, scoped by corridor, asset and ve
 ```text
 {type}:{ownerType}:{ownerId}:{corridor | *}:{asset}:{venue}
 
-liability:customer:adeola-imports:NGN-CNY:pathUSD:tempo
-asset:vault:treasury:*:pathUSD:tempo
+liability:customer:eu-payco:EUR-KES:USDC:stellar
+asset:vault:treasury:*:USDC:stellar
 clearing:clearing:usd-peg:*:USDC:solana
-expense:expense:gas:*:pathUSD:tempo
+expense:expense:gas:*:XLM:stellar
 ```
 
 | Type | Natural balance | Used for |
 |---|---|---|
-| `asset` | Debit | Vaults: real funds Corridor controls on a venue (treasury, Solana egress/ingress, Zcash vaults) |
-| `liability` | Credit | What Corridor owes customers: available balance and funds held for in-flight payouts |
-| `clearing` | Debit | Conversions between assets (pathUSD ↔ USDC, USD ↔ ZEC). Each pair nets to zero over time |
+| `asset` | Debit | Vaults: real funds Corridor controls on a venue (the Stellar treasury, the spoke egress and ingress vaults) |
+| `liability` | Credit | What Corridor owes customers: available balance (`customer`) and funds held for an in-flight payout (`customer_hold`) |
+| `clearing` | Debit | Conversions between assets and between venues. Each pair nets to zero over a flow |
 | `revenue` | Credit | Fees earned |
-| `expense` | Debit | Costs borne: network gas, Zcash fees |
-| `equity` | Credit | Owner funding: gas float, testnet faucet mints |
+| `expense` | Debit | Costs borne: XLM network fees, sponsored reserves |
+| `equity` | Credit | Owner funding: fee float, Friendbot funding on testnet |
 
 Named helpers (`Accounts.customer`, `.customerHold`, `.vault`, `.clearing`, `.revenue`, `.expense`, `.equity`) open accounts on first use, so legs never build account ids by hand.
+
+## Precision
+
+Every amount is an integer count of minor units, and the digital assets are kept at **7 decimal places — Stellar's own precision**. Converting a Horizon decimal string into the ledger is formatting, never rounding, so a vault's on-chain balance can equal the ledger exactly. Spokes with fewer decimals convert through `rescale`, which refuses any conversion that would drop value. See [ADR 0012](/decisions/0012-seven-decimal-ledger).
 
 ## Invariants
 
@@ -37,17 +41,17 @@ Named helpers (`Accounts.customer`, `.customerHold`, `.vault`, `.clearing`, `.re
     The sum of debits equals the sum of credits **for each asset** in an entry. Checked before any write; an unbalanced entry never reaches the database.
   </Card>
   <Card title="No overdraft where it matters" icon="shield-check">
-    Vaults and customer balances are flagged `no_overdraft`. After applying postings, the natural balance of each such account is checked inside the same transaction, which rolls back on violation.
+    Vaults, customer balances and holds are flagged `no_overdraft`. After applying postings, the natural balance of each such account is checked inside the same transaction, which rolls back on violation.
   </Card>
   <Card title="Exactly once per external movement" icon="fingerprint">
-    `unique (external_venue, external_ref)` on journal entries. A Tempo log, a Solana signature or a partner order id can be booked once; a second attempt returns the original entry as a duplicate.
+    `unique (external_venue, external_ref)` on journal entries. A Stellar payment, an anchor order or a Solana signature can be booked once; a second attempt returns the original entry as a duplicate.
   </Card>
   <Card title="Append-only" icon="lock">
     Database triggers reject `UPDATE` and `DELETE` on the journal and postings. Mistakes are corrected with reversing entries, so the history is never rewritten.
   </Card>
 </CardGroup>
 
-`checkInvariants()` re-verifies globally (every entry balances per asset; the balance projection equals a full recompute from postings) and runs in tests and on demand.
+`checkInvariants()` re-verifies globally — every entry balances per asset, and the balance projection equals a full recompute from postings — and runs in tests, at the end of `pnpm stellar:payout`, and on demand.
 
 ## Schema
 
@@ -56,7 +60,7 @@ accounts        (id, type, owner_type, owner_id, corridor, asset, venue, no_over
 journal_entries (id, kind, saga_id, reference, external_venue, external_ref, metadata,
                  unique (external_venue, external_ref))
 postings        (entry_id, account_id, asset, direction 'D'|'C', amount numeric(78,0) > 0)
-balances        (account_id, asset, debits, credits)   -- projection, updated in the same transaction
+balances        (account_id, asset, debits, credits)   -- projection, same transaction
 ```
 
 Amounts are `numeric(78,0)` integer minor units, wide enough for any 256-bit on-chain amount. Balance rows are locked in a stable order before posting, so concurrent writers cannot deadlock.
@@ -68,17 +72,25 @@ await ledger.post({
   kind: "partner.payout",
   reference: d.reference,               // the Corridor Reference
   sagaId: ctx.sagaId,
-  external: { venue: "partner_fiat", ref: `paj:${orderId}` },
+  external: { venue: "partner_fiat", ref: `${anchor}:${orderId}` },
   lines: [
-    { account: hold,      direction: "D", money: money("pathUSD", 5_000_000n) },
-    { account: pegTempo,  direction: "C", money: money("pathUSD", 5_000_000n) },
-    { account: pegSolana, direction: "D", money: money("USDC",    5_000_000n) },
-    { account: egress,    direction: "C", money: money("USDC",    5_000_000n) },
+    { account: hold,     direction: "D", money: money("USDC", 70_000_000n) },
+    { account: treasury, direction: "C", money: money("USDC", 70_000_000n) },
   ],
 });
 ```
 
-Two assets, each balanced: the customer's hold is released against the pathUSD side of the peg, and the Solana egress vault is credited against the USDC side. The `usd-peg` clearing pair nets to zero across a flow, and the console shows it doing so.
+Seven USDC at the hub's 7 decimal places: the customer's hold is released and the treasury vault is credited out, keyed by the anchor's order so it can only be booked once.
+
+An entry can carry several assets, each balanced in its own: a conversion from EURC into USDC debits and credits both sides through a `clearing` pair, which nets to zero across the flow.
+
+## Reconciliation needs to know which side moved
+
+```ts
+entryTotal(..., { excludeLiabilities: true })
+```
+
+Now that the hub and its spokes settle in the same asset, a payout debits the customer's hold in USDC *and* moves USDC on the chain — and only the second is what an observer saw. `excludeLiabilities` gives the movement across Corridor's own positions, which is the number to compare with the chain.
 
 ## Storage
 

@@ -1,57 +1,73 @@
 ---
 title: "Failure and compensation"
-description: "A partner fails mid-payout. The saga undoes every completed step in reverse order, including a real on-chain refund on Tempo, and the customer ends exactly where they started."
+description: "An anchor fails mid-payout. The saga undoes every completed step in reverse order; after funding it stops for a person instead. What matters is where the money is afterwards, and whether the books say so."
 icon: "undo-2"
 ---
 
-Payments fail. What matters is where the money is afterwards, and whether the books say so. This walkthrough is the console action **Payout with partner failure**, which injects a failure at `partner.payout` (`faults.failAt`). It ran three times on testnet; each run compensated cleanly.
+Payments fail. What matters is where the money is afterwards, and whether the books say so.
 
-## The run
-
-EUR → NGN, 4 pathUSD, recorded on 29 September 2026:
-
-<Frame caption="Fig. 07 · Forward legs, a failure at the partner, and compensation in reverse order with an on-chain refund.">
+<Frame caption="Fig. 07 · Forward legs, a failure at the anchor, and compensation in reverse order with an on-chain refund on Stellar.">
   <img className="block dark:hidden" src="/images/diagrams/saga-compensation-light.svg" alt="Saga forward steps and reverse compensation" />
   <img className="hidden dark:block" src="/images/diagrams/saga-compensation-dark.svg" alt="Saga forward steps and reverse compensation" />
 </Frame>
 
-```mermaid
-sequenceDiagram
-  participant S as Saga
-  participant L as Ledger
-  participant T as Tempo
-  S->>L: reserve 4 pathUSD (available → hold)
-  S->>T: bridge out: treasury → escrow, reference memo
-  S->>L: book bridge.deposit + bridge.fill
-  S--xS: partner.payout fails (injected)
-  Note over S: compensate in reverse order
-  S->>T: refund: escrow → treasury, same reference memo
-  S->>L: book bridge.unfill + bridge.refund
-  S->>L: release hold (hold → available)
-  Note over S: status: compensated
+## Two failures, two answers
+
+| When it fails | What the saga does | Why |
+|---|---|---|
+| **Before money leaves Corridor's control** | Compensates every completed step, last to first, and ends `compensated` | Each earlier state can be truthfully undone |
+| **After the anchor was funded** | Throws `ManualReviewError`: no retries, no automatic compensation, status `manual_review` | The money is at the anchor. Reversing Corridor's books before its refund is confirmed would describe a sequence that never happened |
+
+## The common path barely has a middle
+
+On a route with an anchor on the hub — `ledger.reserve → partner.payout` — there is only one place a failure can land before money moves: the anchor refusing the order. The hold is released, and the customer ends exactly where they started.
+
+```sql
+-- after a refused order
+saga_steps: ledger.reserve = compensated, partner.payout = failed
+sagas:      status = compensated
 ```
+
+That is a consequence of settling where the anchors are: fewer legs means fewer intermediate states to unwind.
+
+## A route with a leg off the hub
+
+The naira corridor leaves the hub, so it has a middle. On testnet that leg is `bridge.simulated`, whose **Stellar side is real**:
 
 | Step | Forward | Compensation |
 |---|---|---|
-| `ledger.reserve` | Available → hold | Hold → available (`payout.release`) |
-| `bridge.simulated` | Treasury → escrow on Tempo ([0xb13fd060…](https://explore.testnet.tempo.xyz/tx/0xb13fd06043c4647bbcdeb9e53313f02f845443e8ddcd17a57a468758a8ae229d)) | Escrow → treasury refund ([0x67790303…](https://explore.testnet.tempo.xyz/tx/0x6779030377fb90884212fa7f5d3acc681958856b7ce22406862f7d2e0940c944)) |
+| `ledger.reserve` | Available → hold | Hold → available |
+| `bridge.simulated` | Treasury → escrow on Stellar, reference as `MEMO_HASH`; the far side booked `simulated: true` | Escrow → treasury on Stellar with the same reference; books `bridge.unfill` and `bridge.refund` |
 | `partner.payout` | **Failed** | Nothing to undo |
+
+Both Stellar movements carry the payout's reference, so reconciliation matches the forward entry and the refund to the same payout.
 
 ## Why reverse order
 
-Compensations run from the last completed step to the first. Unwinding the hold before the bridge refund would let the customer's balance show funds that are still in the escrow, and the ledger would balance while describing a sequence that never happened. In reverse order, every intermediate state is one that really existed.
+Compensations run from the last completed step to the first. Unwinding the hold before the refund would let the customer's balance show funds that are still in the escrow, and the ledger would balance while describing a sequence that never happened. In reverse order, every intermediate state is one that really existed.
 
-## When not to compensate
+A test asserts exactly this, with a three-step saga and a forced failure:
 
-If the partner fails **after** it was funded, the money is at the partner, not with Corridor. Reversing Corridor's books at that point would be wrong until the partner's refund is confirmed, so the payout leg throws `ManualReviewError`: no retries, no automatic compensation, and the saga waits in `manual_review` for a person to close it against the partner's refund.
+```ts
+expect(await engine.run(id)).toBe("compensated");
+expect(view.steps.map((s) => s.status)).toEqual(["compensated", "compensated", "failed"]);
+```
+
+## Retries that do not pay twice
+
+Every leg records its external side effect before it waits on it, and a leg that moves money asks Horizon first whether an identical movement — same memo, parties, amount and asset — already landed. A crash between "sent" and "recorded" therefore resumes rather than repeats.
+
+Separately, every commit checks the saga's **fencing token**. A worker that stalls inside a leg, loses its lease and wakes up later is refused at its next commit with `StaleLeaseError`, writes nothing, and returns the saga's real status. A test runs that race — a stalled worker while a second worker completes the saga — and checks that only one booking exists; with fencing disabled the same test finds two.
 
 ## The result
 
-| | Before | After |
+| | Before | After a pre-funding failure |
 |---|---|---|
 | Customer available | X | X |
 | Customer hold | 0 | 0 |
-| Treasury vault on Tempo | Y | Y (refund received) |
+| Treasury vault on Stellar | Y | Y (refund received, where a leg had moved value) |
 | Saga status | | `compensated` |
 
-The Tempo deposit and its refund both carry the payout's reference, so reconciliation matches both movements to the forward and compensating entries.
+<Note>
+Compensation is proven by the saga engine's tests, with forced failures and asserted step order. It has not yet been exercised against a signed anchor on Stellar, because [no anchor is signed](/start/ten-minute-review#what-is-not-built).
+</Note>

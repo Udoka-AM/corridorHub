@@ -1,25 +1,30 @@
 ---
 title: "ADR 0008: Book from the chain"
 sidebarTitle: "0008 · Book from the chain"
-description: "Gas, owner funding and shielded deliveries are booked against the log or output that proves them, so a vault's on-chain balance always equals the ledger."
+description: "Fees, sponsored reserves, account funding and anchor rounding are booked against the transaction that proves them, so a vault's on-chain balance always equals the ledger."
 ---
 
 ## Context
 
-Memo-matched reconciliation proves that every Corridor-referenced movement was booked. It does not prove completeness: fees, faucet mints and top-ups move vault balances without a reference, and a ledger that ignores them drifts from the chain while still balancing.
+Memo-matched reconciliation proves that every Corridor-referenced movement was booked. It does not prove completeness: fees, sponsored reserves and owner top-ups move vault balances without carrying a reference, and a ledger that ignores them drifts from the chain while still balancing perfectly.
 
 ## Decision
 
-**Book every vault movement from the chain evidence that proves it.** Tempo fees are TIP-20 transfers to the Fee Manager and are booked to `expense:gas` keyed by that log; deposits from approved funding sources are booked to `equity:owner`; Zcash deliveries are booked under the output an auditor's viewing key will see. Unidentified deposits are never credited automatically. A vault check compares on-chain balances with the ledger after replaying each vault's history from its first funded block.
+**Book every vault movement from the chain evidence that proves it.** Every ledger entry for an on-chain movement is keyed by its transaction, and fees, reserves and rounding are booked from what the network reports rather than from what the code intended.
+
+- Stellar charges fees in XLM. With `unreferenced` set, `StellarObserver` reports the XLM fee each outbound transaction charged, account funding and sponsored reserves, and each is booked to `expense:gas` or `equity:owner` keyed by that transaction.
+- Anchor rounding is booked as dust held for the customer, not written off.
+- Unidentified deposits stay `unreferenced` and are never credited automatically: a payment sent without a memo may be a customer's money.
+- A vault check compares each vault's on-chain balance with the ledger, and `checkInvariants()` re-verifies globally that every entry balances per asset and that the balance projection equals a full recompute from postings.
 
 ## Consequences
 
-- On Moderato the treasury's on-chain balance equals the ledger to the last unit, gas included.
-- Booking is idempotent: each movement is keyed by its log or output.
-- A deposit without a memo stays `unreferenced` until someone classifies it, because it may be customer money.
-- Solana network fees and account rent are booked the same way, from each transaction the vault signed, and the Solana vault's SOL balance is checked against the ledger. Base gas is booked from each Across deposit's receipts (execution gas plus the L1 data fee).
+- A vault's on-chain balance equals the ledger to the unit, fees included. That is only possible because the ledger keeps the chain's own precision ([ADR 0012](/decisions/0012-seven-decimal-ledger)).
+- Booking is idempotent: each movement is keyed by its transaction, under a unique `(venue, external_ref)`.
+- Movements are processed in chain order, so a top-up is booked before the fees it paid for.
+- Observers must resume from a stored paging token, or a restart double-books or skips.
 
 ## Alternatives rejected
 
-- **Estimate gas from receipts at send time:** misses retries, compensations and any transaction the code did not anticipate.
-- **Periodic balance adjustments:** hide the cause of drift instead of booking it.
+- **Estimate fees at send time:** misses retries, compensations and any transaction the code did not anticipate.
+- **Periodic balance adjustments:** hide the cause of drift instead of booking it, and an auditor cannot tell an adjustment from an error.

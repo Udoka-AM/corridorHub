@@ -1,12 +1,14 @@
 ---
 title: "Corridor Reference"
-description: "One 32-byte identifier, carried in the native memo field of every chain a payment touches, that lets chain logs, partner webhooks and the ledger reconcile without an indexer."
+description: "One 32-byte identifier, exactly the size of Stellar's MEMO_HASH, carried whole in the signed transaction. It lets Horizon payments, anchor orders and the ledger reconcile with no indexer."
 icon: "fingerprint"
 ---
 
-Every Corridor movement carries the same 32-byte **Corridor Reference**: in Tempo's TIP-20 memo, in a Solana SPL Memo, in each Zcash output's encrypted memo, and in the partner's free-text field. Reconciliation is a join on this value.
+Every Corridor movement carries the same 32-byte **Corridor Reference**: in Stellar's `MEMO_HASH`, in a Solana SPL Memo on a cross-chain spoke, and in the anchor's own SEP-31 fields. Reconciliation is a join on this value.
 
-<Frame caption="Fig. 04 · The 32-byte Corridor Reference of a real NGN → CNY payout, and the field that carries it on each venue.">
+`MEMO_HASH` is exactly 32 bytes, which is exactly a Corridor Reference: no truncation, no encoding games, and the memo is part of the signed transaction rather than a separate operation.
+
+<Frame caption="Fig. 04 · The 32-byte Corridor Reference of a real Stellar testnet payout, and the field that carries it on each venue.">
   <img className="block dark:hidden" src="/images/diagrams/corridor-reference-light.svg" alt="Corridor Reference byte layout and carriers" />
   <img className="hidden dark:block" src="/images/diagrams/corridor-reference-dark.svg" alt="Corridor Reference byte layout and carriers" />
 </Frame>
@@ -19,35 +21,48 @@ Every Corridor movement carries the same 32-byte **Corridor Reference**: in Temp
 | 1 | Kind | payout `0x01` · batch `0x02` · batch item `0x03` · sweep `0x04` · deposit `0x05` · collection `0x06` |
 | 2 | Funding currency | One-byte index from the [currency table](/architecture/core-model#currencies) |
 | 3 | Beneficiary currency | Same table, so `GHS-HKD` needs no registry change |
-| 4 | Flags | bit 0 = shielded |
-| 5–20 | Payment id | UUIDv7 (16 bytes): time-ordered, globally unique |
-| 21–27 | Customer tag | 7-byte keyed hash (HMAC) of the customer id: links payments to a customer without naming them on a public chain |
+| 4 | Flags | bit 0 = shielded, reserved for the [confidential lane](/decisions/0005-confidential-lane-deferred) |
+| 5–20 | Payout id | UUIDv7 (16 bytes): time-ordered, globally unique |
+| 21–27 | Customer tag | 7-byte keyed hash (HMAC) of the customer id: links payments to a customer without naming them on a public ledger |
 | 28–31 | Checksum | First 4 bytes of SHA-256 over bytes 0–27 |
 
 ## A real one, decoded
 
-The payout that paid a Shenzhen supplier ¥7,140 on testnet carries this reference in its Tempo `TransferWithMemo` log ([transaction](https://explore.testnet.tempo.xyz/tx/0x671161f61c70a0b5b33c6c8de4221c938d86c310958725146ea9f21517957b5e)):
+This is the reference from the [Stellar testnet smoke run](/status/evidence#stellar-testnet) of 17 October 2026, read back out of the transaction's `MEMO_HASH`:
 
 ```text
-0x 02 01 28 46 00 01a0eb3fe7e57ca994eb596e7f87c87f 33d74bd58688d8 53957c1f
+0x 02 01 14 29 00 01a1494e71ec7073bfffc84d758d67d2 c6cf255f57adc6 fd6cb505
    │  │  │  │  │  │                                │              └ checksum ✓
    │  │  │  │  │  │                                └ customer tag (keyed hash)
-   │  │  │  │  │  └ payment id 01a0eb3f-e7e5-7ca9-94eb-596e7f87c87f (UUIDv7)
+   │  │  │  │  │  └ payout id 01a1494e-71ec-7073-bfff-c84d758d67d2 (UUIDv7)
    │  │  │  │  └ flags: public lane
-   │  │  │  └ to: 0x46 = 70 = CNY
-   │  │  └ from: 0x28 = 40 = NGN
+   │  │  │  └ to: 0x29 = 41 = KES
+   │  │  └ from: 0x14 = 20 = EUR
    │  └ kind: payout
    └ version 2
 ```
 
-## Where it lives on each chain
+## Where it lives
 
 | Venue | Field | Why it fits |
 |---|---|---|
-| Tempo | TIP-20 `transferWithMemo(to, amount, bytes32 memo)`. The memo is an **indexed topic** of the `TransferWithMemo` event | Reconciliation filters logs by reference directly through `eth_getLogs`, with no indexer |
-| Solana | SPL Memo instruction `corridor:<hex>` in the same transaction as the USDC transfer | The native pattern ramp partners already read |
-| Zcash | ZIP-302 text memo on each Ironwood output: `INV-… / corridor:<hex>` | Encrypted to the recipient; readable only by the recipient and viewing-key holders |
-| Partners | Free-text fields (Paj `description` / `userExternalId`), echoed back on webhooks | Lets partner events join the same reconciliation |
+| Stellar | The transaction's `MEMO_HASH` | 32 bytes exactly, and part of the signed transaction rather than a separate operation |
+| Solana | SPL Memo instruction in the same transaction | The native pattern partners already read, on the one corridor that leaves the hub |
+| Anchor | SEP-31 transaction fields, echoed into the bank narration | A bank statement line traces back to the payout that caused it |
+
+## Reconciliation is a join, not an index
+
+Horizon cannot be asked for a memo network-wide, the way an indexed event topic can. It does not need to be: Corridor reads the payment stream of the account it already watches and filters on the memo.
+
+```ts
+const found = await findTransfersByReference(client, { account: treasury.address, reference });
+```
+
+That stream is per-vault and bounded, a stored paging token makes restarts neither miss nor double-count, and no indexer sits in the path. See [ADR 0003](/decisions/0003-reference-in-memo-hash).
+
+<Warning>
+**One honest exception.** On a SEP-31 leg the *anchor* assigns the memo for the funding payment, so Corridor's reference cannot ride in it. The reference then travels in the SEP-31 transaction fields and the join key becomes `(anchor, transaction id)`, which the saga already records to make funding exactly-once. `PartnerOrder.fundingMemo` carries the anchor's memo, and `stellarAnchorFunder` uses it when it is set, falling back to the reference. The duplicate check matches on whichever memo went out, so funding stays exactly-once either way.
+</Warning>
 
 ## Codec
 
@@ -56,10 +71,10 @@ import { encodeRef, decodeRef, customerTag, RefKind, uuidv7 } from "@corridor/co
 
 const ref = encodeRef({
   kind: RefKind.Payout,
-  corridor: "NGN-CNY",
+  corridor: "EUR-KES",
   shielded: false,
   id: uuidv7(),
-  customerTag: customerTag("adeola-imports", process.env.CORRIDOR_REF_SECRET!),
+  customerTag: customerTag("eu-payco", process.env.CORRIDOR_TAG_SECRET!),
 });
 
 decodeRef(ref); // validates version, kind and checksum; throws on any mismatch
@@ -71,7 +86,8 @@ The checksum makes a mistyped or truncated reference fail loudly at decode time 
 
 ## Design notes
 
-- **Fixed 32 bytes** fits Tempo's `bytes32` memo exactly, so the hub carries it with no encoding overhead.
+- **Fixed 32 bytes** is the size of `MEMO_HASH`, so the hub carries it with no encoding overhead.
 - **The currency pair is in the reference**, so any observer knows the corridor without a lookup.
 - **No PII on-chain.** The customer tag is a keyed hash: anyone can see two payments share a tag, but only Corridor can say whose it is.
 - **Versioned.** Version 2 encodes the currency pair directly rather than a corridor id, so any spoke is addressable without a registry change; decoders reject unknown versions.
+- **Horizon needs `join=transactions`** for the memo to arrive with the payment. Getting that wrong loses every memo silently, so it is covered by tests.

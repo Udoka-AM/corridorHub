@@ -1,53 +1,66 @@
 ---
 title: "Architecture overview"
-description: "One route planner, one saga engine, one double-entry ledger and one reconciliation engine serve every lane and direction: public and shielded, collections and payouts."
+description: "One route planner, one saga engine, one double-entry ledger and one reconciliation engine serve every corridor and both directions. Two properties of Stellar decide the shape of all of it."
 icon: "layers"
 ---
 
-Corridor is a modular TypeScript monorepo with one Rust service. Its central design rule is that **every lane runs through the same engines**. A shielded supplier batch and a public naira payout differ only in the path the planner chooses, not in which subsystem handles them.
+Corridor is a modular TypeScript monorepo. Its central design rule is that **every corridor runs through the same engines**: a KES payout through an anchor and a naira payout through an off-Stellar partner differ only in the path the planner chooses, not in which subsystem handles them.
 
-<Frame caption="Fig. 01 · Clients, control plane, execution legs, observers and books. One engine per concern serves every lane.">
+Two things about Stellar decide the shape of the system:
+
+1. **`MEMO_HASH` is exactly 32 bytes**, which is exactly a Corridor Reference. The reference travels whole, as part of the signed transaction, so reconciliation is a join rather than an inference.
+2. **Anchors settle on Stellar itself.** The fiat spoke touches the hub directly, so the common payout path has no bridge in it at all.
+
+<Frame caption="Fig. 01 · Clients, control plane, execution legs, observers and books. One engine per concern serves every corridor.">
   <img className="block dark:hidden" src="/images/diagrams/system-architecture-light.svg" alt="Corridor system architecture" />
   <img className="hidden dark:block" src="/images/diagrams/system-architecture-dark.svg" alt="Corridor system architecture" />
 </Frame>
+
+Everything in that diagram runs in the customer's own environment.
 
 ## The layers
 
 <AccordionGroup>
   <Accordion title="Route planner (packages/routing)" icon="route">
-    Turns a request (corridor, purpose, privacy, source, destination, environment) into an ordered list of legs by searching a graph of venue/asset positions. It **rejects any payout not funded from the Tempo hub and any collection that does not land on it**, and it is the only place privacy is decided: a shielded payout must end in the `zcash_ironwood` venue. [Routing →](/architecture/routing)
+    Turns a request (corridor, purpose, privacy, source, destination, environment) into an ordered list of legs by searching a graph of venue/asset positions. It **rejects any payout not funded from the Stellar hub and any collection that does not land on it**, and it is the only place privacy is decided — today by refusing `privacy: "shielded"`, because no shielded venue is configured. [Routing →](/architecture/routing)
   </Accordion>
   <Accordion title="Saga engine (packages/saga)" icon="workflow">
-    Runs a plan as durable steps in Postgres. Each leg has `forward` and optional `compensate`. Steps retry with backoff, a lease keeps one worker per saga, and a failure compensates completed steps in reverse order. Failures after money has left Corridor's control stop at `manual_review` instead. [Saga →](/architecture/saga)
+    Runs a plan as durable steps in Postgres. Each leg has `forward` and an optional `compensate`. Steps retry with backoff, a lease keeps one worker per saga, and a failure compensates completed steps in reverse order. Failures after money has left Corridor's control stop at `manual_review` instead. [Saga →](/architecture/saga)
   </Accordion>
   <Accordion title="Legs (packages/legs and chain packages)" icon="puzzle">
-    Each leg kind (`tempo.transfer`, `across.bridge`, `partner.payout`, `near.swap`, `zcash.shieldedBatch`, …) moves value on one venue and returns the ledger entries that describe what it did. Legs are idempotent: before sending, they look for the movement by its reference. [Chains & partners →](/integrations/overview)
+    Each implemented leg kind (`stellar.transfer`, `partner.payout`, `partner.collect`, `ledger.reserve`, `ledger.credit`, `bridge.simulated`) moves value on one venue and returns the ledger entries that describe what it did. Two more, `stellar.pathPayment` and `cctp.transfer`, are declared in the route graph and not yet written. Legs are idempotent: before sending, they ask the network whether the movement already landed. [Stellar →](/integrations/stellar)
   </Accordion>
   <Accordion title="Ledger (packages/ledger)" icon="book-open">
-    Double-entry, append-only journal on Postgres. Postings balance per asset, accounts can be flagged no-overdraft, and each external movement is booked exactly once through a unique `(venue, external_ref)`. [Ledger →](/architecture/ledger)
+    Double-entry, append-only journal on Postgres, at Stellar's own 7 decimal places. Postings balance per asset, accounts can be flagged no-overdraft, and each external movement is booked exactly once through a unique `(venue, external_ref)`. [Ledger →](/architecture/ledger)
+  </Accordion>
+  <Accordion title="Anchors (packages/partners)" icon="plug">
+    Every fiat spoke sits behind one partner interface. `SepAnchor` implements it over SEP-1, 10, 12, 38 and 31; `PajPartner` and `MockPartner` implement the same interface for currencies no Stellar anchor serves yet. [Anchors →](/integrations/sep-anchors)
   </Accordion>
   <Accordion title="Observers and reconciliation (packages/recon)" icon="scan-search">
-    Observers turn chain logs, partner webhooks and viewing-key scans into one `Observation` shape. The matcher joins them with ledger entries on the external reference, and a vault check compares each vault's on-chain balance with the books. [Reconciliation →](/architecture/reconciliation)
-  </Accordion>
-  <Accordion title="Treasury console (apps/console)" icon="layout-dashboard">
-    The operator's view: hub balances, venues, sagas with explorer links, pre-funding forecast, reconciliation, shielded batches with FROST approvals, and auditor disclosure exports. [Console →](/architecture/treasury-console)
+    Observers turn Horizon payments, anchor status and partner webhooks into one `Observation` shape. The matcher joins them with ledger entries on the external reference, and a vault check compares each vault's on-chain balance with the books. [Reconciliation →](/architecture/reconciliation)
   </Accordion>
 </AccordionGroup>
 
 ## Design principles
 
 <CardGroup cols={2}>
-  <Card title="Privacy is a venue, not a feature" icon="shield" href="/decisions/0005-privacy-as-a-venue">
-    Shielded payouts are a path through the same graph into `zcash_ironwood`, booked in the same ledger, reconciled by the same matcher.
-  </Card>
   <Card title="The hub is enforced, not suggested" icon="git-merge" href="/decisions/0002-hub-enforced-by-planner">
-    Every dollar is settled, held and reconciled on Tempo. The planner refuses anything else.
+    Every dollar is settled, held and reconciled on Stellar. The planner refuses anything else, and that is what makes anchors additive.
   </Card>
-  <Card title="One reference, every chain" icon="fingerprint" href="/architecture/corridor-reference">
-    A 32-byte reference rides in each chain's native memo field, so no indexer is needed to reconcile.
+  <Card title="One reference, carried whole" icon="fingerprint" href="/decisions/0003-reference-in-memo-hash">
+    32 bytes in `MEMO_HASH`, part of the signed transaction. Reconciliation is a join on a watched account's own payment stream — no indexer.
   </Card>
   <Card title="Book from the chain" icon="link" href="/decisions/0008-book-from-the-chain">
-    Gas, funding and deliveries are booked against the log or output that proves them, never against what the code intended.
+    Fees, sponsored reserves and funding are booked against the transaction that proves them, never against what the code intended.
+  </Card>
+  <Card title="The ledger keeps 7 decimal places" icon="scale" href="/decisions/0012-seven-decimal-ledger">
+    Stellar's own precision, so a booked balance can equal an on-chain balance exactly and reconciliation needs no tolerance.
+  </Card>
+  <Card title="Customers hold the keys" icon="key-round" href="/decisions/0009-customer-held-keys">
+    Every vault signs through the customer's own KMS or MPC. Corridor sends digests and receives signatures.
+  </Card>
+  <Card title="Say what is not built" icon="eye" href="/decisions/0005-confidential-lane-deferred">
+    The confidential lane is deferred and the planner refuses it with that reason. SEP-6 collections raise rather than guess.
   </Card>
 </CardGroup>
 
@@ -55,17 +68,16 @@ Corridor is a modular TypeScript monorepo with one Rust service. Its central des
 
 | Package | Responsibility |
 |---|---|
-| `@corridor/core` | Venues, 32 fiat currencies with stable one-byte indices, digital assets, `Money` in integer minor units, Corridor Reference codec, `Observation` |
-| `@corridor/ledger` | Schema, `Ledger.post`, invariants, named `Accounts` |
+| `@corridor/core` | Venues, 32 fiat currencies with stable one-byte indices, digital assets at 7 dp, `Money` in integer minor units, Corridor Reference codec, `Observation` |
+| `@corridor/chain-stellar` | Horizon client, asset registry by issuer, `transferWithReference`, `StellarObserver`, trustlines |
 | `@corridor/routing` | Route graph (`DEFAULT_EDGES`), `planRoute`, hub enforcement |
 | `@corridor/saga` | `SagaEngine`, `Leg`, `NonRetryableError`, `ManualReviewError`, reserve leg |
-| `@corridor/legs` | Simulated bridge, partner payout and collect, ledger credit, NEAR swap, shielded batch |
-| `@corridor/chain-tempo` | viem/tempo client, `transferWithReference`, `TempoObserver`, Fee Manager |
-| `@corridor/chain-solana` | `SolanaVault`, USDC + memo transactions, reference extraction |
-| `@corridor/bridge-across` | Across Swap API: quote, execute, deposit status, wait for fill |
-| `@corridor/swap-near` | NEAR Intents 1Click: quote, status |
-| `@corridor/chain-zcash` | `ZcashWallet` over zcash-devtool, ZIP-321 requests, `FrostSigner` |
-| `@corridor/partners` | `RampPartner`, `PartnerRegistry`, Paj adapter, mock partner, webhook signing |
+| `@corridor/ledger` | Schema, `Ledger.post`, invariants, named `Accounts` |
+| `@corridor/legs` | Stellar transfer, simulated bridge, anchor payout and collect, ledger credit |
+| `@corridor/partners` | `RampPartner`, `SepAnchor`, `PartnerRegistry`, Paj adapter, mock partner, webhook signing |
+| `@corridor/recon` | `reconcile`, `reconcileReadOnly`, `bookVaultMovements`, `checkVaults` |
+| `@corridor/signer` | Signer interface for Ed25519 and secp256k1; local, AWS KMS and Turnkey adapters |
 | `@corridor/webhooks` | Partner webhook server, event store, exactly-once order links |
-| `@corridor/recon` | `reconcile`, `bookVaultMovements`, `checkVaults` |
-| `services/zcash-frost` | `corridor-frost` (Rust): FROST(RedPallas) keygen, rerandomized signing, PCZT application |
+| `@corridor/chain-solana`, `@corridor/chain-evm` | The cross-chain spokes, for currencies no Stellar anchor serves yet |
+
+The authoritative version of all of this is [`docs/ARCHITECTURE.md`](https://github.com/Udoka-AM/corridorHub/blob/main/docs/ARCHITECTURE.md) in the repository.

@@ -37,7 +37,11 @@ export interface PartnerOrder {
   partnerStatus: string;
   chain: PartnerChain;
   currency: Fiat;
-  /** USDC in base units (6 dp). */
+  /**
+   * USDC in base units at the hub's 7 dp. Adapters convert at their own edge:
+   * a Stellar anchor keeps 7 dp, and a partner settling on a 6 dp chain
+   * rescales (and refuses an amount that would lose a stroop).
+   */
   usdcAmount: bigint;
   /** Local currency in minor units. */
   fiatAmount: bigint;
