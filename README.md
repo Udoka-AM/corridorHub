@@ -1,4 +1,4 @@
-# Corridor
+# Corridorhub
 
 **Never lose a cross-border payout.**
 
