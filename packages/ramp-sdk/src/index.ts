@@ -317,12 +317,19 @@ export function verifyWebhook(
  * the client with an agent key so the key's spending policy applies; a
  * refused payout returns the `spending_limit` details for the agent to act on.
  */
-export function agentTools(ramp: Ramp, sign?: SignXdr) {
-  const run = async (fn: () => Promise<unknown>) => {
+export interface AgentTool {
+  name: string;
+  description: string;
+  inputSchema: Record<string, unknown>;
+  handler: (input: any) => Promise<{ ok: true; result: unknown } | { ok: false; error: { code: string; message: string; details?: Record<string, unknown> } }>;
+}
+
+export function agentTools(ramp: Ramp, sign?: SignXdr): AgentTool[] {
+  const run = async (fn: () => Promise<unknown>): ReturnType<AgentTool["handler"]> => {
     try {
-      return { ok: true, result: await fn() };
+      return { ok: true as const, result: await fn() };
     } catch (e) {
-      if (e instanceof RampApiError) return { ok: false, error: { code: e.code, message: e.message, details: e.details } };
+      if (e instanceof RampApiError) return { ok: false as const, error: { code: e.code, message: e.message, details: e.details } };
       throw e;
     }
   };
