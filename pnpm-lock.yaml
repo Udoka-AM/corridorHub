@@ -186,6 +186,42 @@ importers:
         specifier: ^17.2.1
         version: 17.2.1
 
+  packages/ramp:
+    dependencies:
+      '@corridor/chain-stellar':
+        specifier: workspace:*
+        version: link:../chain-stellar
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
+      '@corridor/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@corridor/partners':
+        specifier: workspace:*
+        version: link:../partners
+      '@stellar/stellar-sdk':
+        specifier: ^17.2.1
+        version: 17.2.1
+
+  packages/ramp-sdk:
+    devDependencies:
+      '@corridor/chain-stellar':
+        specifier: workspace:*
+        version: link:../chain-stellar
+      '@corridor/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@corridor/partners':
+        specifier: workspace:*
+        version: link:../partners
+      '@corridor/ramp':
+        specifier: workspace:*
+        version: link:../ramp
+      '@stellar/stellar-sdk':
+        specifier: ^17.2.1
+        version: 17.2.1
+
   packages/recon:
     dependencies:
       '@corridor/core':

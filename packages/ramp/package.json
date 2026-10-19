@@ -1,0 +1,17 @@
+{
+  "name": "@corridor/ramp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "dependencies": {
+    "@corridor/core": "workspace:*",
+    "@corridor/chain-stellar": "workspace:*",
+    "@corridor/ledger": "workspace:*",
+    "@corridor/partners": "workspace:*",
+    "@stellar/stellar-sdk": "^17.2.1"
+  }
+}
