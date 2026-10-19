@@ -29,6 +29,12 @@ importers:
       '@corridor/partners':
         specifier: workspace:*
         version: link:packages/partners
+      '@corridor/ramp':
+        specifier: workspace:*
+        version: link:packages/ramp
+      '@corridor/ramp-sdk':
+        specifier: workspace:*
+        version: link:packages/ramp-sdk
       '@corridor/recon':
         specifier: workspace:*
         version: link:packages/recon

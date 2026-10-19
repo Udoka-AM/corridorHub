@@ -9,7 +9,9 @@
     "stellar:smoke": "tsx scripts/stellar-smoke.ts",
     "stellar:wallets": "tsx scripts/stellar-wallets.ts",
     "stellar:payout": "tsx scripts/stellar-payout.ts",
-    "watch:report": "tsx scripts/watch-report.ts"
+    "watch:report": "tsx scripts/watch-report.ts",
+    "ramp:serve": "tsx scripts/ramp-serve.ts",
+    "ramp:demo": "tsx scripts/ramp-demo.ts"
   },
   "devDependencies": {
     "@types/node": "22",
@@ -25,6 +27,8 @@
     "@corridor/ledger": "workspace:*",
     "@corridor/legs": "workspace:*",
     "@corridor/partners": "workspace:*",
+    "@corridor/ramp": "workspace:*",
+    "@corridor/ramp-sdk": "workspace:*",
     "@corridor/recon": "workspace:*",
     "@corridor/routing": "workspace:*",
     "@corridor/saga": "workspace:*",
