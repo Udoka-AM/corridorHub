@@ -1,0 +1,84 @@
+---
+title: "Ramp"
+description: "A hosted API and TypeScript SDK that lets any Stellar app, agent or merchant send and receive local African currency through licensed anchors, on the same core as the Hub."
+icon: "plug-zap"
+---
+
+Ramp is the hosted front door onto Corridor. An app gets an API key, onboards its users with sponsored Stellar accounts, and pays out to or collects from bank and mobile-money accounts through the anchors the Hub already integrates. It runs on the same packages as the self-hosted Hub ([ADR 0013](/decisions/0013-ramp-and-hub-share-one-core)).
+
+```ts
+import { Ramp } from "@corridor/ramp-sdk";
+
+const ramp = new Ramp({ apiKey: process.env.RAMP_KEY!, signXdr: (xdr) => wallet.signTransaction(xdr) });
+
+await ramp.accounts.onboard(user.address);          // sponsored account + USDC trustline
+const order = await ramp.withdrawals.send({         // quote → anchor order → user signs → submitted
+  currency: "KES",
+  amount: 100_000_000n,                              // 10 USDC, 7 dp minor units
+  account: user.address,
+  beneficiary: { bankCode: "01", accountNumber: "0123456789" },
+  idempotencyKey: invoice.id,
+});
+await ramp.orders.wait(order.id);
+```
+
+## How a withdrawal moves
+
+1. **Quote.** `POST /v1/quotes` prices the payout from the anchor's rate. The Ramp fee is quoted next to it, and the quote expires after 5 minutes.
+2. **Order.** `POST /v1/withdrawals` spends the quote once, opens the anchor's order with a fresh Corridor Reference, and builds the funding transaction: a payment to the anchor's receiving account with **the anchor's memo**, plus the Ramp fee. The transaction is returned unsigned.
+3. **Sign.** The user's wallet signs it in the app, through the SDK's `signXdr`. Ramp never sees the key.
+4. **Submit.** `POST /v1/withdrawals/:id/submit` checks that the hash matches the transaction Ramp built, wraps it in a sponsor fee bump, and submits. The fee is booked in the ledger.
+5. **Track.** The anchor's webhooks (or polling) move the order to `completed` or `failed`, and each change is delivered to the app's webhook, signed.
+
+Deposits run the same way in reverse. `POST /v1/deposits` opens a collection with the anchor and returns the virtual account to pay into, plus a hosted collection link at `/pay/:id` that a merchant can send to a customer.
+
+## API
+
+All amounts are integer strings: settlement amounts in 7 dp minor units, fiat in the currency's own minor units. Every POST accepts an `Idempotency-Key`. A replay with the same body returns the first response, and the same key with a different body returns `409 conflict`.
+
+| Method | Path | |
+|---|---|---|
+| `POST` | `/v1/signup` | Free testnet sandbox app (self-serve) |
+| `POST` | `/v1/tenants` | Paid-plan app (operator token) |
+| `GET` | `/v1/me` | The app and the calling key |
+| `POST` `GET` `DELETE` | `/v1/keys` | Secret keys and agent keys with spending policies |
+| `PUT` | `/v1/webhook` | Set the app's webhook URL |
+| `POST` | `/v1/quotes` | Withdrawal or deposit quote |
+| `POST` | `/v1/accounts` | Sponsored onboarding transaction for a user |
+| `POST` | `/v1/accounts/:address/submit` | Submit the user-signed onboarding |
+| `POST` | `/v1/withdrawals` | Open a payout; returns the unsigned funding transaction |
+| `POST` | `/v1/withdrawals/:id/submit` | Submit the user-signed funding |
+| `POST` | `/v1/deposits` | Open a collection; returns the account to pay and a link |
+| `GET` | `/v1/orders`, `/v1/withdrawals/:id`, `/v1/deposits/:id` | Status |
+| `GET` | `/v1/usage` | Volume, orders and fees for the period |
+| `GET` | `/v1/events` | Webhook events and their delivery state |
+
+Errors are `{ "error": { "code", "message", "details" } }` with stable codes: `unauthorized`, `forbidden`, `not_found`, `invalid_request`, `quote_expired`, `quote_used`, `spending_limit`, `unsupported`, `conflict`, `transaction_mismatch`, `partner_error`, `chain_error`.
+
+## Webhooks
+
+Each event is POSTed with `x-ramp-timestamp` and `x-ramp-signature: v1=<hex HMAC-SHA256 of "timestamp.body">`, signed with the app's webhook secret. `verifyWebhook(secret, rawBody, headers)` in the SDK checks the signature and the age. Undelivered events are retried.
+
+## Agents
+
+An agent key can quote, pay out and read status, and cannot mint keys. Its policy caps each payout, the day's total, and the currencies it may use. A refusal is a `spending_limit` error that names the limit, what remains and what was asked. `agentTools(ramp, signXdr)` exports `ramp_quote_payout`, `ramp_send_payout` and `ramp_payout_status` with JSON schemas, ready to register with an MCP server or a function-calling model.
+
+## Plans
+
+| Plan | Price | Network |
+|---|---|---|
+| Sandbox | Free | Testnet only |
+| Growth | $300 / month + 0.35% of routed volume | Mainnet |
+| Merchant | 0.40% of collected volume | Mainnet |
+| Agent | 0.50% + 0.05 USDC per payout | Mainnet |
+
+## Run it
+
+```bash
+pnpm ramp:serve   # the API on :8787, mock anchor unless CORRIDOR_ANCHOR_BASE_URL is set
+pnpm ramp:demo    # signup → sponsored onboarding → payout → usage, on Stellar testnet
+```
+
+## Declared and not built
+
+Passkey or social-login smart accounts, SEP-6/24 collections against a real anchor, Tron/Solana/Base deposit addresses, x402, an MCP server, invoices and a dashboard. See [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built).

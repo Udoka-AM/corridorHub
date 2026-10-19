@@ -79,11 +79,21 @@ CORRIDOR_PAYOUT_CURRENCY=USD pnpm stellar:payout
 No local currency moved: the anchor is Stellar's reference implementation, run locally, and telling it the beneficiary was paid is a step a real anchor performs itself off its own rail. Everything on Corridor's side of the exchange is real, and nothing in the adapter is stubbed. See [`examples/anchor`](https://github.com/Udoka-AM/corridorHub/tree/main/examples/anchor).
 </Note>
 
+### Ramp, through the SDK
+
+On **19 October 2026**, `pnpm ramp:demo` ran the hosted API in-process against Stellar testnet and drove it only through `@corridor/ramp-sdk`: a sandbox app signed up, an end user was onboarded with reserves sponsored, and a payout ran to `completed` against the mock anchor. The user's key stayed in the script, which signed through the SDK's `signXdr` hook. It settled in XLM because testnet has no USDC faucet.
+
+| Step | Result | Transaction |
+|---|---|---|
+| Sponsored onboarding | Account created inside `beginSponsoringFutureReserves`, signed by the sponsor and the user | [0f7a738a…](https://stellar.expert/explorer/testnet/tx/0f7a738a172c67b1dc9eb79a01a83b948c3fa6873361b78768ce5f2a8c094bc2) |
+| Funding the anchor | Built by Ramp with the anchor's memo, signed by the user, submitted in a sponsor fee bump; hash checked against the one Ramp built | [293cb9c6…](https://stellar.expert/explorer/testnet/tx/293cb9c6bbc61bd87d35c891514f6cb288db6bccdf6771c095978d6217ea1401) |
+| Status and usage | Order `completed` via the anchor's signed webhook; `/v1/usage` reported 5 XLM routed to KES | — |
+
 ## The test suite
 
 | Measure | Value |
 |---|---|
-| Tests | **128 passing**, no network |
+| Tests | **145 passing**, no network |
 | Stellar venue | 20 tests: the reference on a real transaction shape, issuer identity, the held-key signer, and the Horizon quirks that would otherwise lose every memo |
 | Routing | 11 tests: hub enforcement, every route shape, the shielded refusal, the off-Stellar list |
 | Reference codec | 12 tests: encode, decode, checksum, version rejection, currency pairs |
@@ -91,10 +101,12 @@ No local currency moved: the anchor is Stellar's reference implementation, run l
 | Saga engine | 6 tests: compensation order, `manual_review`, lease fencing under a real race |
 | SEP anchor | 16 tests against a stubbed anchor: discovery over HTTPS or a given base URL, the challenge check, the quote, the funding method read from the anchor's own `/info`, the receiving account whether it arrives on the POST or the GET, both amount shapes, and the status mapping |
 | Anchor funding | 5 tests: the anchor's memo is carried, the reference is the fallback, and a retry after a crash finds the payment instead of paying twice |
+| Ramp | 12 tests: fees in integer minor units, sponsored onboarding, the full withdrawal with a fee bump, a tampered transaction refused, quotes spent once and expiring, agent spending limits, tenant isolation, deposits, failed payouts, webhook retry |
+| Ramp SDK | 5 tests over HTTP: signup to completed payout, idempotent replay and conflict, a collection link, agent tools under a policy, error codes |
 | Partners, webhooks, signers, recon | The rest |
 
 ```bash
-pnpm test        # 128 tests
+pnpm test        # 145 tests
 pnpm typecheck   # tsc -b, clean
 ```
 
