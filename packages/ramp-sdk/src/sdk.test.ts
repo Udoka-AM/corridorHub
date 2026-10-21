@@ -45,6 +45,7 @@ describe("Ramp SDK against the API", () => {
     expect(sent.transaction).toBeUndefined();
 
     await t.mock.observeFunding(sent.partnerOrderId, sent.txHash!);
+    await t.ramp.reconcile();
     const done = await ramp.orders.wait(sent.id, { intervalMs: 10 });
     expect(done.status).toBe("completed");
 
@@ -81,6 +82,7 @@ describe("Ramp SDK against the API", () => {
     const page = await fetch(`${baseUrl}/pay/${order.id}`);
     expect(await page.text()).toContain("Pay Choppaddi");
     await t.mock.payerTransferred(order.partnerOrderId);
+    await t.ramp.reconcile();
     expect((await ramp.deposits.get(order.id)).status).toBe("completed");
   });
 
@@ -113,5 +115,43 @@ describe("Ramp SDK against the API", () => {
       body: JSON.stringify({ name: "Blink", plan: "growth" }),
     });
     expect(op.status).toBe(201);
+  });
+
+  it("rate-limits per key and logs requests without secrets", async () => {
+    const lines: string[] = [];
+    const limited = rampServer(t.ramp, { selfServeSignup: true, rateLimit: { requestsPerMinute: 3 }, log: (e) => lines.push(JSON.stringify(e)) });
+    await new Promise<void>((r) => limited.listen(0, "127.0.0.1", r));
+    try {
+      const url = `http://127.0.0.1:${(limited.address() as AddressInfo).port}`;
+      const { secretKey } = await Ramp.signup({ name: "Limited", baseUrl: url });
+      const ramp = new Ramp({ apiKey: secretKey, baseUrl: url });
+      const { key: other } = await ramp.keys.create({ kind: "secret", label: "other" });
+      await ramp.me();
+      await ramp.me();
+      await expect(ramp.me()).rejects.toMatchObject({ status: 429, code: "rate_limited" });
+      // Budgets are per key.
+      await expect(new Ramp({ apiKey: other, baseUrl: url }).me()).resolves.toBeTruthy();
+      const raw = await fetch(`${url}/v1/me`, { headers: { authorization: `Bearer ${secretKey}` } });
+      expect(raw.headers.get("retry-after")).toMatch(/^\d+$/);
+      expect(raw.headers.get("x-request-id")).toBeTruthy();
+      const log = lines.join("\n");
+      expect(log).toContain('"route":"/v1/me"');
+      expect(log).toContain('"status":429');
+      expect(log).not.toContain(secretKey);
+      expect(log).not.toContain(other);
+    } finally {
+      await new Promise((r) => limited.close(r));
+    }
+  });
+
+  it("rotates a key over the API", async () => {
+    const { secretKey } = await Ramp.signup({ name: "Rotator", baseUrl });
+    const ramp = new Ramp({ apiKey: secretKey, baseUrl });
+    const agent = await ramp.keys.create({ kind: "agent", label: "bot" });
+    const next = await ramp.keys.rotate(agent.id, { graceSeconds: 0 });
+    expect(next.label).toBe("bot");
+    await expect(new Ramp({ apiKey: agent.key, baseUrl }).me()).rejects.toMatchObject({ code: "unauthorized" });
+    await expect(new Ramp({ apiKey: next.key, baseUrl }).me()).resolves.toBeTruthy();
+    expect(await ramp.webhooks.deadLetters()).toEqual([]);
   });
 });

@@ -1,4 +1,4 @@
-import { FIAT, type Fiat, type Hex, assetDecimals, parseMoney, rescale } from "@corridor/core";
+import { FIAT, decimal, type Fiat, type Hex, assetDecimals, parseMoney, rescale } from "@corridor/core";
 import {
   PartnerError,
   type CollectionRequest,
@@ -78,7 +78,7 @@ export class PajPartner implements RampPartner {
 
   async rates(currency: Fiat): Promise<Rates> {
     const r = await this.call("GET", `/pub/v2/rate?currency=${currency}`);
-    return { currency, onRamp: r.onRampRate.rate, offRamp: r.offRampRate.rate, at: new Date(r.offRampRate.createdAt) };
+    return { currency, onRamp: decimal(r.onRampRate.rate), offRamp: decimal(r.offRampRate.rate), at: new Date(r.offRampRate.createdAt) };
   }
 
   private assertChain(chain: PartnerChain): void {
@@ -154,7 +154,7 @@ export class PajPartner implements RampPartner {
       currency,
       usdcAmount: numberToUsdc(tx.usdcAmount ?? tx.amount ?? 0),
       fiatAmount: numberToMinor(currency, tx.fiatAmount ?? 0),
-      rate: Number(tx.rate ?? 0),
+      rate: decimal(tx.rate ?? 0),
       fundingAddress: resolvedKind === "payout" ? tx.address : undefined,
       virtualAccount:
         resolvedKind === "collection" && tx.accountNumber
@@ -182,11 +182,11 @@ function usdcToNumber(base: bigint): number {
   return Number(rescale(base, USDC_DP, SOLANA_USDC_DP)) / 10 ** SOLANA_USDC_DP;
 }
 function numberToUsdc(n: number | string): bigint {
-  return parseMoney("USDC", Number(n).toFixed(USDC_DP)).amount;
+  return parseMoney("USDC", decimal(n), { truncate: true }).amount;
 }
 function minorToNumber(c: Fiat, minor: bigint): number {
   return Number(minor) / 10 ** FIAT[c].decimals;
 }
 function numberToMinor(c: Fiat, n: number | string): bigint {
-  return parseMoney(c, Number(n).toFixed(FIAT[c].decimals)).amount;
+  return parseMoney(c, decimal(n), { truncate: true }).amount;
 }

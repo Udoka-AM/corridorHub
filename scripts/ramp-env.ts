@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import type { Asset } from "@corridor/core";
-import { fundFromFriendbot, type StellarClient } from "@corridor/chain-stellar";
-import { openLocalDb } from "@corridor/ledger";
+import { fundFromFriendbot, horizonPayments, issuerOf, trustAsset, type StellarClient } from "@corridor/chain-stellar";
+import { openLocalDb, openPostgresDb } from "@corridor/ledger";
 import { MockPartner, PartnerRegistry, SepAnchor, type RampPartner } from "@corridor/partners";
 import { RampService, stellarRampChain } from "@corridor/ramp";
 import { NETWORK, vault } from "./runtime.ts";
@@ -11,7 +11,7 @@ import { NETWORK, vault } from "./runtime.ts";
  * (a real SEP server when CORRIDOR_ANCHOR_BASE_URL is set, otherwise the
  * mock), and the Ramp service on a local database.
  */
-export const RAMP_ASSET = (process.env.RAMP_ASSET ?? (NETWORK === "testnet" ? "XLM" : "USDC")) as Asset;
+export const RAMP_ASSET = (process.env.RAMP_ASSET ?? "USDC") as Asset;
 
 export async function ensureFunded(client: StellarClient, address: string) {
   if (NETWORK !== "testnet") return;
@@ -22,9 +22,20 @@ export async function ensureFunded(client: StellarClient, address: string) {
   }
 }
 
+/** An account Ramp pays an issued asset to (the fee account, the mock anchor) needs a trustline first. */
+export async function ensureTrust(client: StellarClient, asset: Asset) {
+  if (asset === "XLM") return;
+  const issuer = issuerOf(asset, client.network);
+  const record = await client.server.loadAccount(client.address);
+  const trusted = record.balances.some((b) => "asset_code" in b && b.asset_code === asset && "asset_issuer" in b && b.asset_issuer === issuer);
+  if (!trusted) await trustAsset(client, asset);
+}
+
 export async function openRamp(opts: { publicUrl: string; dataDir?: string; partnerWebhookBase?: string }) {
   const sponsor = await vault("RAMP_SPONSOR");
   await ensureFunded(sponsor, sponsor.address);
+  // The sponsor is also the fee account, so it must hold the settlement asset.
+  await ensureTrust(sponsor, RAMP_ASSET);
 
   let mock: MockPartner | undefined;
   let anchor: RampPartner;
@@ -43,16 +54,19 @@ export async function openRamp(opts: { publicUrl: string; dataDir?: string; part
   } else {
     const escrow = await vault("ESCROW");
     await ensureFunded(escrow, escrow.address);
+    await ensureTrust(escrow, RAMP_ASSET);
     mock = new MockPartner({ webhookSecret: "whsec_dev", chains: ["STELLAR"], stellarAccount: escrow.address });
     anchor = mock;
   }
 
-  if (opts.dataDir) mkdirSync(opts.dataDir, { recursive: true });
-  const db = await openLocalDb(opts.dataDir);
+  // A real Postgres server when DATABASE_URL is set; otherwise embedded PGlite on disk.
+  if (!process.env.DATABASE_URL && opts.dataDir) mkdirSync(opts.dataDir, { recursive: true });
+  const db = process.env.DATABASE_URL ? await openPostgresDb(process.env.DATABASE_URL) : await openLocalDb(opts.dataDir);
   const ramp = await RampService.open({
     db,
     partners: new PartnerRegistry().register(anchor),
     chain: stellarRampChain({ sponsor }),
+    payments: horizonPayments(sponsor.server),
     asset: RAMP_ASSET,
     publicUrl: opts.publicUrl,
     partnerWebhookUrl: opts.partnerWebhookBase ? (id) => `${opts.partnerWebhookBase}/v1/partners/${id}/webhook` : undefined,

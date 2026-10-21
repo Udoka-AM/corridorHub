@@ -1,6 +1,6 @@
 import { Keypair } from "@stellar/stellar-sdk";
 import { randomBytes, randomUUID } from "node:crypto";
-import { FIAT, type Fiat, assetDecimals } from "@corridor/core";
+import { type Decimal, type Fiat, divRate, mulRate } from "@corridor/core";
 import {
   PartnerError,
   type CollectionRequest,
@@ -14,7 +14,6 @@ import {
 import { header, signWebhook, verifyWebhookSignature } from "./webhook.ts";
 
 /** The hub's own precision, so the mock prices like a real anchor. */
-const USDC_DP = assetDecimals("USDC");
 
 /**
  * A ramp partner for testnet and tests, behaving like Paj: one-off funding
@@ -31,7 +30,7 @@ export interface MockPartnerOptions {
   deliver?: (rawBody: string, headers: Record<string, string>) => Promise<void>;
   /** Collections: send USDC to the order's recipient once the payer's transfer "arrives". */
   sendUsdc?: (recipient: string, usdcAmount: bigint, chain: PartnerChain) => Promise<string>;
-  rates?: Partial<Record<Fiat, { onRamp: number; offRamp: number }>>;
+  rates?: Partial<Record<Fiat, { onRamp: Decimal; offRamp: Decimal }>>;
   /** Which chains this stand-in settles on. Defaults to Solana. */
   chains?: readonly PartnerChain[];
   /**
@@ -50,13 +49,13 @@ export interface MockPartnerOptions {
   failPayouts?: boolean;
 }
 
-const DEFAULT_RATES: Partial<Record<Fiat, { onRamp: number; offRamp: number }>> = {
-  NGN: { onRamp: 1_560, offRamp: 1_530 },
-  KES: { onRamp: 130.5, offRamp: 128.9 },
-  GHS: { onRamp: 15.9, offRamp: 15.4 },
-  CNY: { onRamp: 7.21, offRamp: 7.14 },
-  HKD: { onRamp: 7.83, offRamp: 7.79 },
-  USD: { onRamp: 1, offRamp: 1 },
+const DEFAULT_RATES: Partial<Record<Fiat, { onRamp: Decimal; offRamp: Decimal }>> = {
+  NGN: { onRamp: "1560", offRamp: "1530" },
+  KES: { onRamp: "130.5", offRamp: "128.9" },
+  GHS: { onRamp: "15.9", offRamp: "15.4" },
+  CNY: { onRamp: "7.21", offRamp: "7.14" },
+  HKD: { onRamp: "7.83", offRamp: "7.79" },
+  USD: { onRamp: "1", offRamp: "1" },
 };
 
 const PARTNER_STATUS: Record<OrderStatus, string> = { open: "INIT", processing: "PROCESSING", completed: "COMPLETED", failed: "ERROR" };
@@ -110,7 +109,7 @@ export class MockPartner implements RampPartner {
       chain: req.chain,
       currency: req.currency,
       usdcAmount: req.usdcAmount,
-      fiatAmount: toMinor(req.currency, (Number(req.usdcAmount) / 10 ** USDC_DP) * offRamp),
+      fiatAmount: mulRate(req.usdcAmount, "USDC", offRamp, req.currency),
       rate: offRamp,
       ...this.funding(req.chain, id),
       reference: req.reference,
@@ -123,7 +122,7 @@ export class MockPartner implements RampPartner {
 
   async openCollection(req: CollectionRequest): Promise<PartnerOrder> {
     const { onRamp } = await this.rates(req.currency);
-    const usdc = BigInt(Math.floor((Number(req.fiatAmount) / 10 ** FIAT[req.currency].decimals / onRamp) * 10 ** USDC_DP));
+    const usdc = divRate(req.fiatAmount, req.currency, onRamp, "USDC");
     const order: PartnerOrder = {
       partner: this.id,
       id: `mock_${randomUUID()}`,
@@ -201,10 +200,6 @@ export class MockPartner implements RampPartner {
     const ts = Math.floor(Date.now() / 1000);
     await this.opts.deliver(body, { "x-paj-timestamp": String(ts), "x-paj-signature": signWebhook(this.opts.webhookSecret, ts, body) });
   }
-}
-
-function toMinor(c: Fiat, amount: number): bigint {
-  return BigInt(Math.round(amount * 10 ** FIAT[c].decimals));
 }
 
 const B58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";

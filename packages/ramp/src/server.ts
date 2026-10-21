@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Fiat } from "@corridor/core";
 import { RampError } from "./errors.ts";
@@ -19,6 +19,50 @@ export interface RampServerOptions {
   /** Let anyone create a free sandbox app with `POST /v1/signup` (testnet only). */
   selfServeSignup?: boolean;
   bodyLimit?: number;
+  /** Per-API-key request budget (token bucket). Default 600/min; `false` disables it. */
+  rateLimit?: { requestsPerMinute: number } | false;
+  /**
+   * One structured line per request. It carries the route template, status,
+   * timing and the caller's app and key ids: never headers, bodies, query
+   * strings or path values, so no API key, signed transaction or bank detail
+   * can reach the logs.
+   */
+  log?: (entry: RequestLog) => void;
+}
+
+export interface RequestLog {
+  at: string;
+  requestId: string;
+  method: string;
+  /** The matched route template (`/v1/withdrawals/:id`), not the raw path. */
+  route: string;
+  status: number;
+  ms: number;
+  tenantId?: string;
+  keyId?: string;
+}
+
+/** Token bucket per key: `requestsPerMinute` capacity, refilled continuously. */
+export class RateLimiter {
+  private readonly buckets = new Map<string, { tokens: number; at: number }>();
+  constructor(
+    private readonly perMinute: number,
+    private readonly now: () => number = Date.now,
+  ) {}
+
+  take(id: string): { ok: true } | { ok: false; retryAfterSeconds: number } {
+    const t = this.now();
+    const rate = this.perMinute / 60_000;
+    const b = this.buckets.get(id) ?? { tokens: this.perMinute, at: t };
+    b.tokens = Math.min(this.perMinute, b.tokens + (t - b.at) * rate);
+    b.at = t;
+    this.buckets.set(id, b);
+    if (b.tokens >= 1) {
+      b.tokens -= 1;
+      return { ok: true };
+    }
+    return { ok: false, retryAfterSeconds: Math.ceil((1 - b.tokens) / rate / 1000) };
+  }
 }
 
 type Handler = (ctx: Ctx) => Promise<{ status?: number; body: unknown } | unknown>;
@@ -34,6 +78,7 @@ interface Ctx {
 
 interface Route {
   method: string;
+  path: string;
   pattern: RegExp;
   handler: Handler;
   /** Responses are stored against Idempotency-Key. */
@@ -43,7 +88,8 @@ interface Route {
 export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
   const routes: Route[] = [];
   const on = (method: string, path: string, handler: Handler, idempotent = method === "POST") =>
-    routes.push({ method, pattern: new RegExp(`^${path.replace(/:[a-zA-Z]+/g, "([^/]+)")}$`), handler, idempotent });
+    routes.push({ method, path, pattern: new RegExp(`^${path.replace(/:[a-zA-Z]+/g, "([^/]+)")}$`), handler, idempotent });
+  const limiter = opts.rateLimit === false ? undefined : new RateLimiter(opts.rateLimit?.requestsPerMinute ?? 600);
 
   on("GET", "/v1/health", async () => ({ ok: true, network: ramp.network, asset: ramp.asset }));
 
@@ -79,13 +125,21 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
       kind: (optStr(body.kind) as "secret" | "agent" | undefined) ?? "agent",
       label: optStr(body.label),
       policy: policy(body.policy),
+      expiresInSeconds: body.expiresInSeconds === undefined ? undefined : Number(body.expiresInSeconds),
     }),
+  }));
+  on("POST", "/v1/keys/:id/rotate", async ({ caller, params, body }) => ({
+    status: 201,
+    body: await ramp.rotateKey(await caller(), params[0]!, { graceSeconds: body.graceSeconds === undefined ? undefined : Number(body.graceSeconds) }),
   }));
   on("GET", "/v1/keys", async ({ caller }) => ({ data: await ramp.listKeys(await caller()) }));
   on("DELETE", "/v1/keys/:id", async ({ caller, params }) => {
     await ramp.revokeKey(await caller(), params[0]!);
     return { revoked: params[0] };
   });
+
+  on("GET", "/v1/webhook/dead-letters", async ({ caller }) => ({ data: await ramp.deadLetters(await caller()) }));
+  on("POST", "/v1/webhook/dead-letters/:id/redeliver", async ({ caller, params }) => ramp.redeliver(await caller(), params[0]!));
 
   on("PUT", "/v1/webhook", async ({ caller, body }) => ramp.setWebhook(await caller(), body.url === null ? null : str(body.url, "url")));
 
@@ -144,11 +198,35 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
     false,
   );
 
-  return async function handle(req: IncomingMessage, res: ServerResponse) {
+  async function handle(req: IncomingMessage, res: ServerResponse) {
+    const started = performance.now();
+    const supplied = headerOf(req, "x-request-id");
+    const requestId = supplied && /^[\w.-]{1,64}$/.test(supplied) ? supplied : randomUUID();
+    res.setHeader("x-request-id", requestId);
+    let matched = "unmatched";
+    let who: Caller | undefined;
+    if (opts.log) {
+      const log = opts.log;
+      res.on("finish", () =>
+        log({
+          at: new Date().toISOString(),
+          requestId,
+          method: req.method ?? "",
+          route: matched,
+          status: res.statusCode,
+          ms: Math.round(performance.now() - started),
+          ...(who ? { tenantId: who.tenant.id, keyId: who.key.id } : {}),
+        }),
+      );
+    }
     try {
       const url = new URL(req.url ?? "/", "http://ramp.local");
-      if (req.method === "GET" && url.pathname.startsWith("/pay/")) return await payPage(ramp, decodeURIComponent(url.pathname.slice(5)), req, res);
+      if (req.method === "GET" && url.pathname.startsWith("/pay/")) {
+        matched = "/pay/:id";
+        return await payPage(ramp, decodeURIComponent(url.pathname.slice(5)), req, res);
+      }
       const route = routes.find((r) => r.method === req.method && r.pattern.test(url.pathname));
+      if (route) matched = route.path;
       if (!route) {
         const known = routes.some((r) => r.pattern.test(url.pathname));
         throw new RampError(known ? "invalid_request" : "not_found", known ? `method ${req.method} not allowed` : `no route ${url.pathname}`);
@@ -165,7 +243,16 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
         if (!body || typeof body !== "object" || Array.isArray(body)) throw new RampError("invalid_request", "body must be a JSON object");
       }
       let cached: Caller | undefined;
-      const caller = async () => (cached ??= await ramp.authenticate(bearer(req)));
+      const caller = async () => {
+        if (cached) return cached;
+        const c = await ramp.authenticate(bearer(req));
+        who = c;
+        const verdict = limiter?.take(c.key.id);
+        if (verdict && !verdict.ok) {
+          throw new RampError("rate_limited", `rate limit exceeded; retry in ${verdict.retryAfterSeconds}s`, { retryAfterSeconds: verdict.retryAfterSeconds });
+        }
+        return (cached = c);
+      };
       const ctx: Ctx = { req, params, query: url.searchParams, raw, body, caller };
 
       const idemKey = route.idempotent ? headerOf(req, "idempotency-key") : undefined;
@@ -184,11 +271,18 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
       const out = normalize(await route.handler(ctx));
       return send(res, out.status, out.body);
     } catch (e) {
-      if (e instanceof RampError) return send(res, e.status, e.toJSON());
-      console.error("ramp: unhandled error", e);
-      return send(res, 500, { error: { code: "internal", message: "internal error" } });
+      if (e instanceof RampError) {
+        const retry = e.code === "rate_limited" ? { "retry-after": String(e.details?.retryAfterSeconds ?? 60) } : undefined;
+        return send(res, e.status, e.toJSON(), retry);
+      }
+      // The error object only: never the request, which may carry keys or signed transactions.
+      console.error(`ramp: unhandled error (request ${requestId})`, e);
+      return send(res, 500, { error: { code: "internal", message: "internal error", requestId } });
     }
-  };
+  }
+  /** The routes this handler serves, for the OpenAPI spec check. */
+  handle.routes = routes.map((r) => ({ method: r.method, path: r.path }));
+  return handle;
 }
 
 export function rampServer(ramp: RampService, opts: RampServerOptions = {}): Server {

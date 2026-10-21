@@ -6,13 +6,17 @@
  *
  *   pnpm ramp:demo
  *
- * Testnet has no USDC faucet, so this settles in XLM unless RAMP_ASSET=USDC
- * and the user is funded with testnet USDC. The anchor is the mock unless
+ * Settles in testnet USDC (Circle's testnet issuer). Onboarding sponsors the
+ * user's account and USDC trustline, so the user holds no XLM; the demo then
+ * buys the user some USDC with the sponsor's friendbot XLM on the testnet DEX
+ * (a path payment), standing in for the user's own deposit. RAMP_ASSET=XLM
+ * runs it natively instead. The anchor is the mock unless
  * CORRIDOR_ANCHOR_BASE_URL names a SEP server.
  */
 import type { AddressInfo } from "node:net";
 import { Asset, Keypair, Operation, TransactionBuilder } from "@stellar/stellar-sdk";
-import { explorerTx } from "@corridor/chain-stellar";
+import { balanceOf, explorerTx, stellarAsset } from "@corridor/chain-stellar";
+import { formatMoney } from "@corridor/core";
 import { rampServer } from "@corridor/ramp";
 import { keypairSigner } from "@corridor/ramp/testing";
 import { Ramp } from "@corridor/ramp-sdk";
@@ -25,6 +29,8 @@ const { ramp: service, sponsor, mock } = await openRamp({ publicUrl: "http://loc
 const server = rampServer(service, { selfServeSignup: true });
 await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+// Orders settle from Horizon, not the anchor's word (ADR 0008): watch the chain while the demo runs.
+const reconciler = setInterval(() => void service.reconcile().catch((e) => console.error("reconcile:", e)), 3_000);
 
 try {
   const { app, secretKey } = await Ramp.signup({ name: "Ramp demo app", baseUrl });
@@ -35,17 +41,24 @@ try {
   const onboarded = await ramp.accounts.onboard(user.publicKey());
   console.log(`2. user ${user.publicKey()} onboarded, reserves sponsored: ${explorerTx(NETWORK, onboarded.txHash)}`);
 
-  if (RAMP_ASSET === "XLM") {
-    // Testnet stand-in for the user's own deposit: give them something to pay out.
-    const account = await sponsor.server.loadAccount(sponsor.address);
-    const tx = new TransactionBuilder(account, { fee: await sponsor.fee(), networkPassphrase: sponsor.passphrase })
-      .addOperation(Operation.payment({ destination: user.publicKey(), asset: Asset.native(), amount: "10" }))
-      .setTimeout(180)
-      .build();
-    tx.addSignature(sponsor.address, Buffer.from(await sponsor.signer!.sign(tx.hash())).toString("base64"));
-    await sponsor.server.submitTransaction(tx);
-    console.log("   funded the user with 10 XLM (testnet only)");
-  }
+  // Testnet stand-in for the user's own deposit: give them something to pay out.
+  const account = await sponsor.server.loadAccount(sponsor.address);
+  const fund =
+    RAMP_ASSET === "XLM"
+      ? Operation.payment({ destination: user.publicKey(), asset: Asset.native(), amount: "10" })
+      : Operation.pathPaymentStrictReceive({
+          sendAsset: Asset.native(),
+          sendMax: "500",
+          destination: user.publicKey(),
+          destAsset: stellarAsset(RAMP_ASSET, NETWORK) as Asset,
+          destAmount: "10",
+          path: [],
+        });
+  const tx = new TransactionBuilder(account, { fee: await sponsor.fee(), networkPassphrase: sponsor.passphrase }).addOperation(fund).setTimeout(180).build();
+  tx.addSignature(sponsor.address, Buffer.from(await sponsor.signer!.sign(tx.hash())).toString("base64"));
+  const bought = await sponsor.server.submitTransaction(tx);
+  const held = formatMoney({ asset: RAMP_ASSET, amount: await balanceOf(sponsor, RAMP_ASSET, user.publicKey()) });
+  console.log(`   user now holds ${held}${RAMP_ASSET === "XLM" ? "" : " (bought on the testnet DEX through the sponsored trustline)"}: ${explorerTx(NETWORK, bought.hash)}`);
 
   const order = await ramp.withdrawals.send({
     currency: process.env.CORRIDOR_PAYOUT_CURRENCY ?? "KES",
@@ -62,5 +75,6 @@ try {
   console.log(`4. payout ${done.status}`);
   console.log("5. usage", JSON.stringify(await ramp.usage(), null, 2));
 } finally {
+  clearInterval(reconciler);
   server.close();
 }

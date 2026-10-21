@@ -17,5 +17,7 @@ export interface Observation {
   to?: string;
   /** The ledger (Stellar) or block (Solana, Base) the movement landed in. */
   blockNumber?: bigint;
+  /** The raw memo, for venues where a counterparty assigns its own (Stellar anchors' text and id memos). */
+  memo?: { type: string; value: string };
   observedAt: Date;
 }

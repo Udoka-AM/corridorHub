@@ -8,10 +8,12 @@
     "./testing": "./src/testing.ts"
   },
   "dependencies": {
-    "@corridor/core": "workspace:*",
     "@corridor/chain-stellar": "workspace:*",
+    "@corridor/core": "workspace:*",
     "@corridor/ledger": "workspace:*",
     "@corridor/partners": "workspace:*",
+    "@corridor/routing": "workspace:*",
+    "@corridor/saga": "workspace:*",
     "@stellar/stellar-sdk": "^17.2.1"
   }
 }
