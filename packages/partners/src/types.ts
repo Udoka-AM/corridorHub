@@ -1,4 +1,4 @@
-import type { Fiat, Hex } from "@corridor/core";
+import type { Decimal, Fiat, Hex } from "@corridor/core";
 
 /**
  * A ramp partner is a spoke of the network: it pays local currency out
@@ -45,8 +45,8 @@ export interface PartnerOrder {
   usdcAmount: bigint;
   /** Local currency in minor units. */
   fiatAmount: bigint;
-  /** Local currency per USD at pricing time. */
-  rate: number;
+  /** Local currency per USD at pricing time, as a decimal string. */
+  rate: Decimal;
   /** Payout: where to send USDC. One-off; only valid for this order. */
   fundingAddress?: string;
   /**
@@ -93,9 +93,9 @@ export interface CollectionRequest {
 export interface Rates {
   currency: Fiat;
   /** Local currency per USD when collecting (payer buys USDC). */
-  onRamp: number;
+  onRamp: Decimal;
   /** Local currency per USD when paying out. */
-  offRamp: number;
+  offRamp: Decimal;
   at: Date;
 }
 

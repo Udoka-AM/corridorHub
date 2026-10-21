@@ -159,13 +159,20 @@ export function money(asset: Asset, amount: bigint): Money {
   return { asset, amount };
 }
 
-/** Parse a decimal string ("12.50") into minor units of `asset`. */
-export function parseMoney(asset: Asset, value: string): Money {
+/**
+ * Parse a decimal string ("12.50") into minor units of `asset`. Extra decimals
+ * are refused unless `truncate` is set, which rounds toward zero (used for
+ * amounts a partner reports at a higher precision than the asset carries).
+ */
+export function parseMoney(asset: Asset, value: string, opts: { truncate?: boolean } = {}): Money {
   const decimals = assetDecimals(asset);
   const m = /^(\d+)(?:\.(\d+))?$/.exec(value.trim());
   if (!m) throw new Error(`invalid amount "${value}"`);
-  const frac = m[2] ?? "";
-  if (frac.length > decimals) throw new Error(`"${value}" has more than ${decimals} decimals for ${asset}`);
+  let frac = m[2] ?? "";
+  if (frac.length > decimals) {
+    if (!opts.truncate) throw new Error(`"${value}" has more than ${decimals} decimals for ${asset}`);
+    frac = frac.slice(0, decimals);
+  }
   return money(asset, BigInt(m[1]! + frac.padEnd(decimals, "0")));
 }
 
@@ -190,4 +197,54 @@ export function rescale(amount: bigint, from: number, to: number): bigint {
   const divisor = 10n ** BigInt(from - to);
   if (amount % divisor !== 0n) throw new Error(`${amount} (${from} dp) does not fit in ${to} dp without losing value`);
   return amount / divisor;
+}
+
+/**
+ * A non-negative decimal carried as a string ("1530.25"). Partner rates cross
+ * the boundary in this form so no binary float ever touches money.
+ */
+export type Decimal = string;
+
+const DECIMAL = /^\d+(?:\.\d+)?$/;
+
+/**
+ * Normalize a partner-supplied decimal. A JSON number from a vendor API is
+ * accepted once, here, through its shortest round-trip string; exponent forms,
+ * negatives and NaN are refused rather than guessed.
+ */
+export function decimal(value: string | number): Decimal {
+  const s = typeof value === "number" ? String(value) : value.trim();
+  if (!DECIMAL.test(s)) throw new Error(`invalid decimal "${value}"`);
+  const [w, f = ""] = s.split(".");
+  const whole = w!.replace(/^0+(?=\d)/, "");
+  const frac = f.replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : whole;
+}
+
+function units(d: Decimal): { n: bigint; dp: number } {
+  const [w, f = ""] = decimal(d).split(".");
+  return { n: BigInt(w! + f), dp: f.length };
+}
+
+/** Minor units of `from` × `rate` → minor units of `to`, rounded down. */
+export function mulRate(amount: bigint, from: Asset, rate: Decimal, to: Asset): bigint {
+  const r = units(rate);
+  return (amount * r.n * 10n ** BigInt(assetDecimals(to))) / 10n ** BigInt(assetDecimals(from) + r.dp);
+}
+
+/** Minor units of `from` ÷ `rate` → minor units of `to`, rounded down. */
+export function divRate(amount: bigint, from: Asset, rate: Decimal, to: Asset): bigint {
+  const r = units(rate);
+  if (r.n === 0n) throw new Error("cannot divide by a zero rate");
+  return (amount * 10n ** BigInt(r.dp + assetDecimals(to))) / (r.n * 10n ** BigInt(assetDecimals(from)));
+}
+
+/** `numerator / denominator` to `places` decimals, rounded down; "0" when the denominator is zero. */
+export function ratio(numerator: Decimal, denominator: Decimal, places = 7): Decimal {
+  const a = units(numerator);
+  const b = units(denominator);
+  if (b.n === 0n) return "0";
+  const q = (a.n * 10n ** BigInt(b.dp + places)) / (b.n * 10n ** BigInt(a.dp));
+  const s = q.toString().padStart(places + 1, "0");
+  return decimal(`${s.slice(0, s.length - places)}.${s.slice(s.length - places)}`);
 }

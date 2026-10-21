@@ -46,8 +46,8 @@ const RATE_SCALE = 10n ** BigInt(RATE_DP);
 const SETTLEMENT_SCALE = 10n ** 7n;
 
 /** `1530.25` → 15302500000n. Refuses exponent forms rather than guessing. */
-export function scaleRate(rate: number | string): bigint {
-  const s = String(rate);
+export function scaleRate(rate: string): bigint {
+  const s = rate.trim();
   const m = /^(\d+)(?:\.(\d+))?$/.exec(s);
   if (!m) throw new RampError("partner_error", `unusable rate ${s}`);
   const frac = (m[2] ?? "").slice(0, RATE_DP).padEnd(RATE_DP, "0");

@@ -31,10 +31,10 @@ async function onboard(s: Awaited<ReturnType<typeof setup>>) {
 
 describe("fees", () => {
   it("prices in integer minor units", () => {
-    expect(scaleRate(128.9)).toBe(1_289_000_000n);
+    expect(scaleRate("128.9")).toBe(1_289_000_000n);
     expect(formatRate(scaleRate("1530.25"))).toBe("1530.25");
-    expect(toFiat(USDC(10), scaleRate(128.9), "KES")).toBe(128_900n);
-    expect(toSettlement(128_900n, scaleRate(128.9), "KES")).toBe(USDC(10));
+    expect(toFiat(USDC(10), scaleRate("128.9"), "KES")).toBe(128_900n);
+    expect(toSettlement(128_900n, scaleRate("128.9"), "KES")).toBe(USDC(10));
     expect(rampFee(PLANS.growth, USDC(100), "withdrawal")).toBe(3_500_000n);
     expect(rampFee(PLANS.agent, USDC(100), "withdrawal")).toBe(5_000_000n + 500_000n);
     expect(rampFee(PLANS.sandbox, USDC(100), "withdrawal")).toBe(0n);
