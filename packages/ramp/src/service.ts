@@ -319,7 +319,7 @@ export class RampService {
     order.txHash = sent.hash;
     order.status = "submitted";
     order.updatedAt = this.now();
-    await this.store.updateOrder(order);
+    await this.store.patchOrder(order.tenantId, order.id, { txHash: sent.hash, status: "submitted", updatedAt: order.updatedAt });
     await this.emit(caller.tenant, "order.updated", orderView(order));
     // Nothing is booked here: the fee and the order settle when the chain shows the transaction (`reconcile`).
     return this.refresh(caller.tenant, order);
@@ -492,7 +492,7 @@ export class RampService {
           if (!hit || !(await this.store.matchObservations(order.id, [hit.paymentRef, ...(hit.feeRef ? [hit.feeRef] : [])]))) continue;
           order.chain = hit;
           order.updatedAt = this.now();
-          await this.store.updateOrder(order);
+          await this.store.patchOrder(order.tenantId, order.id, { chain: hit, updatedAt: order.updatedAt });
         }
       }
     }
@@ -555,7 +555,7 @@ export class RampService {
     if (next === fresh.status) return fresh;
     fresh.status = next;
     fresh.updatedAt = this.now();
-    await this.store.updateOrder(fresh);
+    await this.store.patchOrder(fresh.tenantId, fresh.id, { status: next, updatedAt: fresh.updatedAt });
     if (!fresh.error) await this.emit(tenant, "order.updated", orderView(fresh));
     return fresh;
   }
@@ -607,7 +607,12 @@ export class RampService {
       order.partnerStatus = po.partnerStatus;
       if (delivery) order.deliveryTx = delivery;
       order.updatedAt = this.now();
-      await this.store.updateOrder(order);
+      await this.store.patchOrder(order.tenantId, order.id, {
+        partnerState: order.partnerState,
+        partnerStatus: order.partnerStatus,
+        ...(delivery ? { deliveryTx: delivery } : {}),
+        updatedAt: order.updatedAt,
+      });
     }
     return this.advance(tenant, order);
   }

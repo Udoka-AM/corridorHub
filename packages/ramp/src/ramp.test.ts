@@ -254,6 +254,23 @@ describe("Ramp", () => {
     expect(still.chain).toBeUndefined();
   });
 
+  it("keeps chain evidence when the anchor's update lands from a copy read before reconcile", async () => {
+    const s = await setup();
+    await onboard(s);
+    const q = await s.ramp.quote(s.caller, { kind: "withdrawal", currency: "KES", amount: USDC(4) });
+    const order = await s.ramp.createWithdrawal(s.caller, { quoteId: q.id, account: s.user.publicKey(), beneficiary: bank });
+    const submitted = await s.ramp.submitWithdrawal(s.caller, order.id, await s.sign(order.unsignedXdr!));
+    const stale = (await s.ramp.store.order(s.caller.tenant.id, order.id))!;
+    expect(stale.chain).toBeUndefined();
+    await s.ramp.reconcile();
+    // A webhook handler that loaded the order before reconcile writes the anchor's state.
+    await s.ramp.store.patchOrder(stale.tenantId, stale.id, { partnerState: "completed", partnerStatus: "COMPLETED" });
+    await s.mock.observeFunding(order.partnerOrderId, submitted.txHash!);
+    const done = await s.ramp.getOrder(s.caller, order.id);
+    expect(done.chain?.txHash).toBe(submitted.txHash);
+    expect(done.status).toBe("completed");
+  });
+
   it("does not let one payment settle two orders", async () => {
     const s = await setup();
     await onboard(s);

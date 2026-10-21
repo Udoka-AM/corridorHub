@@ -386,6 +386,16 @@ export class RampStore {
     ]);
   }
 
+  /**
+   * Merge fields into an order without rewriting the rest. The reconciler, the
+   * anchor's webhook and a status read each own different fields of the same
+   * order and run concurrently; a whole-row write from a stale copy would undo
+   * the others (e.g. erase the chain evidence the reconciler just claimed).
+   */
+  async patchOrder(tenantId: string, id: string, patch: Partial<RampOrder>): Promise<void> {
+    await this.db.query(`UPDATE ramp_orders SET data = data || $3::jsonb WHERE tenant_id = $1 AND id = $2`, [tenantId, id, JSON.stringify(toJson(patch))]);
+  }
+
   async deleteOrder(tenantId: string, id: string): Promise<void> {
     await this.db.query(`DELETE FROM ramp_orders WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
   }
