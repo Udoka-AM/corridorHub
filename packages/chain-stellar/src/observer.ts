@@ -144,7 +144,8 @@ export class StellarObserver {
     const reference: Hex | null = tx?.memo ? fromStellarMemo(tx.memo, tx.memo_type) : null;
     const ledger = tx?.ledger === undefined ? ledgerOf(record.paging_token) : BigInt(tx.ledger);
     const observedAt = new Date(record.created_at);
-    const base = { venue: "stellar" as const, reference, blockNumber: ledger, observedAt };
+    const memo = tx?.memo && tx.memo_type && tx.memo_type !== "none" ? { type: tx.memo_type, value: tx.memo } : undefined;
+    const base = { venue: "stellar" as const, reference, blockNumber: ledger, observedAt, ...(memo ? { memo } : {}) };
     const out: Observation[] = [];
 
     const movement = this.movement(record, network);

@@ -17,15 +17,17 @@ That work is what the Hub already does. Building a second product next to it wou
 | Shared core | Ramp adds | Hub adds |
 |---|---|---|
 | Anchors behind `RampPartner` (SEP-1/10/12/31/38) | Apps, API keys, plans | The customer's own cloud |
-| The 32-byte Corridor Reference | Quotes that expire and are spent once | Route planner and saga over the customer's vaults |
+| The 32-byte Corridor Reference | Quotes that expire and are spent once | Vault custody (`custody: "hub"`): reserve and credit legs over the customer's vaults |
 | The double-entry, 7 dp ledger | Webhooks to apps, usage per app | KMS / MPC / Turnkey signers |
 | The anchor's funding memo (`fundingMemoFor`) | Sponsored end-user accounts, agent spending policies | Read-only reconciliation first |
+| Route planner (`planRoute`) and saga engine | Wallet custody (`custody: "wallet"`): no ledger reserve for funds Corridor does not hold | |
+| Horizon observation (`StellarObserver`), settle from the chain | Matching by the anchor's memo, account and exact amount; one payment claims one order | |
 
 **Ramp never holds an end user's key.** It builds the Stellar transaction (the payment to the anchor's receiving account with the anchor's memo, plus the Ramp fee as a second operation) and returns it unsigned. The user's embedded wallet signs it through the SDK's `signXdr` hook. Ramp checks that the signed transaction is the one it built (same hash), then submits it inside a fee bump from its sponsor account, so users never need XLM for fees.
 
 **Onboarding is sponsored.** `POST /v1/accounts` returns a transaction that creates the user's account and opens the settlement asset's trustline inside `beginSponsoringFutureReserves` / `endSponsoringFutureReserves`, already signed by the sponsor. The user co-signs to accept the trustline.
 
-**Fees are integer arithmetic on the settlement amount** (basis points plus a per-call amount for agent plans) and are booked in the ledger. A withdrawal's fee arrives on-chain in the same transaction and is booked as revenue when that transaction succeeds. A deposit's fee is accrued against the app as a receivable.
+**Fees are integer arithmetic on the settlement amount** (basis points plus a per-call amount for agent plans) and are booked in the ledger. A withdrawal's fee arrives on-chain in the same transaction and is booked as revenue only when the reconciler sees that transaction on Horizon (ADR 0008); an anchor's word that it paid out settles nothing. A deposit's fee is accrued against the app as a receivable.
 
 ## Consequences
 
@@ -44,6 +46,7 @@ The plan's full Ramp scope includes items this record does not claim:
 - Cross-chain deposit addresses: Tron USDT over NEAR Intents, Solana and Base USDC over CCTP.
 - x402-paid endpoints and an MCP server. The SDK exports `agentTools` with JSON schemas, ready to register with an MCP server.
 - Billing and invoices beyond the usage endpoint, and a dashboard UI.
+- A hosted deployment: the KMS behind the sponsor key, the managed Postgres, the domain. The code runs on Postgres; where it runs is undecided.
 
 ## Alternatives rejected
 

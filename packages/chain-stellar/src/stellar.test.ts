@@ -139,6 +139,7 @@ describe("StellarObserver", () => {
         from: "GVAULT",
         to: "GANCHOR",
         blockNumber: 42n,
+        memo: { type: "hash", value: memoOf(ref) },
         observedAt: new Date("2026-10-17T09:00:00Z"),
       },
     ]);

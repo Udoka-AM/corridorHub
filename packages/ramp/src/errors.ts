@@ -14,7 +14,8 @@ export type RampErrorCode =
   | "conflict"
   | "transaction_mismatch"
   | "partner_error"
-  | "chain_error";
+  | "chain_error"
+  | "rate_limited";
 
 const STATUS: Record<RampErrorCode, number> = {
   unauthorized: 401,
@@ -29,6 +30,7 @@ const STATUS: Record<RampErrorCode, number> = {
   transaction_mismatch: 422,
   partner_error: 502,
   chain_error: 502,
+  rate_limited: 429,
 };
 
 export class RampError extends Error {

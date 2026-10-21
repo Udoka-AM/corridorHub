@@ -24,40 +24,45 @@ await ramp.orders.wait(order.id);
 
 ## How a withdrawal moves
 
-1. **Quote.** `POST /v1/quotes` prices the payout from the anchor's rate. The Ramp fee is quoted next to it, and the quote expires after 5 minutes.
-2. **Order.** `POST /v1/withdrawals` spends the quote once, opens the anchor's order with a fresh Corridor Reference, and builds the funding transaction: a payment to the anchor's receiving account with **the anchor's memo**, plus the Ramp fee. The transaction is returned unsigned.
+1. **Quote.** `POST /v1/quotes` prices the payout from the anchor's rate, carried as a decimal string and applied in integer arithmetic. The Ramp fee is quoted next to it, and the quote expires after 5 minutes.
+2. **Route and saga.** `POST /v1/withdrawals` spends the quote once and plans the order on the Hub's route planner (`planRoute`, with `custody: "wallet"` because the user, not Corridor, holds the funds). The plan runs as a durable saga on the Hub's saga engine: its `partner.payout` leg opens the anchor's order with a fresh Corridor Reference and builds the funding transaction, a payment to the anchor's receiving account with **the anchor's memo**, plus the Ramp fee. The transaction is returned unsigned.
 3. **Sign.** The user's wallet signs it in the app, through the SDK's `signXdr`. Ramp never sees the key.
-4. **Submit.** `POST /v1/withdrawals/:id/submit` checks that the hash matches the transaction Ramp built, wraps it in a sponsor fee bump, and submits. The fee is booked in the ledger.
-5. **Track.** The anchor's webhooks (or polling) move the order to `completed` or `failed`, and each change is delivered to the app's webhook, signed.
+4. **Submit.** `POST /v1/withdrawals/:id/submit` checks that the hash matches the transaction Ramp built, wraps it in a sponsor fee bump, and submits. Nothing is booked yet.
+5. **Reconcile from the chain.** The reconciler reads the user's account on Horizon through the Hub's `StellarObserver`, with persisted cursors. An order settles only when the chain shows a payment from the user to the anchor's account, in the settlement asset, for the exact amount, with the anchor's memo, and the fee payment in the same transaction. Each observed payment is claimed by one order. Then the fee is booked in the ledger against that payment ([ADR 0008](/decisions/0008-book-from-the-chain)).
+6. **Track.** The anchor's webhooks (or polling) report its side. The order is `completed` only when the anchor has paid out **and** the chain shows the funding. A `completed` from the anchor with no transaction behind it settles nothing. Each change is delivered to the app's webhook, signed.
 
-Deposits run the same way in reverse. `POST /v1/deposits` opens a collection with the anchor and returns the virtual account to pay into, plus a hosted collection link at `/pay/:id` that a merchant can send to a customer.
+Deposits run the same way in reverse on a `partner.collect` leg. `POST /v1/deposits` opens a collection with the anchor and returns the virtual account to pay into, plus a hosted collection link at `/pay/:id` that a merchant can send to a customer. The deposit settles when the chain shows the anchor's delivery into the user's account, by the anchor's delivery hash or the order's Corridor Reference.
 
 ## API
 
 All amounts are integer strings: settlement amounts in 7 dp minor units, fiat in the currency's own minor units. Every POST accepts an `Idempotency-Key`. A replay with the same body returns the first response, and the same key with a different body returns `409 conflict`.
+
+The full contract is [`packages/ramp/openapi.json`](https://github.com/kelechi-endurance/corridorHub/blob/main/packages/ramp/openapi.json) (OpenAPI 3.1). A test fails if a route the server serves is missing from it, or the other way round.
 
 | Method | Path | |
 |---|---|---|
 | `POST` | `/v1/signup` | Free testnet sandbox app (self-serve) |
 | `POST` | `/v1/tenants` | Paid-plan app (operator token) |
 | `GET` | `/v1/me` | The app and the calling key |
-| `POST` `GET` `DELETE` | `/v1/keys` | Secret keys and agent keys with spending policies |
+| `POST` `GET` `DELETE` | `/v1/keys` | Secret keys and agent keys with spending policies, optional expiry |
+| `POST` | `/v1/keys/:id/rotate` | Issue a replacement key; the old one works until the grace period ends |
 | `PUT` | `/v1/webhook` | Set the app's webhook URL |
+| `GET` `POST` | `/v1/webhook/dead-letters` | Events whose delivery gave up, and redelivery |
 | `POST` | `/v1/quotes` | Withdrawal or deposit quote |
 | `POST` | `/v1/accounts` | Sponsored onboarding transaction for a user |
 | `POST` | `/v1/accounts/:address/submit` | Submit the user-signed onboarding |
 | `POST` | `/v1/withdrawals` | Open a payout; returns the unsigned funding transaction |
 | `POST` | `/v1/withdrawals/:id/submit` | Submit the user-signed funding |
 | `POST` | `/v1/deposits` | Open a collection; returns the account to pay and a link |
-| `GET` | `/v1/orders`, `/v1/withdrawals/:id`, `/v1/deposits/:id` | Status |
+| `GET` | `/v1/orders`, `/v1/withdrawals/:id`, `/v1/deposits/:id` | Status, with the on-chain evidence once settled |
 | `GET` | `/v1/usage` | Volume, orders and fees for the period |
 | `GET` | `/v1/events` | Webhook events and their delivery state |
 
-Errors are `{ "error": { "code", "message", "details" } }` with stable codes: `unauthorized`, `forbidden`, `not_found`, `invalid_request`, `quote_expired`, `quote_used`, `spending_limit`, `unsupported`, `conflict`, `transaction_mismatch`, `partner_error`, `chain_error`.
+Errors are `{ "error": { "code", "message", "details" } }` with stable codes: `unauthorized`, `forbidden`, `not_found`, `invalid_request`, `quote_expired`, `quote_used`, `spending_limit`, `unsupported`, `conflict`, `transaction_mismatch`, `partner_error`, `chain_error`, `rate_limited` (with `Retry-After`).
 
 ## Webhooks
 
-Each event is POSTed with `x-ramp-timestamp` and `x-ramp-signature: v1=<hex HMAC-SHA256 of "timestamp.body">`, signed with the app's webhook secret. `verifyWebhook(secret, rawBody, headers)` in the SDK checks the signature and the age. Undelivered events are retried.
+Each event is POSTed with `x-ramp-timestamp` and `x-ramp-signature: v1=<hex HMAC-SHA256 of "timestamp.body">`, signed with the app's webhook secret. `verifyWebhook(secret, rawBody, headers)` in the SDK checks the signature and the age. A failed delivery is retried with exponential backoff (30 s, doubling, capped at 6 h). After the last attempt the event is dead-lettered: `GET /v1/webhook/dead-letters` lists it and `POST /v1/webhook/dead-letters/:id/redeliver` puts it back in the queue.
 
 ## Agents
 
@@ -72,11 +77,18 @@ An agent key can quote, pay out and read status, and cannot mint keys. Its polic
 | Merchant | 0.40% of collected volume | Mainnet |
 | Agent | 0.50% + 0.05 USDC per payout | Mainnet |
 
+## Operating it
+
+- **Database.** PGlite on disk for local runs and tests; set `DATABASE_URL` to run on Postgres (`openPostgresDb`). The same schema and tests run on both.
+- **Rate limits.** A token bucket per API key (`RAMP_RATE_LIMIT`, requests per minute); over it, `429 rate_limited` with `Retry-After`.
+- **Keys.** Keys can be created with an expiry and rotated with a grace period. An expired key is refused like a revoked one.
+- **Logs.** One JSON line per request: request id, method, route template, status, duration, app and key id. Never the body, headers, query string, raw path, signed XDR, bank details or keys.
+
 ## Run it
 
 ```bash
 pnpm ramp:serve   # the API on :8787, mock anchor unless CORRIDOR_ANCHOR_BASE_URL is set
-pnpm ramp:demo    # signup → sponsored onboarding → payout → usage, on Stellar testnet
+pnpm ramp:demo    # signup → sponsored account + USDC trustline → payout in testnet USDC → usage
 ```
 
 ## Declared and not built

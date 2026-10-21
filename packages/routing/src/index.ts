@@ -85,6 +85,13 @@ export interface RouteRequest {
   source: Position;
   destination: Position;
   env: Environment;
+  /**
+   * Where the value sits around the route. `hub` (the default): a customer
+   * balance in Corridor's ledger, so payouts reserve it and collections credit
+   * it. `wallet`: the end user's own Stellar wallet (Ramp), so there is no
+   * balance to reserve or credit and the route is just its venue legs.
+   */
+  custody?: "hub" | "wallet";
 }
 
 /** The hub: customer balances are held and settled here. */
@@ -177,7 +184,9 @@ export function planRoute(req: RouteRequest, edges: Edge[] = DEFAULT_EDGES): Rou
   }
 
   let legs: Edge[];
-  if (purpose === "collection") {
+  if (req.custody === "wallet") {
+    legs = path;
+  } else if (purpose === "collection") {
     // Funds arrive on the hub, then the customer's balance is credited.
     legs = [...path, { kind: "ledger.credit", from: req.destination, to: req.destination, cost: 0 }];
   } else {

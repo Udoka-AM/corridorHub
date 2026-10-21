@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
 import { FIAT, RefKind, customerTag, encodeRef, isFiat, uuidv7, type Asset, type Fiat } from "@corridor/core";
-import { fundingMemoFor } from "@corridor/chain-stellar";
+import { StellarObserver, type PaymentSource } from "@corridor/chain-stellar";
 import { Accounts, Ledger, type Db } from "@corridor/ledger";
 import { signWebhook, type Beneficiary, type PartnerOrder, type PartnerRegistry, type RampPartner } from "@corridor/partners";
+import { SagaEngine, type SagaStatus } from "@corridor/saga";
 import type { RampChain } from "./chain.ts";
 import { RampError } from "./errors.ts";
+import { PENDING_PARTNER_ORDER, matchOnChain, partnerCall, rampAccounts, rampCollectLeg, rampEdges, rampPayoutLeg, rampPlan, type FlowHost } from "./flows.ts";
 import { PLANS, formatRate, planOf, rampFee, scaleRate, toFiat, toSettlement, type PlanId } from "./fees.ts";
 import { checkSpend, hashKey, newApiKey, newSecret, type SpendingPolicy } from "./keys.ts";
 import { RampStore, toJson, type ApiKey, type OrderKind, type OrderStatus, type Quote, type RampEvent, type RampOrder, type Tenant } from "./store.ts";
@@ -31,6 +33,8 @@ export interface RampServiceOptions {
   /** Where anchors send status webhooks, given the partner id. */
   partnerWebhookUrl?: (partnerId: string) => string;
   quoteTtlSeconds?: number;
+  /** Horizon payments, for settling orders from the chain (ADR 0008). Without it no order settles. */
+  payments?: PaymentSource;
   /** Outbound webhook transport. */
   fetch?: typeof fetch;
   now?: () => Date;
@@ -41,13 +45,6 @@ export interface Caller {
   key: ApiKey;
 }
 
-const PARTNER_TO_ORDER: Record<PartnerOrder["status"], OrderStatus | undefined> = {
-  open: undefined,
-  processing: "processing",
-  completed: "completed",
-  failed: "failed",
-};
-
 const FINAL: OrderStatus[] = ["completed", "failed"];
 const MAX_DELIVERY_ATTEMPTS = 10;
 
@@ -56,6 +53,7 @@ export class RampService {
   readonly feeAccount: string;
   private readonly now: () => Date;
   private readonly ttl: number;
+  private saga!: SagaEngine;
 
   private constructor(
     readonly store: RampStore,
@@ -71,7 +69,11 @@ export class RampService {
 
   static async open(opts: RampServiceOptions): Promise<RampService> {
     const ledger = await Ledger.open(opts.db);
-    return new RampService(await RampStore.open(opts.db), ledger, new Accounts(ledger), opts);
+    const accounts = new Accounts(ledger);
+    const service = new RampService(await RampStore.open(opts.db), ledger, accounts, opts);
+    const host = service.flowHost();
+    service.saga = await SagaEngine.open(opts.db, ledger, accounts, [rampPayoutLeg(host), rampCollectLeg(host)]);
+    return service;
   }
 
   get network() {
@@ -104,19 +106,57 @@ export class RampService {
     if (!apiKey) throw new RampError("unauthorized", "missing API key");
     const key = await this.store.keyByHash(hashKey(apiKey));
     if (!key) throw new RampError("unauthorized", "unknown or revoked API key");
+    if (key.expiresAt && key.expiresAt.getTime() <= this.now().getTime()) throw new RampError("unauthorized", "API key expired");
     const tenant = await this.store.tenant(key.tenantId);
     if (!tenant) throw new RampError("unauthorized", "unknown app");
     return { tenant, key };
   }
 
-  async createKey(caller: Caller, args: { kind?: "secret" | "agent"; label?: string; policy?: SpendingPolicy }) {
+  async createKey(caller: Caller, args: { kind?: "secret" | "agent"; label?: string; policy?: SpendingPolicy; expiresInSeconds?: number }) {
     requireSecret(caller);
     const kind = args.kind ?? "agent";
     if (kind === "secret" && args.policy) throw new RampError("invalid_request", "spending policies apply to agent keys");
+    if (args.expiresInSeconds !== undefined && !(Number.isInteger(args.expiresInSeconds) && args.expiresInSeconds > 0)) {
+      throw new RampError("invalid_request", "expiresInSeconds must be a positive integer");
+    }
+    const expiresAt = args.expiresInSeconds ? new Date(this.now().getTime() + args.expiresInSeconds * 1000) : undefined;
     const key = newApiKey(kind, this.network);
     const id = `key_${randomUUID()}`;
-    await this.store.addKey({ id, tenantId: caller.tenant.id, kind, label: args.label, policy: args.policy, hash: hashKey(key) });
-    return { id, kind, label: args.label, key };
+    await this.store.addKey({ id, tenantId: caller.tenant.id, kind, label: args.label, policy: args.policy, expiresAt, hash: hashKey(key) });
+    return { id, kind, label: args.label, key, expiresAt: expiresAt ?? null };
+  }
+
+  /**
+   * Issue a replacement with the same kind, label and policy, and let the old
+   * key keep working for `graceSeconds` (default a day) so deployments can
+   * roll over without downtime.
+   */
+  async rotateKey(caller: Caller, id: string, args: { graceSeconds?: number } = {}) {
+    requireSecret(caller);
+    const old = (await this.store.listKeys(caller.tenant.id)).find((k) => k.id === id);
+    if (!old) throw new RampError("not_found", `no key ${id}`);
+    const grace = args.graceSeconds ?? 86_400;
+    if (!(Number.isInteger(grace) && grace >= 0)) throw new RampError("invalid_request", "graceSeconds must be a non-negative integer");
+    const key = newApiKey(old.kind, this.network);
+    const newId = `key_${randomUUID()}`;
+    await this.store.addKey({ id: newId, tenantId: caller.tenant.id, kind: old.kind, label: old.label, policy: old.policy, hash: hashKey(key) });
+    const retiresAt = new Date(this.now().getTime() + grace * 1000);
+    await this.store.expireKey(caller.tenant.id, id, retiresAt);
+    return { id: newId, kind: old.kind, label: old.label, key, expiresAt: null, previous: { id, expiresAt: retiresAt } };
+  }
+
+  /** Webhook events that exhausted their retries. */
+  async deadLetters(caller: Caller) {
+    requireSecret(caller);
+    return this.store.deadLetters(caller.tenant.id);
+  }
+
+  /** Replay a dead-lettered event now, with a fresh retry budget if it fails again. */
+  async redeliver(caller: Caller, eventId: string) {
+    requireSecret(caller);
+    if (!(await this.store.requeue(caller.tenant.id, eventId))) throw new RampError("not_found", `no dead-lettered event ${eventId}`);
+    await this.deliverPending();
+    return { requeued: eventId };
   }
 
   async listKeys(caller: Caller) {
@@ -241,26 +281,6 @@ export class RampService {
       }
       const id = uuidv7();
       const reference = this.referenceFor(caller.tenant, RefKind.Payout, q.currency, id);
-      const partner = this.opts.partners.get(q.partner);
-      const po = await partnerCall(() =>
-        partner.openPayout({
-          currency: q.currency,
-          chain: "STELLAR",
-          usdcAmount: q.amount,
-          beneficiary: { bankCode: args.beneficiary.bankCode, accountNumber: args.beneficiary.accountNumber },
-          reference,
-          webhookUrl: this.opts.partnerWebhookUrl?.(partner.id),
-        }),
-      );
-      if (!po.fundingAddress) throw new RampError("partner_error", `${partner.id} returned no funding account`);
-      const payments = [{ to: po.fundingAddress, asset: q.asset, amount: q.amount }];
-      if (q.fee > 0n) payments.push({ to: this.feeAccount, asset: q.asset, amount: q.fee });
-      const built = await this.opts.chain.buildFunding({
-        source: args.account,
-        payments,
-        memo: fundingMemoFor(po, reference),
-        timeoutSeconds: this.ttl,
-      });
       const now = this.now();
       const order: RampOrder = {
         id: `wd_${id.replaceAll("-", "")}`,
@@ -271,25 +291,21 @@ export class RampService {
         currency: q.currency,
         asset: q.asset,
         amount: q.amount,
-        fiatAmount: po.fiatAmount > 0n ? po.fiatAmount : q.fiatAmount,
+        fiatAmount: q.fiatAmount,
         fee: q.fee,
         total: q.total,
         rate: q.rate,
         account: args.account,
-        beneficiary: { ...args.beneficiary, ...(po.virtualAccount?.accountName ? { accountName: po.virtualAccount.accountName } : {}) },
-        partner: partner.id,
-        partnerOrderId: po.id,
-        partnerStatus: po.partnerStatus,
+        beneficiary: { ...args.beneficiary },
+        partner: q.partner,
+        partnerOrderId: `${PENDING_PARTNER_ORDER}${id}`,
+        partnerStatus: "",
         reference,
-        unsignedXdr: built.xdr,
-        xdrHash: built.hash,
         metadata: args.metadata,
         createdAt: now,
         updatedAt: now,
       };
-      await this.store.insertOrder(order);
-      await this.emit(caller.tenant, "order.created", orderView(order));
-      return order;
+      return await this.startFlow(caller, order, q);
     } catch (e) {
       await this.store.releaseQuote(caller.tenant.id, q.id);
       throw e;
@@ -303,21 +319,9 @@ export class RampService {
     order.txHash = sent.hash;
     order.status = "submitted";
     order.updatedAt = this.now();
-    await this.store.updateOrder(order);
-    if (order.fee > 0n) {
-      // Booked from the chain: the fee payment is operation 1 of the funding transaction.
-      await this.ledger.post({
-        kind: "ramp.fee",
-        reference: order.reference,
-        external: { venue: "stellar", ref: `${sent.hash}:1` },
-        lines: [
-          { account: await this.feeVault(), direction: "D", money: { asset: order.asset, amount: order.fee } },
-          { account: await this.revenue(order.tenantId), direction: "C", money: { asset: order.asset, amount: order.fee } },
-        ],
-        metadata: { order: order.id, tenant: order.tenantId },
-      });
-    }
+    await this.store.patchOrder(order.tenantId, order.id, { txHash: sent.hash, status: "submitted", updatedAt: order.updatedAt });
     await this.emit(caller.tenant, "order.updated", orderView(order));
+    // Nothing is booked here: the fee and the order settle when the chain shows the transaction (`reconcile`).
     return this.refresh(caller.tenant, order);
   }
 
@@ -334,17 +338,6 @@ export class RampService {
     try {
       const id = uuidv7();
       const reference = this.referenceFor(caller.tenant, RefKind.Collection, q.currency, id);
-      const partner = this.opts.partners.get(q.partner);
-      const po = await partnerCall(() =>
-        partner.openCollection({
-          currency: q.currency,
-          chain: "STELLAR",
-          fiatAmount: q.fiatAmount,
-          recipient: args.account,
-          reference,
-          webhookUrl: this.opts.partnerWebhookUrl?.(partner.id),
-        }),
-      );
       const now = this.now();
       const order: RampOrder = {
         id: `dp_${id.replaceAll("-", "")}`,
@@ -360,18 +353,15 @@ export class RampService {
         total: q.total,
         rate: q.rate,
         account: args.account,
-        partner: partner.id,
-        partnerOrderId: po.id,
-        partnerStatus: po.partnerStatus,
+        partner: q.partner,
+        partnerOrderId: `${PENDING_PARTNER_ORDER}${id}`,
+        partnerStatus: "",
         reference,
-        virtualAccount: po.virtualAccount,
         metadata: args.metadata,
         createdAt: now,
         updatedAt: now,
       };
-      await this.store.insertOrder(order);
-      await this.emit(caller.tenant, "order.created", orderView(order));
-      return order;
+      return await this.startFlow(caller, order, q);
     } catch (e) {
       await this.store.releaseQuote(caller.tenant.id, q.id);
       throw e;
@@ -467,15 +457,108 @@ export class RampService {
   /** Retry deliveries that have not yet succeeded. Run on a timer in the hosted service. */
   async deliverPending(): Promise<number> {
     let delivered = 0;
-    for (const { tenantId, event, attempts } of await this.store.undelivered()) {
-      if (attempts >= MAX_DELIVERY_ATTEMPTS) continue;
+    for (const { tenantId, event } of await this.store.undelivered(this.now())) {
       const tenant = await this.store.tenant(tenantId);
       if (tenant && (await this.deliver(tenant, event))) delivered++;
     }
     return delivered;
   }
 
+  // ── Settlement from the chain ─────────────────────────────────────────
+
+  /**
+   * Match open orders against what Horizon shows for their users' accounts,
+   * by memo (ADR 0008), then move each order's saga on. An order settles only
+   * here: an anchor's "completed" alone never completes it. Run on a timer.
+   * Returns how many orders changed status.
+   */
+  async reconcile(): Promise<number> {
+    const open = await this.store.openOrders();
+    if (this.opts.payments) {
+      const watched = [...new Set(open.filter((o) => !o.chain && o.partnerOrderId && !o.partnerOrderId.startsWith(PENDING_PARTNER_ORDER)).map((o) => o.account))];
+      for (const account of watched) {
+        // One observer per account, so each keeps its own cursor as the watched set changes.
+        const observer = new StellarObserver(this.opts.payments, {
+          name: `ramp:${account}`,
+          network: this.opts.chain.network,
+          accounts: [account],
+          cursors: this.store.cursors,
+          unreferenced: true,
+        });
+        await this.store.saveObservations(account, await observer.poll());
+        const seen = await this.store.unmatchedObservations(account);
+        for (const order of open.filter((o) => o.account === account && !o.chain)) {
+          const hit = matchOnChain(order, seen, this.feeAccount);
+          if (!hit || !(await this.store.matchObservations(order.id, [hit.paymentRef, ...(hit.feeRef ? [hit.feeRef] : [])]))) continue;
+          order.chain = hit;
+          order.updatedAt = this.now();
+          await this.store.patchOrder(order.tenantId, order.id, { chain: hit, updatedAt: order.updatedAt });
+        }
+      }
+    }
+    let changed = 0;
+    for (const order of open) {
+      const tenant = await this.store.tenant(order.tenantId);
+      if (!tenant) continue;
+      const after = await this.advance(tenant, order);
+      if (after.status !== order.status) changed++;
+    }
+    return changed;
+  }
+
   // ── Internals ─────────────────────────────────────────────────────────
+
+  private flowHost(): FlowHost {
+    return {
+      partners: this.opts.partners,
+      chain: this.opts.chain,
+      feeAccount: this.feeAccount,
+      ttlSeconds: this.ttl,
+      now: () => this.now(),
+      partnerWebhookUrl: this.opts.partnerWebhookUrl,
+      load: async (tenantId, id) => {
+        const o = await this.store.order(tenantId, id);
+        if (!o) throw new Error(`order ${id} vanished`);
+        return o;
+      },
+      save: (o) => this.store.updateOrder(o),
+      opened: async (o) => {
+        const tenant = await this.store.tenant(o.tenantId);
+        if (tenant) await this.emit(tenant, "order.created", orderView(o));
+      },
+    };
+  }
+
+  /** Plan the route, start the saga and drive it until it waits on the user, the anchor or the chain. */
+  private async startFlow(caller: Caller, order: RampOrder, q: Quote): Promise<RampOrder> {
+    const plan = rampPlan(order.kind, order.currency, order.asset, this.network, rampEdges(order.asset, this.opts.partners));
+    await this.store.insertOrder(order);
+    order.sagaId = await this.saga.start({ kind: `ramp.${order.kind}`, reference: order.reference, plan, data: { orderId: order.id, tenantId: order.tenantId } });
+    await this.store.updateOrder(order);
+    const after = await this.advance(caller.tenant, order);
+    if (after.status === "failed" && after.error) {
+      // The order never became actionable (no anchor order, or no transaction to sign): nothing is kept and the caller releases the quote.
+      await this.store.deleteOrder(order.tenantId, order.id);
+      const err = after.error ?? { code: "partner_error", message: "the anchor did not open the order" };
+      throw new RampError(err.code as RampError["code"], err.message);
+    }
+    void q;
+    return after;
+  }
+
+  /** Run the order's saga as far as it goes, then derive the order's status from it. */
+  private async advance(tenant: Tenant, order: RampOrder): Promise<RampOrder> {
+    if (FINAL.includes(order.status) || !order.sagaId) return order;
+    const saga = await this.saga.run(order.sagaId);
+    const fresh = (await this.store.order(order.tenantId, order.id)) ?? order;
+    const next = statusOf(fresh, saga);
+    if (next === fresh.status) return fresh;
+    fresh.status = next;
+    fresh.updatedAt = this.now();
+    await this.store.patchOrder(fresh.tenantId, fresh.id, { status: next, updatedAt: fresh.updatedAt });
+    if (!fresh.error) await this.emit(tenant, "order.updated", orderView(fresh));
+    return fresh;
+  }
 
   private partnerFor(kind: OrderKind, currency: Fiat): RampPartner {
     try {
@@ -510,49 +593,32 @@ export class RampService {
 
   private async refresh(tenant: Tenant, order: RampOrder): Promise<RampOrder> {
     if (FINAL.includes(order.status)) return order;
+    if (order.partnerOrderId.startsWith(PENDING_PARTNER_ORDER)) return this.advance(tenant, order);
     const po = await partnerCall(() => this.opts.partners.get(order.partner).getOrder(order.partnerOrderId));
     return this.apply(tenant, order, po);
   }
 
+  /** Record what the anchor says; the saga decides what it means for the order. */
   private async apply(tenant: Tenant, order: RampOrder, po: PartnerOrder): Promise<RampOrder> {
     if (FINAL.includes(order.status)) return order;
-    let next = PARTNER_TO_ORDER[po.status];
-    // A withdrawal is not "processing" for the user until their funding is on chain.
-    if (order.kind === "withdrawal" && order.status === "awaiting_signature" && next !== "failed") next = undefined;
-    if (!next || (next === order.status && po.partnerStatus === order.partnerStatus)) return order;
-    order.status = next;
-    order.partnerStatus = po.partnerStatus;
-    order.updatedAt = this.now();
-    if (order.kind === "deposit" && po.txSignature) order.txHash = po.txSignature;
-    await this.store.updateOrder(order);
-    if (order.kind === "deposit" && next === "completed" && order.fee > 0n) {
-      // The anchor delivers straight to the user, so a deposit's fee is accrued
-      // against the app and invoiced with the platform fee.
-      await this.ledger.post({
-        kind: "ramp.fee.accrued",
-        reference: order.reference,
-        external: { venue: "internal", ref: `ramp:deposit-fee:${order.id}` },
-        lines: [
-          { account: await this.receivable(order.tenantId), direction: "D", money: { asset: order.asset, amount: order.fee } },
-          { account: await this.revenue(order.tenantId), direction: "C", money: { asset: order.asset, amount: order.fee } },
-        ],
-        metadata: { order: order.id, tenant: order.tenantId },
+    const delivery = order.kind === "deposit" && po.txSignature ? po.txSignature : order.deliveryTx;
+    if (po.status !== order.partnerState || po.partnerStatus !== order.partnerStatus || delivery !== order.deliveryTx) {
+      order.partnerState = po.status;
+      order.partnerStatus = po.partnerStatus;
+      if (delivery) order.deliveryTx = delivery;
+      order.updatedAt = this.now();
+      await this.store.patchOrder(order.tenantId, order.id, {
+        partnerState: order.partnerState,
+        partnerStatus: order.partnerStatus,
+        ...(delivery ? { deliveryTx: delivery } : {}),
+        updatedAt: order.updatedAt,
       });
     }
-    await this.emit(tenant, "order.updated", orderView(order));
-    return order;
-  }
-
-  private feeVault() {
-    return this.accounts.vault("ramp:fees", this.asset, "stellar");
+    return this.advance(tenant, order);
   }
 
   private revenue(tenantId: string) {
-    return this.accounts.open({ type: "revenue", ownerType: "ramp_app", ownerId: tenantId, asset: this.asset, venue: "stellar" });
-  }
-
-  private receivable(tenantId: string) {
-    return this.accounts.open({ type: "asset", ownerType: "ramp_app_receivable", ownerId: tenantId, asset: this.asset, venue: "stellar" });
+    return rampAccounts(this.accounts).revenue(tenantId, this.asset);
   }
 
   private async emit(tenant: Tenant, type: string, data: unknown) {
@@ -572,13 +638,24 @@ export class RampService {
         body,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await this.store.markDelivery(event.id);
+      await this.store.markDelivered(event.id);
       return true;
     } catch (e) {
-      await this.store.markDelivery(event.id, (e as Error).message);
+      const attempts = (await this.store.attempts(event.id)) + 1;
+      const now = this.now().getTime();
+      await this.store.markFailed(
+        event.id,
+        (e as Error).message,
+        attempts >= MAX_DELIVERY_ATTEMPTS ? { dead: new Date(now) } : { retryAt: new Date(now + webhookBackoffMs(attempts)) },
+      );
       return false;
     }
   }
+}
+
+/** Exponential backoff for webhook retries: 30s, 1m, 2m, … capped at 6h. */
+export function webhookBackoffMs(attempts: number): number {
+  return Math.min(30_000 * 2 ** Math.max(0, attempts - 1), 6 * 3_600_000);
 }
 
 export function tenantView(t: Tenant) {
@@ -587,7 +664,7 @@ export function tenantView(t: Tenant) {
 
 /** What the API returns for an order. */
 export function orderView(o: RampOrder) {
-  const { tenantId: _t, keyId: _k, xdrHash, unsignedXdr, ...rest } = o;
+  const { tenantId: _t, keyId: _k, sagaId: _s, error: _e, xdrHash, unsignedXdr, ...rest } = o;
   return {
     ...rest,
     ...(o.status === "awaiting_signature" && unsignedXdr ? { transaction: { xdr: unsignedXdr, hash: xdrHash } } : {}),
@@ -625,12 +702,9 @@ function startOfDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 
-async function partnerCall<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn();
-  } catch (e) {
-    if (e instanceof RampError) throw e;
-    throw new RampError("partner_error", (e as Error).message);
-  }
+function statusOf(order: RampOrder, saga: SagaStatus): OrderStatus {
+  if (saga === "completed") return "completed";
+  if (saga === "compensated" || saga === "manual_review") return "failed";
+  if (order.kind === "withdrawal") return order.chain ? "processing" : order.txHash ? "submitted" : "awaiting_signature";
+  return order.partnerState === "processing" || order.partnerState === "completed" ? "processing" : "awaiting_payment";
 }
-

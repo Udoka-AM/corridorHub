@@ -11,7 +11,9 @@
     "stellar:payout": "tsx scripts/stellar-payout.ts",
     "watch:report": "tsx scripts/watch-report.ts",
     "ramp:serve": "tsx scripts/ramp-serve.ts",
-    "ramp:demo": "tsx scripts/ramp-demo.ts"
+    "ramp:demo": "tsx scripts/ramp-demo.ts",
+    "docs:check": "tsx scripts/docs-check.ts",
+    "openapi:check": "vitest run packages/ramp/src/openapi.test.ts"
   },
   "devDependencies": {
     "@types/node": "22",

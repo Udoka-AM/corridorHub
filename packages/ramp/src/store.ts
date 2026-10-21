@@ -1,6 +1,8 @@
 import type { Asset, Fiat, Hex } from "@corridor/core";
 import type { Db } from "@corridor/ledger";
-import type { Beneficiary, VirtualAccount } from "@corridor/partners";
+import type { Observation } from "@corridor/core";
+import type { Beneficiary, OrderStatus as PartnerState, VirtualAccount } from "@corridor/partners";
+import type { StellarMemo } from "@corridor/chain-stellar";
 import type { PlanId } from "./fees.ts";
 import { policyFromJson, policyToJson, type KeyKind, type SpendingPolicy } from "./keys.ts";
 
@@ -68,6 +70,9 @@ CREATE TABLE IF NOT EXISTS ramp_events (
   last_error TEXT
 );
 CREATE INDEX IF NOT EXISTS ramp_events_tenant ON ramp_events (tenant_id, created_at);
+ALTER TABLE ramp_events ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ;
+ALTER TABLE ramp_events ADD COLUMN IF NOT EXISTS dead_at TIMESTAMPTZ;
+ALTER TABLE ramp_api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS ramp_idempotency (
   tenant_id TEXT NOT NULL,
   key TEXT NOT NULL,
@@ -76,6 +81,17 @@ CREATE TABLE IF NOT EXISTS ramp_idempotency (
   body JSONB NOT NULL,
   PRIMARY KEY (tenant_id, key)
 );
+CREATE TABLE IF NOT EXISTS ramp_cursors (
+  name TEXT PRIMARY KEY,
+  cursor NUMERIC(78,0) NOT NULL
+);
+CREATE TABLE IF NOT EXISTS ramp_observations (
+  external_ref TEXT PRIMARY KEY,
+  account TEXT NOT NULL,
+  data JSONB NOT NULL,
+  matched_order TEXT
+);
+CREATE INDEX IF NOT EXISTS ramp_observations_open ON ramp_observations (account) WHERE matched_order IS NULL;
 `;
 
 export interface Tenant {
@@ -96,6 +112,8 @@ export interface ApiKey {
   kind: KeyKind;
   label?: string;
   policy?: SpendingPolicy;
+  /** Past this the key no longer authenticates (rotation grace, or a key issued with a lifetime). */
+  expiresAt?: Date;
 }
 
 export type OrderKind = "withdrawal" | "deposit";
@@ -154,10 +172,35 @@ export interface RampOrder {
   /** Hash of that transaction; a submitted transaction must match it. */
   xdrHash?: string;
   txHash?: string;
+  /** Where the anchor wants the withdrawal funded, and the memo it must carry. */
+  fundingAddress?: string;
+  fundingMemo?: StellarMemo;
+  /** The funding transaction's time bound: unsigned past this, the order lapses. */
+  fundingDeadline?: Date;
+  /** The anchor's normalized status; the order's own status follows the saga and the chain. */
+  partnerState?: PartnerState;
+  /** The anchor's reported delivery transaction (deposits). */
+  deliveryTx?: string;
+  /** What the chain showed for this order (ADR 0008): the only evidence that settles it. */
+  chain?: OnChain;
+  sagaId?: string;
+  /** Why opening the order failed, when it did. */
+  error?: { code: string; message: string };
   virtualAccount?: VirtualAccount;
   metadata?: Record<string, string>;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface OnChain {
+  txHash: string;
+  ledger?: string;
+  /** `${txHash}:${operationId}` of the movement that funds (withdrawal) or delivers (deposit). */
+  paymentRef: string;
+  /** The fee payment in the same transaction (withdrawals). */
+  feeRef?: string;
+  amount: string;
+  observedAt: string;
 }
 
 export interface RampEvent {
@@ -172,6 +215,8 @@ const BIGINT_FIELDS = ["amount", "fiatAmount", "fee", "total"] as const;
 export function toJson(value: unknown): unknown {
   return JSON.parse(JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v)));
 }
+
+const ORDER_DATES = ["createdAt", "updatedAt", "fundingDeadline"];
 
 function revive<T extends object>(row: Record<string, unknown>, dates: string[]): T {
   const out: Record<string, unknown> = { ...row };
@@ -216,19 +261,20 @@ export class RampStore {
   }
 
   async addKey(k: ApiKey & { hash: string }): Promise<void> {
-    await this.db.query(`INSERT INTO ramp_api_keys (id, tenant_id, hash, kind, label, policy) VALUES ($1,$2,$3,$4,$5,$6)`, [
+    await this.db.query(`INSERT INTO ramp_api_keys (id, tenant_id, hash, kind, label, policy, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [
       k.id,
       k.tenantId,
       k.hash,
       k.kind,
       k.label ?? null,
       k.policy ? JSON.stringify(policyToJson(k.policy)) : null,
+      k.expiresAt?.toISOString() ?? null,
     ]);
   }
 
   async keyByHash(hash: string): Promise<ApiKey | undefined> {
     const { rows } = await this.db.query<Record<string, unknown>>(
-      `SELECT id, tenant_id, kind, label, policy FROM ramp_api_keys WHERE hash = $1 AND revoked_at IS NULL`,
+      `SELECT id, tenant_id, kind, label, policy, expires_at FROM ramp_api_keys WHERE hash = $1 AND revoked_at IS NULL`,
       [hash],
     );
     const r = rows[0];
@@ -239,12 +285,13 @@ export class RampStore {
       kind: r.kind as KeyKind,
       label: (r.label as string | null) ?? undefined,
       policy: policyFromJson(r.policy),
+      ...(r.expires_at ? { expiresAt: new Date(r.expires_at as string) } : {}),
     };
   }
 
   async listKeys(tenantId: string): Promise<ApiKey[]> {
     const { rows } = await this.db.query<Record<string, unknown>>(
-      `SELECT id, tenant_id, kind, label, policy FROM ramp_api_keys WHERE tenant_id = $1 AND revoked_at IS NULL ORDER BY created_at`,
+      `SELECT id, tenant_id, kind, label, policy, expires_at FROM ramp_api_keys WHERE tenant_id = $1 AND revoked_at IS NULL ORDER BY created_at`,
       [tenantId],
     );
     return rows.map((r) => ({
@@ -253,7 +300,16 @@ export class RampStore {
       kind: r.kind as KeyKind,
       label: (r.label as string | null) ?? undefined,
       policy: policyFromJson(r.policy),
+      ...(r.expires_at ? { expiresAt: new Date(r.expires_at as string) } : {}),
     }));
+  }
+
+  /** Bring a key's expiry forward (never back): rotation's grace period. */
+  async expireKey(tenantId: string, id: string, at: Date): Promise<void> {
+    await this.db.query(
+      `UPDATE ramp_api_keys SET expires_at = LEAST(COALESCE(expires_at, $3::timestamptz), $3::timestamptz) WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, id, at.toISOString()],
+    );
   }
 
   async revokeKey(tenantId: string, id: string): Promise<boolean> {
@@ -322,7 +378,90 @@ export class RampStore {
   }
 
   async updateOrder(o: RampOrder): Promise<void> {
-    await this.db.query(`UPDATE ramp_orders SET data = $3 WHERE tenant_id = $1 AND id = $2`, [o.tenantId, o.id, JSON.stringify(toJson(o))]);
+    await this.db.query(`UPDATE ramp_orders SET data = $3, partner_order_id = $4 WHERE tenant_id = $1 AND id = $2`, [
+      o.tenantId,
+      o.id,
+      JSON.stringify(toJson(o)),
+      o.partnerOrderId,
+    ]);
+  }
+
+  /**
+   * Merge fields into an order without rewriting the rest. The reconciler, the
+   * anchor's webhook and a status read each own different fields of the same
+   * order and run concurrently; a whole-row write from a stale copy would undo
+   * the others (e.g. erase the chain evidence the reconciler just claimed).
+   */
+  async patchOrder(tenantId: string, id: string, patch: Partial<RampOrder>): Promise<void> {
+    await this.db.query(`UPDATE ramp_orders SET data = data || $3::jsonb WHERE tenant_id = $1 AND id = $2`, [tenantId, id, JSON.stringify(toJson(patch))]);
+  }
+
+  async deleteOrder(tenantId: string, id: string): Promise<void> {
+    await this.db.query(`DELETE FROM ramp_orders WHERE tenant_id = $1 AND id = $2`, [tenantId, id]);
+  }
+
+  /** Every tenant's orders that are not yet final, oldest first. For the reconciler. */
+  async openOrders(limit = 1000): Promise<RampOrder[]> {
+    const { rows } = await this.db.query<{ data: Record<string, unknown> }>(
+      `SELECT data FROM ramp_orders WHERE data->>'status' NOT IN ('completed', 'failed') ORDER BY created_at LIMIT $1`,
+      [limit],
+    );
+    return rows.map((r) => revive<RampOrder>(r.data, ORDER_DATES));
+  }
+
+  /** Observer cursors, so a restart neither misses nor re-reads a payment. */
+  readonly cursors = {
+    get: async (name: string): Promise<bigint | undefined> => {
+      const { rows } = await this.db.query<{ cursor: string }>(`SELECT cursor::text AS cursor FROM ramp_cursors WHERE name = $1`, [name]);
+      return rows[0] ? BigInt(rows[0].cursor) : undefined;
+    },
+    set: async (name: string, cursor: bigint): Promise<void> => {
+      await this.db.query(
+        `INSERT INTO ramp_cursors (name, cursor) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET cursor = EXCLUDED.cursor`,
+        [name, cursor.toString()],
+      );
+    },
+  };
+
+  /** Keep what the chain showed, matched or not: an order may only learn its transaction later. */
+  async saveObservations(account: string, seen: Observation[]): Promise<void> {
+    for (const o of seen) {
+      await this.db.query(`INSERT INTO ramp_observations (external_ref, account, data) VALUES ($1, $2, $3) ON CONFLICT (external_ref) DO NOTHING`, [
+        o.externalRef,
+        account,
+        JSON.stringify(toJson(o)),
+      ]);
+    }
+  }
+
+  async unmatchedObservations(account: string): Promise<Observation[]> {
+    const { rows } = await this.db.query<{ data: Record<string, unknown> }>(
+      `SELECT data FROM ramp_observations WHERE account = $1 AND matched_order IS NULL ORDER BY external_ref`,
+      [account],
+    );
+    return rows.map(({ data: d }) => ({
+      ...(d as unknown as Observation),
+      amount: BigInt(d.amount as string),
+      blockNumber: d.blockNumber === undefined ? undefined : BigInt(d.blockNumber as string),
+      observedAt: new Date(d.observedAt as string),
+    }));
+  }
+
+  /** Claim observations for an order. False if any was already claimed: one payment never settles two orders. */
+  async matchObservations(orderId: string, refs: string[]): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      for (const ref of refs) {
+        const { rows } = await tx.query(`UPDATE ramp_observations SET matched_order = $2 WHERE external_ref = $1 AND matched_order IS NULL RETURNING 1`, [
+          ref,
+          orderId,
+        ]);
+        if (rows.length !== 1) throw new ClaimLost();
+      }
+      return true;
+    }).catch((e) => {
+      if (e instanceof ClaimLost) return false;
+      throw e;
+    });
   }
 
   async order(tenantId: string, id: string): Promise<RampOrder | undefined> {
@@ -330,7 +469,7 @@ export class RampStore {
       tenantId,
       id,
     ]);
-    return rows[0] ? revive<RampOrder>(rows[0].data, ["createdAt", "updatedAt"]) : undefined;
+    return rows[0] ? revive<RampOrder>(rows[0].data, ORDER_DATES) : undefined;
   }
 
   async orderByPartner(partner: string, partnerOrderId: string): Promise<RampOrder | undefined> {
@@ -338,7 +477,7 @@ export class RampStore {
       `SELECT data FROM ramp_orders WHERE partner = $1 AND partner_order_id = $2`,
       [partner, partnerOrderId],
     );
-    return rows[0] ? revive<RampOrder>(rows[0].data, ["createdAt", "updatedAt"]) : undefined;
+    return rows[0] ? revive<RampOrder>(rows[0].data, ORDER_DATES) : undefined;
   }
 
   async orders(tenantId: string, opts: { since?: Date; until?: Date; kind?: OrderKind; limit?: number } = {}): Promise<RampOrder[]> {
@@ -349,7 +488,7 @@ export class RampStore {
        ORDER BY created_at DESC LIMIT $5`,
       [tenantId, opts.since ?? null, opts.until ?? null, opts.kind ?? null, opts.limit ?? 1000],
     );
-    return rows.map((r) => revive<RampOrder>(r.data, ["createdAt", "updatedAt"]));
+    return rows.map((r) => revive<RampOrder>(r.data, ORDER_DATES));
   }
 
   /** Settlement units this key has committed to payouts since `since`, failed payouts excluded. */
@@ -379,21 +518,52 @@ export class RampStore {
     return rows.map((r) => r.payload);
   }
 
-  async undelivered(limit = 100): Promise<Array<{ tenantId: string; event: RampEvent; attempts: number }>> {
+  /** Events due for (re)delivery: not delivered, not dead-lettered, and past their backoff. */
+  async undelivered(now: Date, limit = 100): Promise<Array<{ tenantId: string; event: RampEvent; attempts: number }>> {
     const { rows } = await this.db.query<{ tenant_id: string; payload: RampEvent; attempts: number }>(
-      `SELECT tenant_id, payload, attempts FROM ramp_events WHERE delivered_at IS NULL ORDER BY id LIMIT $1`,
-      [limit],
+      `SELECT tenant_id, payload, attempts FROM ramp_events
+        WHERE delivered_at IS NULL AND dead_at IS NULL AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+        ORDER BY id LIMIT $2`,
+      [now.toISOString(), limit],
     );
     return rows.map((r) => ({ tenantId: r.tenant_id, event: r.payload, attempts: r.attempts }));
   }
 
-  async markDelivery(id: string, error?: string): Promise<void> {
-    await this.db.query(
-      error
-        ? `UPDATE ramp_events SET attempts = attempts + 1, last_error = $2 WHERE id = $1`
-        : `UPDATE ramp_events SET attempts = attempts + 1, delivered_at = now(), last_error = NULL WHERE id = $1`,
-      error ? [id, error] : [id],
+  async markDelivered(id: string): Promise<void> {
+    await this.db.query(`UPDATE ramp_events SET attempts = attempts + 1, delivered_at = now(), next_attempt_at = NULL, last_error = NULL WHERE id = $1`, [id]);
+  }
+
+  /** Record a failed attempt; returns the attempt count so the caller can schedule or dead-letter. */
+  async markFailed(id: string, error: string, next: { retryAt?: Date; dead?: Date }): Promise<void> {
+    await this.db.query(`UPDATE ramp_events SET attempts = attempts + 1, last_error = $2, next_attempt_at = $3, dead_at = $4 WHERE id = $1`, [
+      id,
+      error.slice(0, 500),
+      next.retryAt?.toISOString() ?? null,
+      next.dead?.toISOString() ?? null,
+    ]);
+  }
+
+  async attempts(id: string): Promise<number> {
+    const { rows } = await this.db.query<{ attempts: number }>(`SELECT attempts FROM ramp_events WHERE id = $1`, [id]);
+    return Number(rows[0]?.attempts ?? 0);
+  }
+
+  /** Events that exhausted their retries, for the app to inspect and replay. */
+  async deadLetters(tenantId: string, limit = 100) {
+    const { rows } = await this.db.query<{ payload: RampEvent; attempts: number; last_error: string | null; dead_at: string }>(
+      `SELECT payload, attempts, last_error, dead_at FROM ramp_events WHERE tenant_id = $1 AND dead_at IS NOT NULL ORDER BY id LIMIT $2`,
+      [tenantId, limit],
     );
+    return rows.map((r) => ({ event: r.payload, attempts: Number(r.attempts), lastError: r.last_error, deadAt: new Date(r.dead_at) }));
+  }
+
+  /** Put a dead-lettered event back in the queue with a fresh retry budget. */
+  async requeue(tenantId: string, id: string): Promise<boolean> {
+    const { rows } = await this.db.query(
+      `UPDATE ramp_events SET dead_at = NULL, attempts = 0, next_attempt_at = NULL WHERE tenant_id = $1 AND id = $2 AND dead_at IS NOT NULL RETURNING 1`,
+      [tenantId, id],
+    );
+    return rows.length === 1;
   }
 
   async idempotent(tenantId: string, key: string): Promise<{ requestHash: string; status: number; body: unknown } | undefined> {
@@ -412,3 +582,5 @@ export class RampStore {
     );
   }
 }
+
+class ClaimLost extends Error {}

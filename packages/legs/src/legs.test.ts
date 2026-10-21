@@ -305,7 +305,7 @@ describe("funding an anchor on Stellar", () => {
 
   const order = (over: Partial<PartnerOrder> = {}): PartnerOrder => ({
     partner: "anchor", id: "tx-1", kind: "payout", status: "open", partnerStatus: "pending_sender",
-    chain: "STELLAR", currency: "KES", usdcAmount: 70_000_000n, fiatAmount: 90_550n, rate: 129.5,
+    chain: "STELLAR", currency: "KES", usdcAmount: 70_000_000n, fiatAmount: 90_550n, rate: "129.5",
     fundingAddress: ANCHOR, createdAt: new Date(), ...over,
   });
 
