@@ -18,6 +18,8 @@ const { ramp, sponsor, anchor } = await openRamp({ publicUrl, dataDir: process.e
 
 const server = rampServer(ramp, { adminToken: process.env.RAMP_ADMIN_TOKEN, selfServeSignup: NETWORK === "testnet" });
 setInterval(() => void ramp.deliverPending().catch((e) => console.error("webhook retry:", e)), 30_000).unref();
+// Orders settle only from what Horizon shows (ADR 0008).
+setInterval(() => void ramp.reconcile().catch((e) => console.error("reconcile:", e)), 10_000).unref();
 server.listen(port, () => {
   console.log(`Ramp API on ${publicUrl} (${NETWORK}, settling in ${RAMP_ASSET})`);
   console.log(`sponsor ${sponsor.address}, anchor ${anchor.id}`);

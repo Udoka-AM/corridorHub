@@ -25,6 +25,8 @@ const { ramp: service, sponsor, mock } = await openRamp({ publicUrl: "http://loc
 const server = rampServer(service, { selfServeSignup: true });
 await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+// Orders settle from Horizon, not the anchor's word (ADR 0008): watch the chain while the demo runs.
+const reconciler = setInterval(() => void service.reconcile().catch((e) => console.error("reconcile:", e)), 3_000);
 
 try {
   const { app, secretKey } = await Ramp.signup({ name: "Ramp demo app", baseUrl });
@@ -62,5 +64,6 @@ try {
   console.log(`4. payout ${done.status}`);
   console.log("5. usage", JSON.stringify(await ramp.usage(), null, 2));
 } finally {
+  clearInterval(reconciler);
   server.close();
 }

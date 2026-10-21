@@ -45,6 +45,7 @@ describe("Ramp SDK against the API", () => {
     expect(sent.transaction).toBeUndefined();
 
     await t.mock.observeFunding(sent.partnerOrderId, sent.txHash!);
+    await t.ramp.reconcile();
     const done = await ramp.orders.wait(sent.id, { intervalMs: 10 });
     expect(done.status).toBe("completed");
 
@@ -81,6 +82,7 @@ describe("Ramp SDK against the API", () => {
     const page = await fetch(`${baseUrl}/pay/${order.id}`);
     expect(await page.text()).toContain("Pay Choppaddi");
     await t.mock.payerTransferred(order.partnerOrderId);
+    await t.ramp.reconcile();
     expect((await ramp.deposits.get(order.id)).status).toBe("completed");
   });
 

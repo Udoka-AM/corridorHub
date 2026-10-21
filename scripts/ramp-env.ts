@@ -1,6 +1,6 @@
 import { mkdirSync } from "node:fs";
 import type { Asset } from "@corridor/core";
-import { fundFromFriendbot, type StellarClient } from "@corridor/chain-stellar";
+import { fundFromFriendbot, horizonPayments, type StellarClient } from "@corridor/chain-stellar";
 import { openLocalDb } from "@corridor/ledger";
 import { MockPartner, PartnerRegistry, SepAnchor, type RampPartner } from "@corridor/partners";
 import { RampService, stellarRampChain } from "@corridor/ramp";
@@ -53,6 +53,7 @@ export async function openRamp(opts: { publicUrl: string; dataDir?: string; part
     db,
     partners: new PartnerRegistry().register(anchor),
     chain: stellarRampChain({ sponsor }),
+    payments: horizonPayments(sponsor.server),
     asset: RAMP_ASSET,
     publicUrl: opts.publicUrl,
     partnerWebhookUrl: opts.partnerWebhookBase ? (id) => `${opts.partnerWebhookBase}/v1/partners/${id}/webhook` : undefined,

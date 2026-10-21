@@ -206,6 +206,12 @@ importers:
       '@corridor/partners':
         specifier: workspace:*
         version: link:../partners
+      '@corridor/routing':
+        specifier: workspace:*
+        version: link:../routing
+      '@corridor/saga':
+        specifier: workspace:*
+        version: link:../saga
       '@stellar/stellar-sdk':
         specifier: ^17.2.1
         version: 17.2.1
