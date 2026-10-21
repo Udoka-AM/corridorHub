@@ -106,19 +106,57 @@ export class RampService {
     if (!apiKey) throw new RampError("unauthorized", "missing API key");
     const key = await this.store.keyByHash(hashKey(apiKey));
     if (!key) throw new RampError("unauthorized", "unknown or revoked API key");
+    if (key.expiresAt && key.expiresAt.getTime() <= this.now().getTime()) throw new RampError("unauthorized", "API key expired");
     const tenant = await this.store.tenant(key.tenantId);
     if (!tenant) throw new RampError("unauthorized", "unknown app");
     return { tenant, key };
   }
 
-  async createKey(caller: Caller, args: { kind?: "secret" | "agent"; label?: string; policy?: SpendingPolicy }) {
+  async createKey(caller: Caller, args: { kind?: "secret" | "agent"; label?: string; policy?: SpendingPolicy; expiresInSeconds?: number }) {
     requireSecret(caller);
     const kind = args.kind ?? "agent";
     if (kind === "secret" && args.policy) throw new RampError("invalid_request", "spending policies apply to agent keys");
+    if (args.expiresInSeconds !== undefined && !(Number.isInteger(args.expiresInSeconds) && args.expiresInSeconds > 0)) {
+      throw new RampError("invalid_request", "expiresInSeconds must be a positive integer");
+    }
+    const expiresAt = args.expiresInSeconds ? new Date(this.now().getTime() + args.expiresInSeconds * 1000) : undefined;
     const key = newApiKey(kind, this.network);
     const id = `key_${randomUUID()}`;
-    await this.store.addKey({ id, tenantId: caller.tenant.id, kind, label: args.label, policy: args.policy, hash: hashKey(key) });
-    return { id, kind, label: args.label, key };
+    await this.store.addKey({ id, tenantId: caller.tenant.id, kind, label: args.label, policy: args.policy, expiresAt, hash: hashKey(key) });
+    return { id, kind, label: args.label, key, expiresAt: expiresAt ?? null };
+  }
+
+  /**
+   * Issue a replacement with the same kind, label and policy, and let the old
+   * key keep working for `graceSeconds` (default a day) so deployments can
+   * roll over without downtime.
+   */
+  async rotateKey(caller: Caller, id: string, args: { graceSeconds?: number } = {}) {
+    requireSecret(caller);
+    const old = (await this.store.listKeys(caller.tenant.id)).find((k) => k.id === id);
+    if (!old) throw new RampError("not_found", `no key ${id}`);
+    const grace = args.graceSeconds ?? 86_400;
+    if (!(Number.isInteger(grace) && grace >= 0)) throw new RampError("invalid_request", "graceSeconds must be a non-negative integer");
+    const key = newApiKey(old.kind, this.network);
+    const newId = `key_${randomUUID()}`;
+    await this.store.addKey({ id: newId, tenantId: caller.tenant.id, kind: old.kind, label: old.label, policy: old.policy, hash: hashKey(key) });
+    const retiresAt = new Date(this.now().getTime() + grace * 1000);
+    await this.store.expireKey(caller.tenant.id, id, retiresAt);
+    return { id: newId, kind: old.kind, label: old.label, key, expiresAt: null, previous: { id, expiresAt: retiresAt } };
+  }
+
+  /** Webhook events that exhausted their retries. */
+  async deadLetters(caller: Caller) {
+    requireSecret(caller);
+    return this.store.deadLetters(caller.tenant.id);
+  }
+
+  /** Replay a dead-lettered event now, with a fresh retry budget if it fails again. */
+  async redeliver(caller: Caller, eventId: string) {
+    requireSecret(caller);
+    if (!(await this.store.requeue(caller.tenant.id, eventId))) throw new RampError("not_found", `no dead-lettered event ${eventId}`);
+    await this.deliverPending();
+    return { requeued: eventId };
   }
 
   async listKeys(caller: Caller) {
@@ -419,8 +457,7 @@ export class RampService {
   /** Retry deliveries that have not yet succeeded. Run on a timer in the hosted service. */
   async deliverPending(): Promise<number> {
     let delivered = 0;
-    for (const { tenantId, event, attempts } of await this.store.undelivered()) {
-      if (attempts >= MAX_DELIVERY_ATTEMPTS) continue;
+    for (const { tenantId, event } of await this.store.undelivered(this.now())) {
       const tenant = await this.store.tenant(tenantId);
       if (tenant && (await this.deliver(tenant, event))) delivered++;
     }
@@ -596,13 +633,24 @@ export class RampService {
         body,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      await this.store.markDelivery(event.id);
+      await this.store.markDelivered(event.id);
       return true;
     } catch (e) {
-      await this.store.markDelivery(event.id, (e as Error).message);
+      const attempts = (await this.store.attempts(event.id)) + 1;
+      const now = this.now().getTime();
+      await this.store.markFailed(
+        event.id,
+        (e as Error).message,
+        attempts >= MAX_DELIVERY_ATTEMPTS ? { dead: new Date(now) } : { retryAt: new Date(now + webhookBackoffMs(attempts)) },
+      );
       return false;
     }
   }
+}
+
+/** Exponential backoff for webhook retries: 30s, 1m, 2m, … capped at 6h. */
+export function webhookBackoffMs(attempts: number): number {
+  return Math.min(30_000 * 2 ** Math.max(0, attempts - 1), 6 * 3_600_000);
 }
 
 export function tenantView(t: Tenant) {

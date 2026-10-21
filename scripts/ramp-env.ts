@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import type { Asset } from "@corridor/core";
 import { fundFromFriendbot, horizonPayments, type StellarClient } from "@corridor/chain-stellar";
-import { openLocalDb } from "@corridor/ledger";
+import { openLocalDb, openPostgresDb } from "@corridor/ledger";
 import { MockPartner, PartnerRegistry, SepAnchor, type RampPartner } from "@corridor/partners";
 import { RampService, stellarRampChain } from "@corridor/ramp";
 import { NETWORK, vault } from "./runtime.ts";
@@ -47,8 +47,9 @@ export async function openRamp(opts: { publicUrl: string; dataDir?: string; part
     anchor = mock;
   }
 
-  if (opts.dataDir) mkdirSync(opts.dataDir, { recursive: true });
-  const db = await openLocalDb(opts.dataDir);
+  // A real Postgres server when DATABASE_URL is set; otherwise embedded PGlite on disk.
+  if (!process.env.DATABASE_URL && opts.dataDir) mkdirSync(opts.dataDir, { recursive: true });
+  const db = process.env.DATABASE_URL ? await openPostgresDb(process.env.DATABASE_URL) : await openLocalDb(opts.dataDir);
   const ramp = await RampService.open({
     db,
     partners: new PartnerRegistry().register(anchor),

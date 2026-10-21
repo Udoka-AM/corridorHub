@@ -229,10 +229,14 @@ describe("Ramp", () => {
 
   it("keeps the free sandbox on testnet and retries undelivered webhooks", async () => {
     let up = false;
-    const s = await setup({ fetch: async () => new Response("", { status: up ? 200 : 500 }) });
+    let clock = new Date("2026-10-20T10:00:00Z");
+    const s = await setup({ now: () => clock, fetch: async () => new Response("", { status: up ? 200 : 500 }) });
     await onboard(s);
     expect((await s.ramp.events(s.caller)).map((e) => e.type)).toEqual(["account.active"]);
     up = true;
+    // The first retry waits out its backoff (30s).
+    expect(await s.ramp.deliverPending()).toBe(0);
+    clock = new Date(clock.getTime() + 30_000);
     expect(await s.ramp.deliverPending()).toBe(1);
     expect(await s.ramp.deliverPending()).toBe(0);
   });
@@ -279,5 +283,55 @@ describe("Ramp", () => {
     await s.ramp.reconcile();
     expect((await s.ramp.getOrder(s.caller, order.id)).status).toBe("failed");
     await expect(s.ramp.submitWithdrawal(s.caller, order.id, await s.sign(order.unsignedXdr!))).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("expires keys and rotates them with a grace period", async () => {
+    let clock = new Date("2026-10-20T10:00:00Z");
+    const s = await setup({ now: () => clock });
+    const short = await s.ramp.createKey(s.caller, { kind: "agent", expiresInSeconds: 60 });
+    await expect(s.ramp.authenticate(short.key)).resolves.toBeTruthy();
+    const rotated = await s.ramp.rotateKey(s.caller, short.id, { graceSeconds: 30 });
+    expect(rotated.kind).toBe("agent");
+    expect(rotated.previous.expiresAt).toEqual(new Date(clock.getTime() + 30_000));
+    clock = new Date(clock.getTime() + 31_000);
+    await expect(s.ramp.authenticate(short.key)).rejects.toMatchObject({ code: "unauthorized", message: "API key expired" });
+    await expect(s.ramp.authenticate(rotated.key)).resolves.toBeTruthy();
+    await expect(s.ramp.createKey(s.caller, { expiresInSeconds: -1 })).rejects.toMatchObject({ code: "invalid_request" });
+  });
+
+  it("backs off failed webhooks and dead-letters them after the last attempt", async () => {
+    let clock = new Date("2026-10-20T10:00:00Z");
+    let calls = 0;
+    let up = false;
+    const s = await setup({
+      now: () => clock,
+      fetch: async () => {
+        calls++;
+        return new Response("", { status: up ? 200 : 503 });
+      },
+    });
+    await onboard(s);
+    const q = await s.ramp.quote(s.caller, { kind: "withdrawal", currency: "KES", amount: USDC(1) });
+    await s.ramp.createWithdrawal(s.caller, { quoteId: q.id, account: s.user.publicKey(), beneficiary: bank });
+    const first = calls;
+    expect(first).toBeGreaterThan(0);
+    // Inside the backoff window nothing is retried.
+    await s.ramp.deliverPending();
+    expect(calls).toBe(first);
+    for (let i = 0; i < 12; i++) {
+      clock = new Date(clock.getTime() + 7 * 3_600_000);
+      await s.ramp.deliverPending();
+    }
+    const dead = await s.ramp.deadLetters(s.caller);
+    expect(dead.length).toBeGreaterThan(0);
+    expect(dead[0]!.attempts).toBe(10);
+    expect(dead[0]!.lastError).toBe("HTTP 503");
+    const settled = calls;
+    clock = new Date(clock.getTime() + 7 * 3_600_000);
+    await s.ramp.deliverPending();
+    expect(calls).toBe(settled);
+    up = true;
+    await s.ramp.redeliver(s.caller, dead[0]!.event.id);
+    expect((await s.ramp.deadLetters(s.caller)).map((d) => d.event.id)).not.toContain(dead[0]!.event.id);
   });
 });

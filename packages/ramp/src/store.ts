@@ -70,6 +70,9 @@ CREATE TABLE IF NOT EXISTS ramp_events (
   last_error TEXT
 );
 CREATE INDEX IF NOT EXISTS ramp_events_tenant ON ramp_events (tenant_id, created_at);
+ALTER TABLE ramp_events ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ;
+ALTER TABLE ramp_events ADD COLUMN IF NOT EXISTS dead_at TIMESTAMPTZ;
+ALTER TABLE ramp_api_keys ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS ramp_idempotency (
   tenant_id TEXT NOT NULL,
   key TEXT NOT NULL,
@@ -109,6 +112,8 @@ export interface ApiKey {
   kind: KeyKind;
   label?: string;
   policy?: SpendingPolicy;
+  /** Past this the key no longer authenticates (rotation grace, or a key issued with a lifetime). */
+  expiresAt?: Date;
 }
 
 export type OrderKind = "withdrawal" | "deposit";
@@ -256,19 +261,20 @@ export class RampStore {
   }
 
   async addKey(k: ApiKey & { hash: string }): Promise<void> {
-    await this.db.query(`INSERT INTO ramp_api_keys (id, tenant_id, hash, kind, label, policy) VALUES ($1,$2,$3,$4,$5,$6)`, [
+    await this.db.query(`INSERT INTO ramp_api_keys (id, tenant_id, hash, kind, label, policy, expires_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`, [
       k.id,
       k.tenantId,
       k.hash,
       k.kind,
       k.label ?? null,
       k.policy ? JSON.stringify(policyToJson(k.policy)) : null,
+      k.expiresAt?.toISOString() ?? null,
     ]);
   }
 
   async keyByHash(hash: string): Promise<ApiKey | undefined> {
     const { rows } = await this.db.query<Record<string, unknown>>(
-      `SELECT id, tenant_id, kind, label, policy FROM ramp_api_keys WHERE hash = $1 AND revoked_at IS NULL`,
+      `SELECT id, tenant_id, kind, label, policy, expires_at FROM ramp_api_keys WHERE hash = $1 AND revoked_at IS NULL`,
       [hash],
     );
     const r = rows[0];
@@ -279,12 +285,13 @@ export class RampStore {
       kind: r.kind as KeyKind,
       label: (r.label as string | null) ?? undefined,
       policy: policyFromJson(r.policy),
+      ...(r.expires_at ? { expiresAt: new Date(r.expires_at as string) } : {}),
     };
   }
 
   async listKeys(tenantId: string): Promise<ApiKey[]> {
     const { rows } = await this.db.query<Record<string, unknown>>(
-      `SELECT id, tenant_id, kind, label, policy FROM ramp_api_keys WHERE tenant_id = $1 AND revoked_at IS NULL ORDER BY created_at`,
+      `SELECT id, tenant_id, kind, label, policy, expires_at FROM ramp_api_keys WHERE tenant_id = $1 AND revoked_at IS NULL ORDER BY created_at`,
       [tenantId],
     );
     return rows.map((r) => ({
@@ -293,7 +300,16 @@ export class RampStore {
       kind: r.kind as KeyKind,
       label: (r.label as string | null) ?? undefined,
       policy: policyFromJson(r.policy),
+      ...(r.expires_at ? { expiresAt: new Date(r.expires_at as string) } : {}),
     }));
+  }
+
+  /** Bring a key's expiry forward (never back): rotation's grace period. */
+  async expireKey(tenantId: string, id: string, at: Date): Promise<void> {
+    await this.db.query(
+      `UPDATE ramp_api_keys SET expires_at = LEAST(COALESCE(expires_at, $3::timestamptz), $3::timestamptz) WHERE tenant_id = $1 AND id = $2`,
+      [tenantId, id, at.toISOString()],
+    );
   }
 
   async revokeKey(tenantId: string, id: string): Promise<boolean> {
@@ -492,21 +508,52 @@ export class RampStore {
     return rows.map((r) => r.payload);
   }
 
-  async undelivered(limit = 100): Promise<Array<{ tenantId: string; event: RampEvent; attempts: number }>> {
+  /** Events due for (re)delivery: not delivered, not dead-lettered, and past their backoff. */
+  async undelivered(now: Date, limit = 100): Promise<Array<{ tenantId: string; event: RampEvent; attempts: number }>> {
     const { rows } = await this.db.query<{ tenant_id: string; payload: RampEvent; attempts: number }>(
-      `SELECT tenant_id, payload, attempts FROM ramp_events WHERE delivered_at IS NULL ORDER BY id LIMIT $1`,
-      [limit],
+      `SELECT tenant_id, payload, attempts FROM ramp_events
+        WHERE delivered_at IS NULL AND dead_at IS NULL AND (next_attempt_at IS NULL OR next_attempt_at <= $1)
+        ORDER BY id LIMIT $2`,
+      [now.toISOString(), limit],
     );
     return rows.map((r) => ({ tenantId: r.tenant_id, event: r.payload, attempts: r.attempts }));
   }
 
-  async markDelivery(id: string, error?: string): Promise<void> {
-    await this.db.query(
-      error
-        ? `UPDATE ramp_events SET attempts = attempts + 1, last_error = $2 WHERE id = $1`
-        : `UPDATE ramp_events SET attempts = attempts + 1, delivered_at = now(), last_error = NULL WHERE id = $1`,
-      error ? [id, error] : [id],
+  async markDelivered(id: string): Promise<void> {
+    await this.db.query(`UPDATE ramp_events SET attempts = attempts + 1, delivered_at = now(), next_attempt_at = NULL, last_error = NULL WHERE id = $1`, [id]);
+  }
+
+  /** Record a failed attempt; returns the attempt count so the caller can schedule or dead-letter. */
+  async markFailed(id: string, error: string, next: { retryAt?: Date; dead?: Date }): Promise<void> {
+    await this.db.query(`UPDATE ramp_events SET attempts = attempts + 1, last_error = $2, next_attempt_at = $3, dead_at = $4 WHERE id = $1`, [
+      id,
+      error.slice(0, 500),
+      next.retryAt?.toISOString() ?? null,
+      next.dead?.toISOString() ?? null,
+    ]);
+  }
+
+  async attempts(id: string): Promise<number> {
+    const { rows } = await this.db.query<{ attempts: number }>(`SELECT attempts FROM ramp_events WHERE id = $1`, [id]);
+    return Number(rows[0]?.attempts ?? 0);
+  }
+
+  /** Events that exhausted their retries, for the app to inspect and replay. */
+  async deadLetters(tenantId: string, limit = 100) {
+    const { rows } = await this.db.query<{ payload: RampEvent; attempts: number; last_error: string | null; dead_at: string }>(
+      `SELECT payload, attempts, last_error, dead_at FROM ramp_events WHERE tenant_id = $1 AND dead_at IS NOT NULL ORDER BY id LIMIT $2`,
+      [tenantId, limit],
     );
+    return rows.map((r) => ({ event: r.payload, attempts: Number(r.attempts), lastError: r.last_error, deadAt: new Date(r.dead_at) }));
+  }
+
+  /** Put a dead-lettered event back in the queue with a fresh retry budget. */
+  async requeue(tenantId: string, id: string): Promise<boolean> {
+    const { rows } = await this.db.query(
+      `UPDATE ramp_events SET dead_at = NULL, attempts = 0, next_attempt_at = NULL WHERE tenant_id = $1 AND id = $2 AND dead_at IS NOT NULL RETURNING 1`,
+      [tenantId, id],
+    );
+    return rows.length === 1;
   }
 
   async idempotent(tenantId: string, key: string): Promise<{ requestHash: string; status: number; body: unknown } | undefined> {

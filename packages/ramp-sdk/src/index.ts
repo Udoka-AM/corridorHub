@@ -225,8 +225,8 @@ export class Ramp {
   };
 
   readonly keys = {
-    create: (args: { kind?: "secret" | "agent"; label?: string; policy?: SpendingPolicy } = {}) =>
-      this.request<{ id: string; kind: string; label?: string; key: string }>("POST", "/v1/keys", {
+    create: (args: { kind?: "secret" | "agent"; label?: string; policy?: SpendingPolicy; expiresInSeconds?: number } = {}) =>
+      this.request<{ id: string; kind: string; label?: string; key: string; expiresAt: string | null }>("POST", "/v1/keys", {
         ...args,
         policy: args.policy && {
           ...args.policy,
@@ -234,12 +234,24 @@ export class Ramp {
           dailyLimit: args.policy.dailyLimit === undefined ? undefined : str(args.policy.dailyLimit),
         },
       }),
-    list: async () => (await this.request<{ data: Array<{ id: string; kind: string; label?: string }> }>("GET", "/v1/keys")).data,
+    list: async () => (await this.request<{ data: Array<{ id: string; kind: string; label?: string; expiresAt?: string }> }>("GET", "/v1/keys")).data,
     revoke: (id: string) => this.request<{ revoked: string }>("DELETE", `/v1/keys/${enc(id)}`),
+    /** Replace a key; the old one keeps working for `graceSeconds` (default a day). */
+    rotate: (id: string, args: { graceSeconds?: number } = {}) =>
+      this.request<{ id: string; kind: string; label?: string; key: string; previous: { id: string; expiresAt: string } }>(
+        "POST",
+        `/v1/keys/${enc(id)}/rotate`,
+        args,
+      ),
   };
 
   readonly webhooks = {
     set: (url: string | null) => this.request<{ url: string | null; secret: string }>("PUT", "/v1/webhook", { url }),
+    /** Events whose delivery exhausted its retries. */
+    deadLetters: async () =>
+      (await this.request<{ data: Array<{ event: RampEvent; attempts: number; lastError: string | null; deadAt: string }> }>("GET", "/v1/webhook/dead-letters"))
+        .data,
+    redeliver: (eventId: string) => this.request<{ requeued: string }>("POST", `/v1/webhook/dead-letters/${enc(eventId)}/redeliver`),
   };
 
   readonly events = {

@@ -1,7 +1,7 @@
 import { Account, Asset as SdkAsset, FeeBumpTransaction, Keypair, Memo, Networks, Operation, Transaction, TransactionBuilder } from "@stellar/stellar-sdk";
 import { randomBytes } from "node:crypto";
 import { STELLAR_ISSUERS, localStellarSigner, stellarClient, type PaymentSource, type StellarPaymentRecord } from "@corridor/chain-stellar";
-import { openLocalDb } from "@corridor/ledger";
+import { openLocalDb, type Db } from "@corridor/ledger";
 import { MockPartner, PartnerRegistry } from "@corridor/partners";
 import { stellarRampChain } from "./chain.ts";
 import { RampService } from "./service.ts";
@@ -11,8 +11,10 @@ import { RampService } from "./service.ts";
  * Stellar: transactions are really built, signed and checked, but "submit"
  * records them instead of sending. For tests and local development.
  */
-export async function testRamp(opts: { now?: () => Date; fetch?: typeof fetch; failPayouts?: boolean; publicUrl?: string } = {}) {
-  const db = await openLocalDb();
+export async function testRamp(
+  opts: { now?: () => Date; fetch?: typeof fetch; failPayouts?: boolean; publicUrl?: string; db?: Db & { close(): Promise<void> } } = {},
+) {
+  const db = opts.db ?? (await openLocalDb());
   const sponsorKeys = Keypair.random();
   const anchorAccount = Keypair.random().publicKey();
   const known = new Set<string>([sponsorKeys.publicKey()]);
