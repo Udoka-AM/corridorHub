@@ -41,7 +41,11 @@ That work is what the Hub already does. Building a second product next to it wou
 
 The plan's full Ramp scope includes items this record does not claim:
 
-- Soroban smart accounts with passkey or social login. The SDK's `signXdr` hook is where a wallet provider (Privy, Stellar Wallets Kit, a passkey kit) plugs in. No provider is wired in.
+- Soroban smart accounts with passkey or social login. The SDK's `signXdr` hook is where a wallet provider (Privy, Stellar Wallets Kit, a passkey kit) plugs in. No provider is wired in, and MVP ships without one: an app brings its own signer, and this is a milestone after MVP.
+
+  Checked against Privy's own documentation on 22 October 2026, because the plan names it as the building block. Stellar sits in Privy's **tier 2**, which covers wallet creation and signing but not the tier-3 managed features: there is **no fee or reserve sponsorship** and **no smart-account support** on Stellar, and Privy's smart wallets are EVM-only. A Privy wallet on Stellar is an Ed25519 keypair held in a trusted execution environment, not a contract account. Passkeys are one of Privy's login methods, which is authentication rather than an on-chain signer, so "passkey login" and "smart account" are two separate pieces of work on Stellar — the second being a Soroban contract account.
+
+  Two consequences. Ramp already supplies what Privy does not: the sponsored reserve, the trustline and the fee bump. And Privy signs a 32-byte hash and returns a raw signature, so a Privy-backed app has to extract the hash and attach the signature itself to satisfy `signXdr`; accepting a hash signer alongside it — the shape `StellarSigner` already uses internally — would make Privy a drop-in.
 - SEP-6 and SEP-24 collections against a real anchor. Deposits run through the partner interface, and today only `MockPartner` implements collection.
 - Cross-chain deposit addresses: Tron USDT over NEAR Intents, Solana and Base USDC over CCTP.
 - x402-paid endpoints and an MCP server. The SDK exports `agentTools` with JSON schemas, ready to register with an MCP server.
