@@ -210,7 +210,8 @@
               "decisions/0010-issuer-neutral-stablecoins",
               "decisions/0011-read-only-first",
               "decisions/0012-seven-decimal-ledger",
-              "decisions/0013-ramp-and-hub-share-one-core"
+              "decisions/0013-ramp-and-hub-share-one-core",
+              "decisions/0014-cctp-receive-only"
             ]
           }
         ]
