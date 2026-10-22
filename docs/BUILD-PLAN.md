@@ -84,7 +84,7 @@ docs/              ARCHITECTURE.md (authoritative) · this file
 
 ```bash
 pnpm install
-pnpm test                 # 128 tests, 16 files, no network
+pnpm test                 # 145 tests, 18 files, no network
 pnpm typecheck            # tsc -b
 pnpm stellar:wallets      # create and fund two testnet vaults (Friendbot)
 pnpm stellar:smoke        # a real payment, reference read back off Horizon
@@ -162,7 +162,7 @@ Also corrected while in there: `PartnerOrder.usdcAmount` was documented as 6 dp 
 | **B4** | **The `stellar.pathPayment` leg.** The planner produces the edge; no implementation. A payout cannot be funded from an EURC or MGUSD balance. | Nothing. | 1 day |
 | **B5** | **MGUSD, PYUSD, USDT issuers unset** in `STELLAR_ISSUERS`. | Each must be verified against the issuer's own published `stellar.toml`. | 1–2 hours total |
 | **B6** | **No treasury console** for Stellar. | The engines produce the data; it is a UI. | 1–2 weeks |
-| **B7** | **No HTTP API.** `ARCHITECTURE.md` §5 shows one; `apps/` has no service. Only `webhookServer` exists, and no script starts it. | Nothing. | 2 days |
+| **B7** | **HTTP API: built as Ramp.** `@corridor/ramp` serves the hosted API (`pnpm ramp:serve`) and `@corridor/ramp-sdk` is its client; see ADR 0013. Its orders run on `planRoute` and the saga engine and settle from the chain; it is specified in `packages/ramp/openapi.json` and runs on Postgres with per-key rate limits, key expiry and rotation, and webhook dead letters. CI (`.github/workflows/ci.yml`) runs typecheck, the tests on PGlite and Postgres, the docs check, the OpenAPI check and the site build on every PR. The Hub's own operator API over the saga and recon remains declared and not built. | Nothing. | Done for Ramp |
 | **B8** | **No mainnet run.** Code paths are identical; nothing has run on Stellar mainnet. | Needs a funded mainnet account and, to be meaningful, an anchor. | — |
 | **B9** | **The confidential lane.** `SHIELDED_VENUES` is empty; `privacy: "shielded"` is refused with that reason. | Deliberate — deferred to Stellar confidential tokens (ADR 0005). | Out of scope |
 

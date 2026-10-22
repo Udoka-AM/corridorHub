@@ -1,0 +1,59 @@
+---
+title: "ADR 0013: Ramp and the Hub are two front doors on one core"
+sidebarTitle: "0013 · Ramp and Hub, one core"
+description: "Ramp is the hosted, multi-tenant API and SDK for apps, agents and merchants; the Hub is the self-hosted deployment for licensed payment companies. Both run the same anchor spokes, Corridor Reference and ledger. Ramp builds transactions and the end user's wallet signs them."
+---
+
+## Context
+
+Corridor's first customer is a licensed payment company that runs the Hub in its own cloud, on its own keys ([ADR 0009](/decisions/0009-customer-held-keys)). That sale is slow and the customer list is short. Meanwhile every small Stellar team, AI agent and merchant that wants local African currency has to do the same work: find an anchor, implement SEP-10/12/31/38 against it, sponsor reserves so users can hold USDC without first holding XLM, and keep books that match the chain.
+
+That work is what the Hub already does. Building a second product next to it would mean two anchor integrations, two references and two ledgers to keep in step.
+
+## Decision
+
+**Ramp and the Hub are one codebase with two front doors.** Ramp (`@corridor/ramp`, `@corridor/ramp-sdk`) is a hosted, multi-tenant layer over the same packages the Hub runs:
+
+| Shared core | Ramp adds | Hub adds |
+|---|---|---|
+| Anchors behind `RampPartner` (SEP-1/10/12/31/38) | Apps, API keys, plans | The customer's own cloud |
+| The 32-byte Corridor Reference | Quotes that expire and are spent once | Vault custody (`custody: "hub"`): reserve and credit legs over the customer's vaults |
+| The double-entry, 7 dp ledger | Webhooks to apps, usage per app | KMS / MPC / Turnkey signers |
+| The anchor's funding memo (`fundingMemoFor`) | Sponsored end-user accounts, agent spending policies | Read-only reconciliation first |
+| Route planner (`planRoute`) and saga engine | Wallet custody (`custody: "wallet"`): no ledger reserve for funds Corridor does not hold | |
+| Horizon observation (`StellarObserver`), settle from the chain | Matching by the anchor's memo, account and exact amount; one payment claims one order | |
+
+**Ramp never holds an end user's key.** It builds the Stellar transaction (the payment to the anchor's receiving account with the anchor's memo, plus the Ramp fee as a second operation) and returns it unsigned. The user's embedded wallet signs it through the SDK's `signXdr` hook. Ramp checks that the signed transaction is the one it built (same hash), then submits it inside a fee bump from its sponsor account, so users never need XLM for fees.
+
+**Onboarding is sponsored.** `POST /v1/accounts` returns a transaction that creates the user's account and opens the settlement asset's trustline inside `beginSponsoringFutureReserves` / `endSponsoringFutureReserves`, already signed by the sponsor. The user co-signs to accept the trustline.
+
+**Fees are integer arithmetic on the settlement amount** (basis points plus a per-call amount for agent plans) and are booked in the ledger. A withdrawal's fee arrives on-chain in the same transaction and is booked as revenue only when the reconciler sees that transaction on Horizon (ADR 0008); an anchor's word that it paid out settles nothing. A deposit's fee is accrued against the app as a receivable.
+
+## Consequences
+
+- An anchor integrated once serves both products. A fix to the SEP adapter ships to both.
+- Ramp is not a custodian of end-user funds. The sponsor key holds only the XLM that covers reserves and fees, and the fee account receives Ramp's own revenue.
+- Ramp is a hosted service, so the sponsor key and the database are Corridor's to operate. The Hub's promise that Corridor never touches the keys holds for the Hub, not for Ramp's sponsor.
+- An app's books are kept apart by tenant id in one database. Single-tenant Ramp for large apps is the Hub.
+- Agent keys carry a spending policy (`maxPerPayout`, `dailyLimit`, `currencies`). A refusal names the limit that was hit, what remains, and what was asked for, so an agent can act on it.
+
+## Declared and not built
+
+The plan's full Ramp scope includes items this record does not claim:
+
+- Soroban smart accounts with passkey or social login. The SDK's `signXdr` hook is where a wallet provider (Privy, Stellar Wallets Kit, a passkey kit) plugs in. No provider is wired in, and MVP ships without one: an app brings its own signer, and this is a milestone after MVP.
+
+  Checked against Privy's own documentation on 22 October 2026, because the plan names it as the building block. Stellar sits in Privy's **tier 2**, which covers wallet creation and signing but not the tier-3 managed features: there is **no fee or reserve sponsorship** and **no smart-account support** on Stellar, and Privy's smart wallets are EVM-only. A Privy wallet on Stellar is an Ed25519 keypair held in a trusted execution environment, not a contract account. Passkeys are one of Privy's login methods, which is authentication rather than an on-chain signer, so "passkey login" and "smart account" are two separate pieces of work on Stellar — the second being a Soroban contract account.
+
+  Two consequences. Ramp already supplies what Privy does not: the sponsored reserve, the trustline and the fee bump. And Privy signs a 32-byte hash and returns a raw signature, so a Privy-backed app has to extract the hash and attach the signature itself to satisfy `signXdr`; accepting a hash signer alongside it — the shape `StellarSigner` already uses internally — would make Privy a drop-in.
+- SEP-6 and SEP-24 collections against a real anchor. Deposits run through the partner interface, and today only `MockPartner` implements collection.
+- Cross-chain deposit addresses: Tron USDT over NEAR Intents, Solana and Base USDC over CCTP.
+- x402-paid endpoints and an MCP server. The SDK exports `agentTools` with JSON schemas, ready to register with an MCP server.
+- Billing and invoices beyond the usage endpoint, and a dashboard UI.
+- A hosted deployment: the KMS behind the sponsor key, the managed Postgres, the domain. The code runs on Postgres; where it runs is undecided.
+
+## Alternatives rejected
+
+- **A separate Ramp codebase:** two anchor adapters and two ledgers drifting apart.
+- **Custodial embedded wallets:** Ramp would become a money transmitter holding user funds, which is the regulatory position the plan rules out.
+- **Ramp signs on the user's behalf with a delegated key:** moves the custody question into key management without answering it.

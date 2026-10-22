@@ -19,7 +19,7 @@ read back 0.1 XLM with the same reference, decoded out of MEMO_HASH
 ledger 5241532 · 2026-10-17T10:00:47Z
 ```
 
-Reproduce it with `pnpm stellar:wallets && pnpm stellar:smoke`, then `pnpm stellar:payout` for the full saga. For the SEP path against a server Corridor does not control, `./examples/anchor/up.sh` brings up Stellar's own Anchor Platform as a receiving SEP-31 anchor and the same payout runs against it. 128 tests cover the venue, the planner, the ledger, the saga and the SEP anchor adapter.
+Reproduce it with `pnpm stellar:wallets && pnpm stellar:smoke`, then `pnpm stellar:payout` for the full saga. For the SEP path against a server Corridor does not control, `./examples/anchor/up.sh` brings up Stellar's own Anchor Platform as a receiving SEP-31 anchor and the same payout runs against it. 145 tests cover the venue, the planner, the ledger, the saga and the SEP anchor adapter.
 
 Corridor's earlier prototype settled on Tempo, and paid ₦3,891.48 into a Nigerian bank account 74 seconds after 2.90 USDC.e left a vault on 11 October 2026. That build lives in its own repository; Stellar is Corridor's home from here.
 
@@ -71,7 +71,7 @@ Architecture in depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). What is bui
 
 ```bash
 pnpm install
-pnpm test                 # 128 tests, no network
+pnpm test                 # 145 tests, no network
 pnpm stellar:wallets      # creates and funds two testnet vaults
 pnpm stellar:smoke        # a real payment, with the reference read back off the network
 pnpm stellar:payout       # the whole saga: route, reserve, fund the anchor, book it
@@ -107,10 +107,14 @@ CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
 | `packages/signer` | Signer interfaces: local, AWS KMS, Turnkey |
 | `packages/chain-solana`, `packages/chain-evm` | The cross-chain spokes |
 | `packages/webhooks` | Partner event store and webhook verification |
+| `packages/ramp` | Ramp: the hosted, multi-tenant API on the same core |
+| `packages/ramp-sdk` | The TypeScript SDK for Ramp |
 
 ## Status
 
 Built and tested: the Stellar venue, the reference in `MEMO_HASH`, the planner, the saga engine, the ledger, read-only reconciliation, and the SEP anchor adapter — which has run end to end against Stellar's own Anchor Platform, brought up locally as a receiving SEP-31 anchor.
+
+Ramp, the hosted API and SDK for apps, agents and merchants, runs on the same core ([ADR 0013](apps/docs/decisions/0013-ramp-and-hub-share-one-core.mdx)). Ramp orders run on the Hub's route planner and saga engine and settle only from Horizon evidence, matched by the anchor's memo and the exact amount. `pnpm ramp:demo` signs up an app, onboards a user with a sponsored account and USDC trustline, and pays out testnet USDC through the SDK, with the user's key signing locally. The API is specified in [OpenAPI](packages/ramp/openapi.json) and runs on PGlite or Postgres. Ramp's wallet providers, SEP-6/24 collections, cross-chain deposits, x402 and an MCP server are declared and not built.
 
 Not done yet: no anchor is signed, so no real local currency has moved on Stellar; SEP-6 collections are unimplemented; the `cctp.transfer` and `stellar.pathPayment` legs are declared in the route graph but not built; the MGUSD, PYUSD and USDT issuers are unset until each is verified against its own `stellar.toml`; there is no treasury console.
 

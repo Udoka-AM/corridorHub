@@ -1,6 +1,6 @@
 ---
 title: "Quickstart"
-description: "Install Corridor, run 128 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
+description: "Install Corridor, run 145 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
 icon: "terminal"
 ---
 
@@ -25,7 +25,7 @@ Corridor is a TypeScript monorepo (pnpm workspaces). The ledger runs on embedded
     pnpm typecheck
     pnpm test
     ```
-    128 tests cover the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
+    145 tests cover Ramp and its SDK, the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
   </Step>
   <Step title="Create two testnet vaults">
     ```bash
@@ -46,7 +46,7 @@ Corridor is a TypeScript monorepo (pnpm workspaces). The ledger runs on embedded
     Plans a EUR → KES route, reserves the customer's balance, opens an anchor order, funds it exactly once with a real Stellar payment, books every movement double-entry and prints the ledger invariants. The anchor is `MockPartner`, so no local currency moves; the route, the saga, the payment and every ledger entry are the real ones.
 ---
 title: "Quickstart"
-description: "Install Corridor, run 128 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
+description: "Install Corridor, run 145 tests with no network, then send a real payment on Stellar testnet carrying the Corridor Reference in MEMO_HASH and run a whole payout through the saga engine."
 icon: "terminal"
 ---
 
@@ -71,7 +71,7 @@ Corridor is a TypeScript monorepo (pnpm workspaces). The ledger runs on embedded
     pnpm typecheck
     pnpm test
     ```
-    128 tests cover the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
+    145 tests cover Ramp and its SDK, the Stellar venue (references on real transaction shapes, issuer identity, the Horizon quirks that would otherwise lose every memo), the reference codec, routing and hub enforcement, ledger invariants, the saga engine (forced failures, compensation order, lease fencing), the SEP anchor adapter, the partner adapters and webhooks, signers, read-only matching and vault accounting.
   </Step>
   <Step title="Create two testnet vaults">
     ```bash
@@ -110,7 +110,7 @@ Both Stellar scripts move **XLM**, because a funded testnet USDC trustline needs
 
 | Command | What it does |
 |---|---|
-| `pnpm test` | 128 tests, no network |
+| `pnpm test` | 145 tests, no network |
 | `pnpm typecheck` | `tsc -b` across every package |
 | `pnpm stellar:wallets` | Create or inspect the testnet vaults (keys stay local) |
 | `pnpm stellar:smoke` | A real payment, with the reference read back off Horizon and decoded |

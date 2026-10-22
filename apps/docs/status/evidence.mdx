@@ -79,11 +79,24 @@ CORRIDOR_PAYOUT_CURRENCY=USD pnpm stellar:payout
 No local currency moved: the anchor is Stellar's reference implementation, run locally, and telling it the beneficiary was paid is a step a real anchor performs itself off its own rail. Everything on Corridor's side of the exchange is real, and nothing in the adapter is stubbed. See [`examples/anchor`](https://github.com/Udoka-AM/corridorHub/tree/main/examples/anchor).
 </Note>
 
+### Ramp, through the SDK
+
+On **21 October 2026**, `pnpm ramp:demo` ran the hosted API in-process against Stellar testnet and drove it only through `@corridor/ramp-sdk`, in **testnet USDC** (Circle's testnet issuer). A sandbox app signed up; an end user was onboarded with a sponsored account and USDC trustline, holding no XLM; the user's USDC was bought on the testnet DEX with the sponsor's friendbot XLM (testnet has no USDC faucet, and this stands in for the user's own deposit); and a 5 USDC payout ran to `completed` against the mock anchor. The order ran as a saga on the route planner and settled only after the reconciler found the funding payment on Horizon by the anchor's memo and exact amount. The user's key stayed in the script, which signed through the SDK's `signXdr` hook.
+
+| Step | Result | Transaction |
+|---|---|---|
+| Sponsored onboarding | Account and USDC trustline created inside `beginSponsoringFutureReserves`, signed by the sponsor and the user | [85614afc…](https://stellar.expert/explorer/testnet/tx/85614afcbe202ff818b1c096fc4b823393bf95a3ceef79c71df0fdbfda83b5f4) |
+| USDC into the trustline | 10 USDC by path payment from XLM on the testnet DEX | [bea90002…](https://stellar.expert/explorer/testnet/tx/bea900024bb81a51d4e7dff0fe232f12fffb3dc090a5881bc80132e2fc5f5b74) |
+| Funding the anchor | 5 USDC built by Ramp with the anchor's memo, signed by the user, submitted in a sponsor fee bump; hash checked against the one Ramp built | [51c67a8e…](https://stellar.expert/explorer/testnet/tx/51c67a8ebb2db4ac2d0df29d484be08d405251db5ac2cfc23a4ebf1939926033) |
+| Status and usage | Order `completed` once the anchor reported payout **and** Horizon showed the funding; `/v1/usage` reported 5 USDC routed to KES (64,450 minor units) | — |
+
+The sandbox plan charges no fee, so this run carried no fee operation; the fee path (a second payment to the fee account in the same transaction, matched before the fee is booked) is covered by the tests.
+
 ## The test suite
 
 | Measure | Value |
 |---|---|
-| Tests | **128 passing**, no network |
+| Tests | **161 passing**, no network (one more against Postgres when `TEST_DATABASE_URL` is set) |
 | Stellar venue | 20 tests: the reference on a real transaction shape, issuer identity, the held-key signer, and the Horizon quirks that would otherwise lose every memo |
 | Routing | 11 tests: hub enforcement, every route shape, the shielded refusal, the off-Stellar list |
 | Reference codec | 12 tests: encode, decode, checksum, version rejection, currency pairs |
@@ -91,10 +104,13 @@ No local currency moved: the anchor is Stellar's reference implementation, run l
 | Saga engine | 6 tests: compensation order, `manual_review`, lease fencing under a real race |
 | SEP anchor | 16 tests against a stubbed anchor: discovery over HTTPS or a given base URL, the challenge check, the quote, the funding method read from the anchor's own `/info`, the receiving account whether it arrives on the POST or the GET, both amount shapes, and the status mapping |
 | Anchor funding | 5 tests: the anchor's memo is carried, the reference is the fallback, and a retry after a crash finds the payment instead of paying twice |
+| Ramp | 18 tests: fees in integer minor units and decimal-string rates, sponsored onboarding, the full withdrawal as a saga settled from Horizon, an anchor's "completed" with no chain evidence refused, one payment never settling two orders, chain evidence surviving a concurrent anchor update, unsigned orders lapsing and compensating, a tampered transaction refused, quotes spent once and expiring, agent spending limits, tenant isolation, deposits, failed payouts, key expiry and rotation, webhook backoff and dead letters |
+| Ramp SDK | 7 tests over HTTP: signup to completed payout, idempotent replay and conflict, a collection link, agent tools under a policy, error codes, per-key rate limits with secret-free request logs, key rotation and dead letters |
+| Ramp OpenAPI | 2 tests: the spec documents exactly the served routes, and every `$ref` resolves |
 | Partners, webhooks, signers, recon | The rest |
 
 ```bash
-pnpm test        # 128 tests
+pnpm test        # 161 tests
 pnpm typecheck   # tsc -b, clean
 ```
 

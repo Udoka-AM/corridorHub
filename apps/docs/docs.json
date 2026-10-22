@@ -164,6 +164,18 @@
         ]
       },
       {
+        "tab": "Ramp",
+        "icon": "plug-zap",
+        "groups": [
+          {
+            "group": "Hosted API and SDK",
+            "pages": [
+              "ramp/overview"
+            ]
+          }
+        ]
+      },
+      {
         "tab": "Flows",
         "icon": "route",
         "groups": [
@@ -197,7 +209,8 @@
               "decisions/0009-customer-held-keys",
               "decisions/0010-issuer-neutral-stablecoins",
               "decisions/0011-read-only-first",
-              "decisions/0012-seven-decimal-ledger"
+              "decisions/0012-seven-decimal-ledger",
+              "decisions/0013-ramp-and-hub-share-one-core"
             ]
           }
         ]

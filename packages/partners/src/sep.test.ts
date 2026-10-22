@@ -162,7 +162,7 @@ describe("SEP-31 payout", () => {
       fundingMemo: "AAAA",
       fundingMemoType: "hash",
       fiatAmount: 90_550n, // KES 905.50
-      rate: 129.5,
+      rate: "129.5",
     });
     expect(posted).toMatchObject({ amount: "7.0000000", asset_code: "USDC", destination_asset: "iso4217:KES", quote_id: "quote-1" });
     // The reference cannot ride in the memo on a SEP-31 leg, so it goes in the fields.

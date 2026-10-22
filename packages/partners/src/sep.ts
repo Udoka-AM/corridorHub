@@ -1,5 +1,5 @@
 import { Networks, Transaction, TransactionBuilder } from "@stellar/stellar-sdk";
-import { FIAT, parseMoney, type Fiat, type Hex } from "@corridor/core";
+import { FIAT, decimal, parseMoney, ratio, type Decimal, type Fiat, type Hex } from "@corridor/core";
 import { PartnerError, type Beneficiary, type CollectionRequest, type OrderStatus, type PartnerChain, type PartnerOrder, type PayoutRequest, type RampPartner, type Rates } from "./types.ts";
 
 /**
@@ -239,19 +239,19 @@ export class SepAnchor implements RampPartner {
     const body = await this.call<{ buy_assets: { asset: string; price: string }[] }>(url.toString());
     const hit = body.buy_assets.find((a) => a.asset === buy);
     if (!hit) throw new PartnerError(`${this.id} quotes no price for ${currency}`, this.id);
-    const price = Number(hit.price);
+    const price = decimal(hit.price);
     return { currency, onRamp: price, offRamp: price, at: this.opts.now?.() ?? new Date() };
   }
 
   /** SEP-38 firm quote: the rate is held for the life of the quote. */
-  private async quote(currency: Fiat, sellAmount: string): Promise<{ id: string; price: number; buyAmount: string }> {
+  private async quote(currency: Fiat, sellAmount: string): Promise<{ id: string; price: Decimal; buyAmount: string }> {
     const quotes = await this.endpoint("ANCHOR_QUOTE_SERVER", "SEP-38");
     const { sell, buy } = await this.assetIds(currency);
     const q = await this.call<{ id: string; price: string; buy_amount: string }>(`${quotes}/quote`, {
       method: "POST",
       body: JSON.stringify({ sell_asset: sell, buy_asset: buy, sell_amount: sellAmount, context: "sep31" }),
     });
-    return { id: q.id, price: Number(q.price), buyAmount: q.buy_amount };
+    return { id: q.id, price: decimal(q.price), buyAmount: q.buy_amount };
   }
 
   /**
@@ -300,7 +300,7 @@ export class SepAnchor implements RampPartner {
       chain: "STELLAR",
       currency: req.currency,
       usdcAmount: req.usdcAmount,
-      fiatAmount: parseMoney(req.currency, Number(quote.buyAmount).toFixed(FIAT[req.currency].decimals)).amount,
+      fiatAmount: parseMoney(req.currency, quote.buyAmount, { truncate: true }).amount,
       rate: quote.price,
       fundingAddress: created.stellar_account_id,
       fundingMemo: created.stellar_memo,
@@ -361,9 +361,9 @@ export class SepAnchor implements RampPartner {
       partnerStatus: t.status,
       chain: "STELLAR",
       currency,
-      usdcAmount: inAmount ? parseMoney("USDC", Number(inAmount).toFixed(7)).amount : 0n,
-      fiatAmount: outAmount && currency in FIAT ? parseMoney(currency, Number(outAmount).toFixed(FIAT[currency].decimals)).amount : 0n,
-      rate: Number(outAmount ?? 0) / Number(inAmount || 1),
+      usdcAmount: inAmount ? parseMoney("USDC", inAmount, { truncate: true }).amount : 0n,
+      fiatAmount: outAmount && currency in FIAT ? parseMoney(currency, outAmount, { truncate: true }).amount : 0n,
+      rate: outAmount && inAmount ? ratio(outAmount, inAmount) : "0",
       fundingAddress: t.stellar_account_id,
       fundingMemo: t.stellar_memo,
       fundingMemoType: t.stellar_memo_type,

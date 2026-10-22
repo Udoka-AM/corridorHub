@@ -71,6 +71,13 @@ export class StaleLeaseError extends Error {}
  */
 export class ManualReviewError extends Error {}
 
+/**
+ * The leg is waiting on something outside the engine: a user's signature, a
+ * transaction to show up on chain, an anchor's status. The step stays pending,
+ * no attempt is spent, and the saga stays `running` until it is run again.
+ */
+export class WaitingError extends Error {}
+
 const SCHEMA = /* sql */ `
 create table if not exists sagas (
   id         text primary key,
@@ -243,6 +250,7 @@ export class SagaEngine {
         const row = view.steps[step.index]!;
         if (row.status === "done") continue;
         const ok = await this.forward(sagaId, input, step, view);
+        if (ok === "waiting") return "running";
         view = await this.get(sagaId);
         if (!ok) {
           if (view.status === "manual_review") return "manual_review";
@@ -296,7 +304,7 @@ export class SagaEngine {
 
   // ---- internals ----
 
-  private async forward(sagaId: string, input: SagaInput, step: PlannedStep, view: SagaView): Promise<boolean> {
+  private async forward(sagaId: string, input: SagaInput, step: PlannedStep, view: SagaView): Promise<boolean | "waiting"> {
     const leg = this.legs.get(step.kind)!;
     const max = leg.maxAttempts ?? 3;
     let attempts = view.steps[step.index]!.attempts;
@@ -323,6 +331,14 @@ export class SagaEngine {
         return true;
       } catch (err) {
         if (err instanceof StaleLeaseError) throw err;
+        if (err instanceof WaitingError) {
+          await this.db.query(`update saga_steps set attempts = $3, updated_at = now() where saga_id = $1 and idx = $2`, [
+            sagaId,
+            step.index,
+            attempts - 1,
+          ]);
+          return "waiting";
+        }
         const msg = err instanceof Error ? err.message : String(err);
         await this.event(sagaId, step.index, "forward.error", msg);
         if (err instanceof ManualReviewError) {
