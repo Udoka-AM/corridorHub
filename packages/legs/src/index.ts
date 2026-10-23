@@ -15,6 +15,7 @@ import {
 import type { PartnerEventStore } from "@corridor/webhooks";
 
 export { ledgerReserveLeg } from "@corridor/saga";
+export { CctpMintStore, cctpTransferLeg, depositInstruction, type CctpInboundData, type CctpLegOptions } from "./cctp.ts";
 
 /** Saga data for a collection: local currency collected into the customer's hub balance. */
 export interface CollectionData {

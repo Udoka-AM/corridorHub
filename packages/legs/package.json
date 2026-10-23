@@ -13,6 +13,7 @@
     "@corridor/saga": "workspace:*",
     "@corridor/partners": "workspace:*",
     "@corridor/webhooks": "workspace:*",
-    "@corridor/routing": "workspace:*"
+    "@corridor/routing": "workspace:*",
+    "@corridor/bridge-cctp": "workspace:*"
   }
 }

@@ -126,15 +126,18 @@ export const PAYOUT_CURRENCIES: readonly Fiat[] = [
 ];
 
 /**
- * Currencies reachable only through an anchor that settles off Stellar, for
- * as long as no Stellar anchor holds the licence. Naira is the case that
- * matters: it goes out over a cross-chain partner until a licensed naira
- * anchor is live on Stellar, and moving it is then one line here.
+ * Currencies reachable only through a partner that settles off Stellar.
+ *
+ * Empty: every launch currency now has a partner that takes USDC on Stellar,
+ * naira included, so no payout crosses a chain. Paj settles on Solana and
+ * stays supported as an alternate — adding `"NGN"` back here is all it takes
+ * to route through it, which is also what a new corridor does while its first
+ * partner is off-Stellar.
  */
-export const OFF_STELLAR_PAYOUT_CURRENCIES: readonly Fiat[] = ["NGN"];
+export const OFF_STELLAR_PAYOUT_CURRENCIES: readonly Fiat[] = [];
 
 /** The same, for collections. */
-export const OFF_STELLAR_COLLECTION_CURRENCIES: readonly Fiat[] = ["NGN"];
+export const OFF_STELLAR_COLLECTION_CURRENCIES: readonly Fiat[] = [];
 
 const p = (venue: Venue, asset: Asset): Position => ({ venue, asset });
 

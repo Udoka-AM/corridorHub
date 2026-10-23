@@ -58,7 +58,9 @@ Why this shape:
 
 Corridors open in this order: **KES** (Minisend), **XOF** (lomi.) and **TZS** (ClickPesa) first, then **NGN** through a licensed partner, then Ghana and South Africa. None of these anchors is signed yet.
 
-**Naira is the exception.** No licensed naira anchor is live on Stellar, so NGN sits in `OFF_STELLAR_PAYOUT_CURRENCIES` and routes over one CCTP hop to a partner that settles on Solana. When a Stellar naira anchor exists, removing it from that list moves the corridor onto the hub.
+**Naira is on the hub as well.** A naira payout partner that settles in USDC on Stellar is available — a payout app rather than a SEP anchor, so it needs its own `RampPartner` adapter in the shape of the existing Paj one, and that adapter is not written yet. What the route graph says is already true: `OFF_STELLAR_PAYOUT_CURRENCIES` is empty, so NGN plans as `ledger.reserve → partner.payout` like every other launch corridor, and no payout crosses a chain.
+
+Putting a currency back into that list routes it over a bridge hop instead, which is what a new corridor does while its first partner settles elsewhere. Paj (Solana → NGN) stays supported as an alternate on exactly that basis.
 
 **Outbound regulation.** Outbound FX from markets like Nigeria is regulated; import payments, for example, need a Form M and an FX-licensed institution. The licensed customer holds the FX permissions and the KYC. Corridor carries the compliance references (invoice number, Form M number) in the saga data and the off-chain payload, and its reconciliation trail is audit evidence.
 
@@ -219,7 +221,8 @@ The ledger keeps Stellar's own 7 decimal places (ADR 0012), so a booked balance 
 - **`partner.payout`** opens the anchor order, funds it exactly once, and waits. The vault it funds from depends on where the anchor settles: an anchor on the hub is paid out of the treasury; one that settles elsewhere is paid from the egress vault a bridge leg filled, and the customer bears those fees. Anchor rounding is booked as dust held for the customer; a failure after funding stops at `manual_review`.
 - **`partner.collect`** opens the onramp order, waits for the anchor to deliver USDC to the ingress vault, and books it. **`ledger.credit`** then credits the customer's USDC balance on the hub.
 - **`bridge.simulated`** stands in for CCTP on testnet: the Stellar side is real (value moves to an escrow with the reference as memo) and the far side is simulated, with the same bookings.
-- **Not built:** the `cctp.transfer` leg and the `stellar.pathPayment` leg. Both are declared in the route graph and planned for, but neither implementation is written, so mainnet naira payouts do not run and a payout cannot yet be funded from an EURC or MGUSD balance.
+- **`cctp.transfer`** receives USDC from a spoke: it takes a burn the sender already made, waits for Circle's attestation, mints on Stellar through the `CctpForwarder` and books both sides at the hub's precision. The two CCTP address fields are the forwarder, never the beneficiary, which travels in hook data — a burn aimed at an account mints nowhere and cannot be recovered. The mint record is keyed by the burn transaction, so one burn is minted once however many sagas see it. A mint is a contract call, so Horizon's payment stream does not show it and it is booked from the transaction Corridor submitted (ADR 0014).
+- **Not built:** the CCTP **burn**, on Stellar or on an EVM spoke, because Circle's references do not publish the argument order for those entry points and this is code that moves money. Inflows therefore work and outflows do not, so mainnet naira payouts still wait and testnet keeps `bridge.simulated`. The `stellar.pathPayment` leg is also unwritten, so a payout cannot yet be funded from an EURC or MGUSD balance.
 
 ### 8.7 Reconciliation and read-only mode (`packages/recon`)
 
@@ -259,7 +262,7 @@ Both use XLM, because a funded testnet USDC trustline needs an issuer faucet; th
 
 | Risk | Mitigation |
 |---|---|
-| Anchor supply is thin, especially for naira | The partner interface is uniform, so a corridor moves between a Stellar anchor and an off-Stellar partner by changing one list in the route graph |
+| Anchor supply is thin | The partner interface is uniform, so a corridor moves between a Stellar anchor, a Stellar-settling payout app and an off-Stellar partner by changing one list in the route graph |
 | An anchor assigns its own memo on SEP-31 | The reference moves to the SEP-31 fields and the join key becomes the anchor's transaction id, which funding already records |
 | Anchor rounding and fees | The payout leg funds exactly the anchor's order and books fees and dust, so vaults still balance to the unit |
 | A look-alike asset from another issuer | Issuer is part of asset identity; unknown issuers are not booked |

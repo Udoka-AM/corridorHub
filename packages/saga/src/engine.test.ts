@@ -1,20 +1,29 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { money } from "@corridor/core";
 import { Accounts, Ledger, openLocalDb } from "@corridor/ledger";
-import { planRoute } from "@corridor/routing";
+import type { RoutePlan } from "@corridor/routing";
 import { SagaEngine, ledgerReserveLeg, type Leg, type PayoutData } from "./index.ts";
 
 let db: Awaited<ReturnType<typeof openLocalDb>>;
 let ledger: Ledger;
 let accounts: Accounts;
 
-const plan = planRoute({
+/**
+ * An explicit three-step plan. These tests are about the engine — ordering,
+ * retries, compensation, fencing — so the plan is written out rather than
+ * planned, and they do not move when a corridor's routing changes.
+ */
+const hub = { venue: "stellar", asset: "USDC" } as const;
+const plan: RoutePlan = {
   corridor: "EUR-NGN",
+  purpose: "payout",
   privacy: "public",
-  source: { venue: "stellar", asset: "USDC" },
-  destination: { venue: "partner_fiat", asset: "NGN" },
-  env: "testnet",
-});
+  steps: [
+    { index: 0, kind: "ledger.reserve", from: hub, to: hub, referenceScope: "payout" },
+    { index: 1, kind: "bridge.simulated", from: hub, to: { venue: "solana", asset: "USDC" }, referenceScope: "payout" },
+    { index: 2, kind: "partner.payout", from: { venue: "solana", asset: "USDC" }, to: { venue: "partner_fiat", asset: "NGN" }, referenceScope: "payout" },
+  ],
+};
 
 const data: PayoutData = {
   payoutId: "p1",

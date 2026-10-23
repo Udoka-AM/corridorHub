@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { NoRouteError, planRoute } from "./index.ts";
+import { DEFAULT_EDGES, NoRouteError, planRoute, type Edge } from "./index.ts";
+
+/**
+ * The graph as it looks while a corridor's only partner settles off Stellar:
+ * the on-hub payout edge for that currency is replaced by one from Solana.
+ * Every launch currency has an on-hub partner now, so this is constructed
+ * rather than configured.
+ */
+const offStellar = (currency: "NGN"): Edge[] => [
+  ...DEFAULT_EDGES.filter((e) => !(e.kind === "partner.payout" && e.to.asset === currency)),
+  { kind: "partner.payout", from: { venue: "solana", asset: "USDC" }, to: { venue: "partner_fiat", asset: currency }, cost: 1 },
+];
 
 const source = { venue: "stellar", asset: "USDC" } as const;
 
@@ -20,8 +31,19 @@ describe("route planner", () => {
     }
   });
 
-  it("takes one CCTP hop for naira, where the licensed partner settles on Solana", () => {
+  it("pays naira out on the hub too, now that its partner settles in Stellar USDC", () => {
     const plan = planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" });
+    expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
+      "ledger.reserve:stellar->stellar",
+      "partner.payout:stellar->partner_fiat",
+    ]);
+  });
+
+  it("takes one CCTP hop for a currency whose only partner settles off Stellar", () => {
+    const plan = planRoute(
+      { corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "mainnet" },
+      offStellar("NGN"),
+    );
     expect(plan.steps.map((s) => `${s.kind}:${s.from.venue}->${s.to.venue}`)).toEqual([
       "ledger.reserve:stellar->stellar",
       "cctp.transfer:stellar->solana",
@@ -30,7 +52,10 @@ describe("route planner", () => {
   });
 
   it("uses the simulated bridge on testnet, where CCTP is not wired up", () => {
-    const plan = planRoute({ corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "testnet" });
+    const plan = planRoute(
+      { corridor: "EUR-NGN", privacy: "public", source, destination: { venue: "partner_fiat", asset: "NGN" }, env: "testnet" },
+      offStellar("NGN"),
+    );
     expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "bridge.simulated", "partner.payout"]);
   });
 
@@ -65,32 +90,17 @@ describe("route planner", () => {
   });
 
   it("collects local currency into the Stellar hub and credits the customer", () => {
-    const direct = planRoute({
-      corridor: "KES-CNY",
-      purpose: "collection",
-      privacy: "public",
-      source: { venue: "partner_fiat", asset: "KES" },
-      destination: source,
-      env: "mainnet",
-    });
-    expect(direct.steps.map((s) => `${s.kind}:${s.to.venue}`)).toEqual(["partner.collect:stellar", "ledger.credit:stellar"]);
-
-    const viaSolana = planRoute({
-      corridor: "NGN-CNY",
-      purpose: "collection",
-      privacy: "public",
-      source: { venue: "partner_fiat", asset: "NGN" },
-      destination: source,
-      env: "mainnet",
-    });
-    expect(viaSolana.steps.map((s) => `${s.kind}:${s.to.venue}`)).toEqual([
-      "partner.collect:solana",
-      "cctp.transfer:stellar",
-      "ledger.credit:stellar",
-    ]);
-
-    const testnet = planRoute({ ...viaSolana, source: { venue: "partner_fiat", asset: "NGN" }, destination: source, env: "testnet" });
-    expect(testnet.steps.map((s) => s.kind)).toEqual(["partner.collect", "bridge.simulated", "ledger.credit"]);
+    for (const currency of ["KES", "NGN"] as const) {
+      const plan = planRoute({
+        corridor: `${currency}-CNY`,
+        purpose: "collection",
+        privacy: "public",
+        source: { venue: "partner_fiat", asset: currency },
+        destination: source,
+        env: "mainnet",
+      });
+      expect(plan.steps.map((s) => `${s.kind}:${s.to.venue}`)).toEqual(["partner.collect:stellar", "ledger.credit:stellar"]);
+    }
   });
 
   it("never lets a flow bypass the Stellar hub", () => {
