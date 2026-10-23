@@ -41,7 +41,19 @@ function challenge(opts: { source?: Keypair; clientAccount?: string } = {}): str
   return tx.toXDR();
 }
 
+interface StubVerdict {
+  status: "ACCEPTED" | "PROCESSING" | "NEEDS_INFO" | "REJECTED";
+  fields?: Record<string, { type?: string; description?: string; optional?: boolean }>;
+  providedFields?: Record<string, { status?: string }>;
+  message?: string;
+}
+
 interface StubOptions {
+  /** What the anchor says about each customer type. Default: everyone is accepted. */
+  customers?: Record<string, StubVerdict>;
+  /** Customer ids a deployment onboarded out of band. */
+  senderId?: string;
+  receiverId?: string;
   challengeXdr?: string;
   onPost?: (url: string, body: unknown) => void;
   /** SEP-31 lets the receiving account arrive on GET rather than in the POST reply. */
@@ -52,6 +64,7 @@ interface StubOptions {
 
 function stubAnchor(opts: StubOptions = {}) {
   const calls: { url: string; method: string; auth?: string }[] = [];
+  const puts: Record<string, string>[] = [];
   const http = (async (input: string | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
@@ -69,7 +82,33 @@ function stubAnchor(opts: StubOptions = {}) {
       return Response.json({ id: "quote-1", price: "129.5", buy_amount: "905.50" });
     }
     if (url === "https://anchor.test/sep31/info") {
-      return Response.json({ receive: { native: { enabled: true, funding_methods: ["bank_account"] }, USDC: { enabled: true, funding_methods: ["bank_account"] } } });
+      return Response.json({
+        receive: {
+          native: { enabled: true, funding_methods: ["bank_account"] },
+          USDC: {
+            enabled: true,
+            funding_methods: ["bank_account"],
+            sender_sep12_type: "sep31-sender",
+            receiver_sep12_type: "sep31-receiver",
+          },
+        },
+      });
+    }
+    if (url.startsWith("https://anchor.test/kyc/customer") && method === "PUT") {
+      const body = JSON.parse(String(init?.body)) as Record<string, string>;
+      puts.push(body);
+      return Response.json({ id: `cust-${body.type}` });
+    }
+    if (url.startsWith("https://anchor.test/kyc/customer") && method === "GET") {
+      const type = new URL(url).searchParams.get("type") ?? "";
+      const verdict = opts.customers?.[type] ?? { status: "ACCEPTED" as const };
+      return Response.json({
+        id: `cust-${type}`,
+        status: verdict.status,
+        ...(verdict.fields ? { fields: verdict.fields } : {}),
+        ...(verdict.providedFields ? { provided_fields: verdict.providedFields } : {}),
+        ...(verdict.message ? { message: verdict.message } : {}),
+      });
     }
     if (url === "https://anchor.test/sep31/transactions" && method === "POST") {
       opts.onPost?.(url, JSON.parse(String(init?.body)));
@@ -104,11 +143,13 @@ function stubAnchor(opts: StubOptions = {}) {
     asset: USDC,
     network: "testnet",
     payoutCurrencies: ["KES"],
+    ...(opts.senderId ? { senderId: opts.senderId } : {}),
+    ...(opts.receiverId ? { receiverId: opts.receiverId } : {}),
     signer: { address: vault.publicKey(), sign: async (hash) => new Uint8Array(vault.sign(Buffer.from(hash))) },
     fetch: http,
     now: () => new Date("2026-10-17T09:00:00Z"),
   });
-  return { anchor, calls };
+  return { anchor, calls, puts };
 }
 
 describe("SEP-1 toml", () => {
@@ -308,5 +349,97 @@ describe("SEP-31 payout", () => {
       fetch: http,
     });
     await expect(anchor.discover()).rejects.toThrow(/no stellar.toml at http:\/\/localhost:8080/);
+  });
+});
+
+describe("SEP-12 customers", () => {
+  const payout = (over: Record<string, unknown> = {}) => ({
+    currency: "KES" as const,
+    chain: "STELLAR" as const,
+    usdcAmount: 70_000_000n,
+    beneficiary: { bankCode: "01", accountNumber: "0123456789" },
+    reference: ref(),
+    ...over,
+  });
+
+  it("reads the customer types the anchor asks for off its SEP-31 info", async () => {
+    const { anchor } = stubAnchor();
+    expect(await anchor.sep12Types("USDC")).toEqual({ sender: "sep31-sender", receiver: "sep31-receiver" });
+    // An asset the anchor does not type is not invented.
+    expect(await anchor.sep12Types("native")).toEqual({ sender: undefined, receiver: undefined });
+  });
+
+  it("registers both parties and puts their ids on the transaction", async () => {
+    let posted: Record<string, unknown> = {};
+    const { anchor, puts } = stubAnchor({ onPost: (_u, body) => (posted = body as Record<string, unknown>) });
+
+    await anchor.openPayout(
+      payout({
+        sender: { first_name: "Uddy", email_address: "u@example.com" },
+        receiver: { first_name: "Amara", bank_account_number: "0123456789" },
+      }) as never,
+    );
+
+    // Each side registered under the type the anchor named, with the caller's fields passed through untouched.
+    expect(puts).toEqual([
+      { type: "sep31-sender", first_name: "Uddy", email_address: "u@example.com" },
+      { type: "sep31-receiver", first_name: "Amara", bank_account_number: "0123456789" },
+    ]);
+    expect(posted).toMatchObject({ sender_id: "cust-sep31-sender", receiver_id: "cust-sep31-receiver" });
+  });
+
+  it("refuses with the fields the anchor is still waiting for, and opens nothing", async () => {
+    let opened = false;
+    const { anchor, calls } = stubAnchor({
+      onPost: () => void (opened = true),
+      customers: {
+        "sep31-receiver": {
+          status: "NEEDS_INFO",
+          fields: {
+            bank_account_number: { type: "string", description: "the receiver's NUBAN" },
+            id_type: { type: "string", description: "government id" },
+            nickname: { type: "string", optional: true },
+          },
+          message: "we need the receiver's bank details",
+        },
+      },
+    });
+
+    await expect(anchor.openPayout(payout() as never)).rejects.toMatchObject({
+      // The refusal names what to ask for, so a caller can collect exactly that and retry.
+      details: { side: "receiver", customerType: "sep31-receiver", missing: ["bank_account_number", "id_type"] },
+    });
+    await expect(anchor.openPayout(payout() as never)).rejects.toThrow(/needs more about the receiver/);
+
+    expect(opened).toBe(false);
+    expect(calls.some((c) => c.url === "https://anchor.test/sep31/transactions")).toBe(false);
+  });
+
+  it("treats a rejected party as final", async () => {
+    const { anchor } = stubAnchor({ customers: { "sep31-sender": { status: "REJECTED", message: "sanctioned" } } });
+    await expect(anchor.openPayout(payout() as never)).rejects.toThrow(/rejected the sender/);
+  });
+
+  it("skips SEP-12 entirely when the ids are already configured", async () => {
+    // A deployment that onboarded its customers out of band supplies the ids.
+    let posted: Record<string, unknown> = {};
+    const { anchor, puts } = stubAnchor({
+      senderId: "known-sender",
+      receiverId: "known-receiver",
+      onPost: (_u, body) => (posted = body as Record<string, unknown>),
+    });
+
+    await anchor.openPayout(payout() as never);
+
+    expect(puts).toEqual([]); // nothing registered
+    expect(posted).toMatchObject({ sender_id: "known-sender", receiver_id: "known-receiver" });
+  });
+
+  it("reads a customer's status and the fields it still wants", async () => {
+    const { anchor } = stubAnchor({
+      customers: { "sep31-sender": { status: "PROCESSING", providedFields: { first_name: { status: "ACCEPTED" } } } },
+    });
+    const record = await anchor.customer({ type: "sep31-sender" });
+    expect(record).toMatchObject({ id: "cust-sep31-sender", status: "PROCESSING", providedFields: { first_name: { status: "ACCEPTED" } } });
   });
 });

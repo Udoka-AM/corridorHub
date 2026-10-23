@@ -17,6 +17,29 @@ import { PartnerError, type Beneficiary, type CollectionRequest, type OrderStatu
  * what makes the spokes additive (ADR 0002).
  */
 
+/** SEP-12 customer statuses. */
+export type CustomerStatus = "ACCEPTED" | "PROCESSING" | "NEEDS_INFO" | "REJECTED";
+
+/** One field in a SEP-12 `fields` or `provided_fields` map. */
+export interface CustomerField {
+  type?: "string" | "binary" | "number" | "date";
+  description?: string;
+  choices?: string[];
+  optional?: boolean;
+  /** `provided_fields` only. */
+  status?: "ACCEPTED" | "PROCESSING" | "REJECTED" | "VERIFICATION_REQUIRED";
+  error?: string;
+}
+
+export interface CustomerRecord {
+  id?: string;
+  status: CustomerStatus;
+  /** What the anchor still needs, when the status is NEEDS_INFO. */
+  fields?: Record<string, CustomerField>;
+  providedFields?: Record<string, CustomerField>;
+  message?: string;
+}
+
 /** Just enough of a Stellar signer to answer a SEP-10 challenge. */
 export interface ChallengeSigner {
   readonly address: string;
@@ -254,6 +277,99 @@ export class SepAnchor implements RampPartner {
     return { id: q.id, price: decimal(q.price), buyAmount: q.buy_amount };
   }
 
+  // ── SEP-12 customers ────────────────────────────────────────────────
+  //
+  // An anchor will not accept a payment until it knows the parties, and it
+  // decides what knowing them means: it publishes a customer *type* per
+  // direction and a field list per type. Corridor passes through whatever the
+  // caller supplies and reports back what is still missing, rather than
+  // modelling any one anchor's form.
+
+  /** The customer types this anchor wants for an asset, from its SEP-31 info. */
+  async sep12Types(code: string): Promise<{ sender?: string; receiver?: string }> {
+    const info = await this.sep31Info();
+    const asset = info.receive?.[code];
+    return { sender: asset?.sender_sep12_type, receiver: asset?.receiver_sep12_type };
+  }
+
+  /** SEP-12 `GET /customer`: what the anchor knows, and what it still wants. */
+  async customer(args: { id?: string; type?: string; transactionId?: string; lang?: string } = {}): Promise<CustomerRecord> {
+    const kyc = await this.endpoint("KYC_SERVER", "SEP-12");
+    const url = new URL(`${kyc}/customer`);
+    for (const [k, v] of [
+      ["id", args.id],
+      ["type", args.type],
+      ["transaction_id", args.transactionId],
+      ["lang", args.lang],
+    ] as const) {
+      if (v) url.searchParams.set(k, v);
+    }
+    const body = await this.call<{
+      id?: string;
+      status: CustomerStatus;
+      fields?: Record<string, CustomerField>;
+      provided_fields?: Record<string, CustomerField>;
+      message?: string;
+    }>(url.toString());
+    return { id: body.id, status: body.status, fields: body.fields, providedFields: body.provided_fields, message: body.message };
+  }
+
+  /** SEP-12 `PUT /customer`: hand the anchor what it asked for. Returns its customer id. */
+  async putCustomer(args: { id?: string; type?: string; transactionId?: string; fields?: Record<string, string> }): Promise<string> {
+    const kyc = await this.endpoint("KYC_SERVER", "SEP-12");
+    const body = await this.call<{ id: string }>(`${kyc}/customer`, {
+      method: "PUT",
+      body: JSON.stringify({
+        ...(args.id ? { id: args.id } : {}),
+        ...(args.type ? { type: args.type } : {}),
+        ...(args.transactionId ? { transaction_id: args.transactionId } : {}),
+        ...args.fields,
+      }),
+    });
+    return body.id;
+  }
+
+  /** SEP-12 `DELETE /customer/{account}`: forget a customer. */
+  async deleteCustomer(account: string, memo?: string): Promise<void> {
+    const kyc = await this.endpoint("KYC_SERVER", "SEP-12");
+    await this.call<unknown>(`${kyc}/customer/${encodeURIComponent(account)}`, {
+      method: "DELETE",
+      ...(memo ? { body: JSON.stringify({ memo }) } : {}),
+    });
+  }
+
+  /**
+   * The customer id to put on a transaction for one side of it.
+   *
+   * A configured id is used as-is. Otherwise the fields the caller supplied
+   * are registered and the anchor's verdict is checked: `NEEDS_INFO` is a
+   * refusal that names the outstanding fields, so a caller can ask for
+   * exactly those and retry, and `REJECTED` is final.
+   */
+  private async customerId(side: "sender" | "receiver", type: string | undefined, fields: Record<string, string> | undefined): Promise<string | undefined> {
+    const configured = side === "sender" ? this.opts.senderId : this.opts.receiverId;
+    if (configured) return configured;
+    if (!type) return undefined; // this anchor does not ask for this side
+
+    const id = await this.putCustomer({ type, fields });
+    const record = await this.customer({ id, type });
+    if (record.status === "REJECTED") {
+      throw new PartnerError(`${this.id} rejected the ${side}`, this.id, undefined, { side, message: record.message });
+    }
+    if (record.status === "NEEDS_INFO") {
+      const missing = Object.entries(record.fields ?? {})
+        .filter(([, f]) => !f.optional)
+        .map(([name]) => name);
+      throw new PartnerError(
+        `${this.id} needs more about the ${side}: ${missing.join(", ") || "unspecified fields"}`,
+        this.id,
+        undefined,
+        { side, customerType: type, missing, fields: record.fields, message: record.message },
+      );
+    }
+    return id;
+  }
+
   /**
    * SEP-31: ask the receiving anchor to pay the beneficiary, then fund the
    * transaction on Stellar. The anchor returns the account *and the memo* to
@@ -269,6 +385,11 @@ export class SepAnchor implements RampPartner {
     const sellAmount = formatDecimal(req.usdcAmount, 7);
     const quote = await this.quote(req.currency, sellAmount);
 
+    // The anchor will not take the payment until it knows both parties.
+    const types = await this.sep12Types(code);
+    const senderId = await this.customerId("sender", types.sender, req.sender);
+    const receiverId = await this.customerId("receiver", types.receiver, req.receiver);
+
     const created = await this.call<{
       id: string;
       stellar_account_id: string;
@@ -283,8 +404,8 @@ export class SepAnchor implements RampPartner {
         destination_asset: `iso4217:${req.currency}`,
         funding_method: await this.fundingMethod(code),
         quote_id: quote.id,
-        sender_id: this.opts.senderId,
-        receiver_id: this.opts.receiverId,
+        sender_id: senderId,
+        receiver_id: receiverId,
         // The Corridor Reference cannot ride in the memo here, so it travels
         // as the sending anchor's own transaction id.
         fields: { transaction: { ...beneficiaryFields(req.beneficiary), reference: req.reference } },
@@ -387,7 +508,10 @@ export class SepAnchor implements RampPartner {
 }
 
 interface Sep31Info {
-  receive?: Record<string, { enabled?: boolean; funding_methods?: string[] } | undefined>;
+  receive?: Record<
+    string,
+    { enabled?: boolean; funding_methods?: string[]; sender_sep12_type?: string; receiver_sep12_type?: string } | undefined
+  >;
 }
 
 interface Sep31Amount {
