@@ -59,7 +59,7 @@ Going up is exact. Going down, an amount carrying a seventh decimal **throws** r
 
 ## When this goes away
 
-The naira corridor needs this only until a licensed naira anchor is live on Stellar. `OFF_STELLAR_PAYOUT_CURRENCIES` is the single list that decides it, and moving the corridor onto the hub is one line:
+No corridor needs this today: naira has a partner that settles in USDC on Stellar, so `OFF_STELLAR_PAYOUT_CURRENCIES` is empty and every payout stays on the hub. The list is what decides it, and routing a currency over a bridge again is one line:
 
 ```ts
 export const OFF_STELLAR_PAYOUT_CURRENCIES: readonly Fiat[] = ["NGN"];

@@ -63,7 +63,7 @@ Stellar treasury ──payment, reference in MEMO_HASH──▶ Anchor (SEP-31) 
 Double-entry ledger ◀─────── observers (Horizon payments · anchor status · bank narration) ───────▶ Reconciliation
 ```
 
-Naira is the exception for now: no licensed naira anchor is live on Stellar, so it goes out over one CCTP hop to a partner that settles on Solana. Moving it back onto the hub is one line in the route graph.
+Naira runs on the hub too. A naira payout partner that settles in USDC on Stellar is available, so NGN needs no bridge — its adapter is not written yet, but the route is the same two steps as the other corridors. `OFF_STELLAR_PAYOUT_CURRENCIES` is empty, and putting a currency back in it is all that routing through an off-Stellar partner takes.
 
 Architecture in depth: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). What is built, what is left and what is being worked on this week: [docs/BUILD-PLAN.md](docs/BUILD-PLAN.md).
 

@@ -42,7 +42,7 @@ icon: "milestone"
 |---|---|---|
 | **A signed anchor** | Nobody has signed one | A design partner or an anchor agreeing to a testnet integration. Everything below is downstream of this |
 | **SEP-6 collections** | No signed anchor has exercised the flow, so it would be a guess | The first collecting anchor, then the deposit flow behind `openCollection` |
-| **`cctp.transfer`** | Only the naira corridor needs it, and naira is the corridor waiting on an anchor | Writing the leg, or a licensed naira anchor on Stellar, which removes the need |
+| **`cctp.transfer`** | Nothing routes through it: every launch currency has a partner that settles in USDC on Stellar, naira included, so no payout crosses a chain. It stays in the graph for inflows and for a corridor whose first partner settles elsewhere | Writing the leg, when a corridor needs it |
 | **`stellar.pathPayment`** | The planner produces the edge; the leg is unwritten | Writing it, so a balance in EURC or MGUSD can fund a payout |
 | **MGUSD, PYUSD, USDT issuers** | Unset until each is verified against the issuer's own `stellar.toml` | Verification, or a deployment supplying its own with `CORRIDOR_STELLAR_ISSUER_…` |
 | **A treasury console** | The prototype's read Tempo and was removed rather than left misreporting | The engines already produce the data; it is a user interface |

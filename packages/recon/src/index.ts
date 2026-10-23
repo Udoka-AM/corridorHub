@@ -32,10 +32,11 @@ export async function reconcile(ledger: Ledger, observations: Observation[]): Pr
       results.push({ observation, status: observation.reference ? "unbooked" : "unreferenced" });
       continue;
     }
-    // Compare against the movement across Corridor's own positions: the
-    // customer-liability side of the same entry is in the same asset now that
-    // the hub settles in USDC, and no observer ever sees it.
-    const bookedAmount = await ledger.entryTotal(entryId, observation.asset, { excludeLiabilities: true });
+    // Compare against the entry's movement across Corridor's vaults, which is
+    // the part of it that exists on a chain. The customer's hold and the peg
+    // accounts are in the same asset now that the hub settles in USDC, and no
+    // observer ever sees those.
+    const bookedAmount = await ledger.entryVaultMovement(entryId, observation.asset);
     results.push({
       observation,
       entryId,
