@@ -327,3 +327,119 @@ export function explorerAccount(network: StellarNetwork, address: string): strin
 export function isCorridorMemo(memo: string | undefined, memoType?: string): boolean {
   return !!memo && !!fromStellarMemo(memo, memoType) && !!tryDecodeRef(fromStellarMemo(memo, memoType)!);
 }
+
+/**
+ * On-ledger FX. A payout funded from a EURC or MGUSD balance converts on
+ * Stellar's own order books rather than at an external venue, so the
+ * conversion lands in the same chain history as the payment and books from it
+ * (ADR 0010).
+ *
+ * Strict *send* is the right shape here: what is known is the balance that
+ * was reserved, and what varies is how much settlement asset it buys.
+ * `destMin` is the slippage floor — the transaction fails rather than
+ * delivering less than the caller allowed.
+ */
+export interface PathQuote {
+  /** The asset spent, and the exact amount of it. */
+  from: Asset;
+  sourceAmount: bigint;
+  /** What Horizon says that buys, in minor units of the destination asset. */
+  destAmount: bigint;
+  /** Intermediate assets, in order. Empty for a direct order book. */
+  path: Asset[];
+}
+
+/** The best price for spending exactly `sourceAmount` of `from` to get `destAsset`. */
+export async function strictSendQuote(
+  client: StellarClient,
+  args: { from: Asset; sourceAmount: bigint; destAsset: Asset },
+): Promise<PathQuote | null> {
+  const page = await client.server
+    .strictSendPaths(stellarAsset(args.from, client.network), toStellarAmount(money(args.from, args.sourceAmount)), [
+      stellarAsset(args.destAsset, client.network),
+    ])
+    .call();
+  if (page.records.length === 0) return null;
+
+  // Most received wins.
+  const best = page.records.reduce((a, b) => (Number(a.destination_amount) >= Number(b.destination_amount) ? a : b));
+  const hops = best.path ?? [];
+  const path = hops.flatMap((h) => {
+    const asset = assetOf({ asset_type: h.asset_type, asset_code: h.asset_code, asset_issuer: h.asset_issuer }, client.network);
+    return asset ? [asset] : [];
+  });
+  // A path through an asset Corridor does not book is not a path it will take.
+  if (path.length !== hops.length) return null;
+  return {
+    from: args.from,
+    sourceAmount: args.sourceAmount,
+    destAmount: fromStellarAmount(args.destAsset, best.destination_amount),
+    path,
+  };
+}
+
+/**
+ * Convert on the order books, carrying the reference as MEMO_HASH. The
+ * destination is normally the vault itself: a path payment to your own
+ * account is how a swap is done on Stellar.
+ */
+export async function pathPaymentWithReference(
+  client: StellarClient,
+  args: { from: Asset; sourceAmount: bigint; destAsset: Asset; destMin: bigint; to?: string; path?: Asset[]; reference: Hex },
+): Promise<Observation & { txHash: string; sourceAmount: bigint }> {
+  const signer = client.signer;
+  if (!signer) throw new Error("pathPaymentWithReference needs a signer");
+  const destination = args.to ?? signer.address;
+  const source = await client.server.loadAccount(signer.address);
+  const tx = new TransactionBuilder(source, {
+    fee: await client.fee(),
+    networkPassphrase: client.passphrase,
+    memo: Memo.hash(Buffer.from(toStellarMemo(args.reference))),
+  })
+    .addOperation(
+      Operation.pathPaymentStrictSend({
+        sendAsset: stellarAsset(args.from, client.network),
+        sendAmount: toStellarAmount(money(args.from, args.sourceAmount)),
+        destination,
+        destAsset: stellarAsset(args.destAsset, client.network),
+        destMin: toStellarAmount(money(args.destAsset, args.destMin)),
+        path: (args.path ?? []).map((a) => stellarAsset(a, client.network)),
+      }),
+    )
+    .setTimeout(180)
+    .build();
+
+  tx.addSignature(signer.address, Buffer.from(await signer.sign(tx.hash())).toString("base64"));
+  const sent = await client.server.submitTransaction(tx);
+  if (sent.successful === false) throw new Error(`Stellar path payment ${sent.hash} was not successful`);
+
+  // How much actually arrived is set by the order books, not by the request,
+  // and the response body does not carry it. Read it back off the account's
+  // own payment stream, which reports a path payment like any other.
+  const landed = (await findTransfersByReference(client, { account: signer.address, reference: args.reference })).find(
+    (o) => o.externalRef.startsWith(sent.hash) && o.asset === args.destAsset,
+  );
+
+  return {
+    venue: "stellar",
+    externalRef: landed?.externalRef ?? `${sent.hash}:0`,
+    reference: args.reference,
+    asset: args.destAsset,
+    amount: landed?.amount ?? args.destMin,
+    from: signer.address,
+    to: destination,
+    blockNumber: landed?.blockNumber ?? (sent.ledger === undefined ? undefined : BigInt(sent.ledger)),
+    observedAt: landed?.observedAt ?? new Date(),
+    txHash: sent.hash,
+    sourceAmount: args.sourceAmount,
+  };
+}
+
+/**
+ * The Stellar Asset Contract address for a classic asset. A Soroban contract
+ * moving USDC does it through this contract, and its events are the only
+ * place such a movement appears — Horizon's payment stream does not show it.
+ */
+export function sacContractId(asset: Asset, network: StellarNetwork): string {
+  return stellarAsset(asset, network).contractId(PASSPHRASE[network]);
+}
