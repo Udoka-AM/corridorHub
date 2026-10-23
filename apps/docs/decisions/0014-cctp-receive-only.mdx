@@ -1,6 +1,6 @@
 ---
-title: "0014 · Receive CCTP, do not burn"
-description: "Corridor completes inbound CCTP transfers on Stellar and hands out the instruction for the burn, rather than performing burns itself."
+title: "0014 · Receive CCTP, and burn on Solana"
+description: "Corridor completes inbound CCTP transfers on Stellar, hands out the instruction for an external sender's burn, and burns on Solana itself. The Soroban burn is still unwritten."
 icon: "arrow-left-right"
 ---
 
@@ -33,3 +33,16 @@ This matches who owns the money. On the way in the funds are the sender's, on th
 - **Writing the burn from the documentation's prose.** The argument order is the whole risk, and it is the one thing the prose does not give.
 - **Burning on the user's behalf in Ramp.** It would mean holding the user's funds on the source chain, which is the custody position the plan rules out ([ADR 0013](/decisions/0013-ramp-and-hub-share-one-core)).
 - **Accepting a wrapped USDC inflow instead.** A second representation of the dollar to reconcile, against a ledger whose claim is that it matches the chain.
+
+## Amended, 23 October 2026
+
+The burn **is** built on Solana. What unblocked it was reading Circle's own Solana quickstart and its Solana programs reference instead of its prose: those give the Anchor discriminators, the eight arguments in order and the full twenty-account list with every PDA seed, which is exactly what was missing.
+
+`encodeDepositForBurn` writes the instruction data and `depositForBurnAccounts` the account list, both tested byte for byte and position by position, because argument order and account order *are* the ABI. `buildBurnToStellar` composes them through `depositInstruction` — the same function that tells an external sender what to put in a burn — so the two halves of the lane cannot disagree about where the money goes.
+
+What this changes:
+
+- Corridor can bring USDC from Solana to Stellar under its own key, where before only an external sender could start a transfer.
+- The Tron lane becomes possible as two hops: Tron USDT → Solana USDC by intent, then Solana → Stellar by burn-and-mint. NEAR Intents' $100 minimum still applies, and it still does not route Stellar directly.
+
+What it does **not** change: the Soroban `deposit_for_burn` on Stellar is still unwritten, so float cannot be moved *off* the hub. That direction needs the same treatment — the contract source read for its argument order.

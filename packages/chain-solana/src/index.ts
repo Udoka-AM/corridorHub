@@ -147,6 +147,15 @@ export class SolanaVault {
       reference: args.reference,
       tokenProgram: stable.tokenProgram,
     });
+    return this.sendInstructions(instructions);
+  }
+
+  /**
+   * Sign and send instructions this vault pays for. Any signer carried on an
+   * instruction's accounts — a one-off account a program writes an event to,
+   * for instance — is resolved along with the vault's own key.
+   */
+  async sendInstructions(instructions: Instruction[]): Promise<string> {
     const { value: blockhash } = await this.rpc.getLatestBlockhash().send();
     const message = pipe(
       createTransactionMessage({ version: 0 }),

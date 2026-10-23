@@ -129,6 +129,15 @@ importers:
       '@corridor/core':
         specifier: workspace:*
         version: link:../core
+      '@solana-program/system':
+        specifier: ^0.9.0
+        version: 0.9.1(@solana/kit@8.4.0(typescript@5.9.3))
+      '@solana-program/token':
+        specifier: ^0.17.0
+        version: 0.17.0(@solana/kit@8.4.0(typescript@5.9.3))
+      '@solana/kit':
+        specifier: ^8.4.0
+        version: 8.4.0(typescript@5.9.3)
       '@stellar/stellar-sdk':
         specifier: ^17.2.1
         version: 17.2.1
@@ -810,6 +819,11 @@ packages:
     resolution: {integrity: sha512-xE08wZCyNRhOaO/XNRd9A3kSLfUrTe/BnmAHhql8uqc2eriNy2ZmnvaGRrs0m+kOSihvUbANzHljmJsTzGL5kg==}
     peerDependencies:
       '@solana/kit': ^8.3.0
+
+  '@solana-program/system@0.9.1':
+    resolution: {integrity: sha512-2N30CgYJw0qX8jKU8vW808yLmx5oRoDSM+FC6tqhsLQiph7agK9eRXJlnrq6OUfTAZd5yCYQHQvGtx0S8I9SAA==}
+    peerDependencies:
+      '@solana/kit': ^5.0
 
   '@solana-program/token@0.17.0':
     resolution: {integrity: sha512-l7EhF3lCWXXdOllGI8qnbF4Pj7pCT/5zJTW2lPsNUQfa7G28pnFhSssHW2GCW7dzGttSHgPdJYdQRB5rvQoN9Q==}
@@ -2612,6 +2626,10 @@ snapshots:
       '@solana/kit': 8.4.0(typescript@5.9.3)
 
   '@solana-program/system@0.15.0(@solana/kit@8.4.0(typescript@5.9.3))':
+    dependencies:
+      '@solana/kit': 8.4.0(typescript@5.9.3)
+
+  '@solana-program/system@0.9.1(@solana/kit@8.4.0(typescript@5.9.3))':
     dependencies:
       '@solana/kit': 8.4.0(typescript@5.9.3)
 

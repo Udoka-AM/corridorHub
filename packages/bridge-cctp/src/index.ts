@@ -8,3 +8,13 @@ export {
   type DepositInstruction,
 } from "./deposit.ts";
 export { mintAndForward, receivedOnStellar, type MintResult, type StellarMintOptions } from "./stellar.ts";
+export {
+  DISCRIMINATOR,
+  SOLANA_CCTP,
+  STANDARD_FINALITY_THRESHOLD as SOLANA_STANDARD_FINALITY_THRESHOLD,
+  buildBurnToStellar,
+  buildDepositForBurn,
+  depositForBurnAccounts,
+  encodeDepositForBurn,
+  type DepositForBurnArgs,
+} from "./solana.ts";

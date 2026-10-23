@@ -13,8 +13,12 @@ Most of Corridor's work never leaves Stellar: anchors settle on the hub, so the 
 **Receiving is built.** `cctpTransferLeg` takes a burn someone already made on a spoke, waits for Circle's attestation, mints on Stellar through the forwarder contract and books both sides. It is covered by tests for the hook layout, the attestation client, the mint, and the exactly-once behaviour.
 </Note>
 
+<Note>
+**Burning is built on Solana.** `buildBurnToStellar` writes a `depositForBurnWithHook` instruction for Circle's `TokenMessengerMinterV2`, addressed at the Stellar forwarder with the beneficiary in hook data, so Corridor can bring USDC from Solana to the hub under its own key. The instruction data and the twenty-account list are tested byte for byte, because argument order and account order are the ABI.
+</Note>
+
 <Warning>
-**Burning is not built.** Nothing in Corridor calls `deposit_for_burn` — not on Stellar and not on an EVM spoke. Circle's references give the Stellar contract ids and the forwarder's signature but not the argument order for the burn entry points, and this is code that moves money, so it is left unwritten rather than guessed at. The consequence: **inflows work, outflows do not**, so mainnet naira payouts still do not run and testnet continues to use `bridge.simulated`.
+**Burning on Stellar is not built.** The Soroban `deposit_for_burn` has no published argument order, so float cannot be moved *off* the hub. No corridor needs that today — every launch currency has a partner that settles in USDC on Stellar — but Hub treasury rebalancing does.
 </Warning>
 
 ## Why CCTP and not a bridge
