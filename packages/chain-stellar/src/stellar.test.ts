@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { Keypair, Memo, Networks, Operation, TransactionBuilder, Account as SdkAccount } from "@stellar/stellar-sdk";
+import { Keypair, Memo, Networks, Operation, TransactionBuilder, Account as SdkAccount, nativeToScVal, xdr } from "@stellar/stellar-sdk";
 import { RefKind, customerTag, encodeRef, fromStellarMemo, toStellarMemo, uuidv7, type Observation } from "@corridor/core";
 import { STELLAR_ISSUERS, assetOf, fromStellarAmount, stellarAsset, toStellarAmount } from "./assets.ts";
 import { StellarObserver, ledgerOf, normalizeRecord, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
+import { StellarEventObserver } from "./events.ts";
 import { ed25519StellarSigner, findTransfersByMemo, fundingMemoFor, localStellarSigner } from "./index.ts";
 
 const USDC_ISSUER = STELLAR_ISSUERS.USDC!.testnet!;
@@ -319,5 +320,116 @@ describe("an anchor's own memo", () => {
     // 28 bytes is the limit for a text memo; the SDK refuses more, which is
     // exactly why the reference rides MEMO_HASH instead.
     expect(() => Memo.text("x".repeat(29))).toThrow();
+  });
+});
+
+describe("StellarEventObserver", () => {
+  const VAULT = "GVAULTVAULTVAULT";
+  const OTHER = "GSOMEONEELSE";
+
+  /** A SAC transfer event, in the shape Soroban RPC returns. */
+  const transferEvent = (over: Partial<{ from: string; to: string; amount: string; asset: string; ledger: number; txHash: string; id: string }> = {}) => ({
+    topic: [
+      xdr.ScVal.scvSymbol("transfer"),
+      xdr.ScVal.scvString(over.from ?? OTHER),
+      xdr.ScVal.scvString(over.to ?? VAULT),
+      xdr.ScVal.scvString(over.asset ?? `USDC:${USDC_ISSUER}`),
+    ],
+    value: nativeToScVal(over.amount ?? "29000000", { type: "i128" }),
+    txHash: over.txHash ?? "f".repeat(64),
+    ledger: over.ledger ?? 5_324_782,
+    ledgerClosedAt: "2026-10-22T05:38:17Z",
+    id: over.id ?? "ev1",
+  });
+
+  function fakeRpc(pages: ReturnType<typeof transferEvent>[][], latest = 5_324_800) {
+    let call = 0;
+    const asked: unknown[] = [];
+    return {
+      asked,
+      source: {
+        async getLatestLedger() {
+          return { sequence: latest };
+        },
+        async getEvents(args: unknown) {
+          asked.push(args);
+          const page = pages[Math.min(call++, pages.length - 1)] ?? [];
+          return { events: page, latestLedger: latest, cursor: call < pages.length ? `c${call}` : undefined };
+        },
+      },
+    };
+  }
+
+  const observe = async (pages: ReturnType<typeof transferEvent>[][], over: { startLedger?: number } = {}) => {
+    const rpc = fakeRpc(pages);
+    const cursors = memoryCursors();
+    const observer = new StellarEventObserver(rpc.source as never, {
+      name: "sac",
+      network: "testnet",
+      contracts: { USDC: "CUSDCSAC" },
+      accounts: [VAULT],
+      cursors,
+      pageSize: 2,
+      ...over,
+    });
+    return { seen: await observer.poll(), rpc, cursors };
+  };
+
+  it("reports a contract transfer into a watched account, which Horizon's payments miss", async () => {
+    const { seen } = await observe([[transferEvent()]]);
+    expect(seen).toEqual<Observation[]>([
+      {
+        venue: "stellar",
+        externalRef: `${"f".repeat(64)}:ev1`,
+        // A memo belongs to the transaction, not the event, so this arrives unreferenced.
+        reference: null,
+        asset: "USDC",
+        amount: 29_000_000n,
+        from: OTHER,
+        to: VAULT,
+        blockNumber: 5_324_782n,
+        observedAt: new Date("2026-10-22T05:38:17Z"),
+      },
+    ]);
+  });
+
+  it("asks only for transfer events on the assets' contracts", async () => {
+    const { rpc } = await observe([[transferEvent()]]);
+    const args = rpc.asked[0] as { filters: { contractIds: string[]; topics: string[][] }[] };
+    expect(args.filters[0]!.contractIds).toEqual(["CUSDCSAC"]);
+    expect(args.filters[0]!.topics[0]![0]).toBe(xdr.ScVal.scvSymbol("transfer").toXDR("base64"));
+    expect(args.filters[0]!.topics[0]!.slice(1)).toEqual(["*", "*", "*"]);
+  });
+
+  it("ignores transfers between accounts it does not watch", async () => {
+    const { seen } = await observe([[transferEvent({ from: OTHER, to: "GTHIRDPARTY" })]]);
+    expect(seen).toEqual([]);
+  });
+
+  it("skips a look-alike asset from another issuer", async () => {
+    const { seen } = await observe([[transferEvent({ asset: `USDC:${Keypair.random().publicKey()}` })]]);
+    expect(seen).toEqual([]);
+  });
+
+  it("pages, and resumes from the ledger it reached", async () => {
+    const { seen, cursors } = await observe([
+      [transferEvent({ id: "a", ledger: 10 }), transferEvent({ id: "b", ledger: 11 })],
+      [transferEvent({ id: "c", ledger: 12 })],
+    ]);
+    expect(seen.map((o) => o.blockNumber)).toEqual([10n, 11n, 12n]);
+    expect(cursors.stored.get("sac")).toBe(5_324_800n); // the latest ledger the page reported
+  });
+
+  it("does nothing when no contract is configured", async () => {
+    const rpc = fakeRpc([[transferEvent()]]);
+    const observer = new StellarEventObserver(rpc.source as never, {
+      name: "sac",
+      network: "testnet",
+      contracts: {},
+      accounts: [VAULT],
+      cursors: memoryCursors(),
+    });
+    expect(await observer.poll()).toEqual([]);
+    expect(rpc.asked).toEqual([]);
   });
 });

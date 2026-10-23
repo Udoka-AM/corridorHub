@@ -29,7 +29,7 @@ icon: "milestone"
     One signer interface; AWS KMS and Turnkey adapters; Stellar and Solana served by one Ed25519 key.
   </Card>
   <Card title="Read-only reconciliation" icon="eye" href="/flows/read-only-pilot">
-    Watch Stellar accounts by id, match the company's own payout records, exceptions queue and CSV. No keys.
+    Watch Stellar accounts by id, match the company's own payout records, exceptions queue and CSV. No keys. Both observers: Horizon payments and the Stellar Asset Contract's own events, so a contract-moved payment is not missed.
   </Card>
   <Card title="CCTP inflows" icon="arrow-left-right" href="/integrations/cctp">
     An attested burn on Base or Solana minted on Stellar through the forwarder, booked exactly once per burn, at the hub's 7 decimals.

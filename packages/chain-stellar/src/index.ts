@@ -4,6 +4,14 @@ import { NATIVE, assetOf, fromStellarAmount, issuerOf, stellarAsset, toStellarAm
 import { StellarObserver, ledgerOf, normalizeRecord, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
 
 export { NATIVE, STELLAR_DECIMALS, STELLAR_ISSUERS, assetOf, fromStellarAmount, issuerOf, stellarAsset, toStellarAmount, type StellarNetwork } from "./assets.ts";
+export {
+  StellarEventObserver,
+  TRANSFER_TOPICS,
+  type ContractEvent,
+  type EventCursorStore,
+  type EventPage,
+  type EventSource,
+} from "./events.ts";
 export { StellarObserver, ledgerOf, normalizeRecord, type CursorStore, type PaymentSource, type StellarPaymentRecord } from "./observer.ts";
 
 export const HORIZON: Record<StellarNetwork, string> = {
