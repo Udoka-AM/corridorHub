@@ -26,7 +26,9 @@ const anchor = new SepAnchor({
   network: "mainnet",
   payoutCurrencies: ["KES"],
   signer: vaultSigner,          // answers the SEP-10 challenge
-  senderId, receiverId,         // SEP-12 customer ids, when the anchor knows the parties
+  // Optional: SEP-12 ids, when you onboarded the parties out of band.
+  // Leave them out and Corridor registers each payout's parties itself.
+  // senderId, receiverId,
 });
 
 registry.register(anchor);
@@ -40,12 +42,40 @@ That is the whole integration. `SepAnchor` implements `RampPartner`, so the legs
 |---|---|---|
 | **SEP-1** | Discovery: which endpoints and currencies you serve | The file itself |
 | **SEP-10** | Authentication: your challenge, signed by the vault key, exchanged for a JWT | `WEB_AUTH_ENDPOINT`, `SIGNING_KEY` |
-| **SEP-12** | Customer records, when you need KYC on sender or receiver | `KYC_SERVER` |
+| **SEP-12** | Customer records: each payout's parties are registered under the customer types your `GET /info` names, and whatever you still want is reported back by name | `KYC_SERVER` |
 | **SEP-38** | Indicative prices and a firm quote before anything moves | `ANCHOR_QUOTE_SERVER` |
 | **SEP-31** | The cross-border payment itself, and `GET /info` for the funding methods you accept | `DIRECT_PAYMENT_SERVER` |
 | **SEP-6** | Collections. **Not implemented** | `TRANSFER_SERVER` |
 
 If an endpoint is missing, Corridor says exactly that — *"anchor.example.com publishes no ANCHOR_QUOTE_SERVER, so it does not serve SEP-38"* — rather than failing somewhere later.
+
+## SEP-12: KYC is passed through, not modelled
+
+An anchor will not take a payment until it knows the parties, and it decides what knowing them means: it publishes a customer **type** per direction in its SEP-31 `GET /info` — `sender_sep12_type` and `receiver_sep12_type` — and a field list per type.
+
+Corridor does not model anyone's form. A payout carries two optional field bags, passed through untouched:
+
+```ts
+await anchor.openPayout({
+  currency: "KES",
+  chain: "STELLAR",
+  usdcAmount: 70_000_000n,
+  beneficiary: { bankCode: "01", accountNumber: "0123456789" },
+  reference,
+  sender: { first_name: "Uddy", email_address: "u@example.com" },
+  receiver: { first_name: "Amara", bank_account_number: "0123456789" },
+});
+```
+
+Each side is registered under the type the anchor named, and the anchor's verdict decides what happens next:
+
+- **`ACCEPTED`** or **`PROCESSING`** — the customer id goes on the transaction.
+- **`NEEDS_INFO`** — the payout is refused, and the refusal *names the outstanding fields*: `minisend needs more about the receiver: bank_account_number, id_type`, with the anchor's own field descriptions in `details`. A caller can collect exactly those and retry. Optional fields are left out of that list.
+- **`REJECTED`** — final.
+
+Nothing is sent to the anchor's SEP-31 endpoint until both parties are settled, so a payout never half-opens waiting on paperwork.
+
+Supply `senderId` and `receiverId` instead if a deployment onboarded its customers out of band; Corridor then skips SEP-12 entirely. And an anchor that names no customer type for a side gets no id for it — Corridor does not invent one.
 
 ## SEP-10: the challenge is checked before the vault signs it
 

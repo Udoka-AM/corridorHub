@@ -77,6 +77,17 @@ export interface PayoutRequest {
   beneficiary: Beneficiary;
   reference: Hex;
   webhookUrl?: string;
+  /**
+   * KYC fields for the two parties, passed through to the partner untouched.
+   *
+   * Which fields a partner wants is the partner's business — a SEP-12 anchor
+   * publishes them per customer type and they differ by anchor and corridor —
+   * so Corridor forwards what the caller supplies and reports back whatever
+   * is still missing rather than modelling anyone's form. Keys are SEP-9
+   * field names for an anchor.
+   */
+  sender?: Record<string, string>;
+  receiver?: Record<string, string>;
 }
 
 export interface CollectionRequest {
@@ -117,7 +128,13 @@ export interface RampPartner {
 }
 
 export class PartnerError extends Error {
-  constructor(message: string, readonly partner: string, readonly status?: number) {
+  constructor(
+    message: string,
+    readonly partner: string,
+    readonly status?: number,
+    /** Machine-readable specifics, e.g. the KYC fields an anchor is still waiting for. */
+    readonly details?: Record<string, unknown>,
+  ) {
     super(message);
   }
 }
