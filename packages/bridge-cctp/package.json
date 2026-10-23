@@ -1,0 +1,14 @@
+{
+  "name": "@corridor/bridge-cctp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@corridor/core": "workspace:*",
+    "@stellar/stellar-sdk": "^17.2.1",
+    "@corridor/chain-stellar": "workspace:*"
+  }
+}

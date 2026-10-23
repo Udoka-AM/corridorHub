@@ -1,0 +1,35 @@
+---
+title: "0014 · Receive CCTP, do not burn"
+description: "Corridor completes inbound CCTP transfers on Stellar and hands out the instruction for the burn, rather than performing burns itself."
+icon: "arrow-left-right"
+---
+
+## Context
+
+USDC reaches the hub from Base and Solana over CCTP, which burns on the source chain and mints canonical USDC on the destination. Two directions were specified: inflows to the hub, and one outflow for the naira corridor, whose licensed partner settles on Solana.
+
+Circle's references give Stellar's domain (27), the Soroban contract ids, the `CctpForwarder.mint_and_forward(message, attestation)` signature, the hook-data layout and the attestation API. They do not publish the argument order for the burn entry points — `deposit_for_burn` on Stellar, `depositForBurnWithHook` on an EVM chain — in a form that could be verified from the documentation alone.
+
+## Decision
+
+Build the receiving half and the deposit instruction. Do not write the burn.
+
+- `depositInstruction` returns what a sender's wallet needs to construct the burn: destination domain, `mintRecipient`, `destinationCaller` and `hookData`.
+- `Iris` waits for Circle's attestation.
+- `mintAndForward` replays the attested message on Stellar through the forwarder.
+- `cctpTransferLeg` runs those as a saga step and books both sides.
+
+This matches who owns the money. On the way in the funds are the sender's, on the sender's own chain: in Ramp's flow an app's user burns from their own wallet, and Corridor's job is to say where to send it and to complete the mint. Corridor only needs to burn for its own outflows, which is the direction left unbuilt.
+
+## Consequences
+
+- Inflows work; outflows do not. Mainnet naira payouts still wait on a burn, so testnet keeps using `bridge.simulated`.
+- Guessing an argument order in money-moving code would risk funds that cannot be recovered — a burn whose `mintRecipient` is wrong mints nowhere. Reading the contract source, or Circle's SDK, is the work that unblocks it.
+- The mint record is keyed by the burn transaction rather than the saga step, because one burn may only ever be minted once however many sagas see it.
+- A mint is a contract call, so Horizon's payment stream does not show it. Corridor books it from the transaction it submitted. Detecting an inbound CCTP mint on an account Corridor does not control would need Soroban RPC `getEvents`, which read-only mode does not have yet.
+
+## Alternatives rejected
+
+- **Writing the burn from the documentation's prose.** The argument order is the whole risk, and it is the one thing the prose does not give.
+- **Burning on the user's behalf in Ramp.** It would mean holding the user's funds on the source chain, which is the custody position the plan rules out ([ADR 0013](/decisions/0013-ramp-and-hub-share-one-core)).
+- **Accepting a wrapped USDC inflow instead.** A second representation of the dollar to reconcile, against a ledger whose claim is that it matches the chain.

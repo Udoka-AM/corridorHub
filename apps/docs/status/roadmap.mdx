@@ -31,6 +31,9 @@ icon: "milestone"
   <Card title="Read-only reconciliation" icon="eye" href="/flows/read-only-pilot">
     Watch Stellar accounts by id, match the company's own payout records, exceptions queue and CSV. No keys.
   </Card>
+  <Card title="CCTP inflows" icon="arrow-left-right" href="/integrations/cctp">
+    An attested burn on Base or Solana minted on Stellar through the forwarder, booked exactly once per burn, at the hub's 7 decimals.
+  </Card>
   <Card title="Ramp: hosted API and SDK" icon="plug-zap" href="/ramp/overview">
     Apps, API keys, quotes, sponsored onboarding, user-signed payouts, collections, webhooks and usage, on the Hub's own anchors, reference and ledger.
   </Card>
@@ -42,7 +45,7 @@ icon: "milestone"
 |---|---|---|
 | **A signed anchor** | Nobody has signed one | A design partner or an anchor agreeing to a testnet integration. Everything below is downstream of this |
 | **SEP-6 collections** | No signed anchor has exercised the flow, so it would be a guess | The first collecting anchor, then the deposit flow behind `openCollection` |
-| **`cctp.transfer`** | Nothing routes through it: every launch currency has a partner that settles in USDC on Stellar, naira included, so no payout crosses a chain. It stays in the graph for inflows and for a corridor whose first partner settles elsewhere | Writing the leg, when a corridor needs it |
+| **The CCTP burn** | Receiving is built: an attested burn is minted on Stellar and booked ([ADR 0014](/decisions/0014-cctp-receive-only)). Nothing burns, because Circle's references do not publish the argument order for the burn entry points and this moves money. Nothing needs it either — every launch currency has a partner that settles in USDC on Stellar, naira included, so no payout crosses a chain | Reading the contract source or Circle's SDK, if a corridor ever needs an outflow |
 | **`stellar.pathPayment`** | The planner produces the edge; the leg is unwritten | Writing it, so a balance in EURC or MGUSD can fund a payout |
 | **MGUSD, PYUSD, USDT issuers** | Unset until each is verified against the issuer's own `stellar.toml` | Verification, or a deployment supplying its own with `CORRIDOR_STELLAR_ISSUER_…` |
 | **A treasury console** | The prototype's read Tempo and was removed rather than left misreporting | The engines already produce the data; it is a user interface |
