@@ -48,7 +48,7 @@ The plan's full Ramp scope includes items this record does not claim:
   Two consequences. Ramp already supplies what Privy does not: the sponsored reserve, the trustline and the fee bump. And Privy signs a 32-byte hash and returns a raw signature, so a Privy-backed app has to extract the hash and attach the signature itself to satisfy `signXdr`; accepting a hash signer alongside it — the shape `StellarSigner` already uses internally — would make Privy a drop-in.
 - SEP-6 and SEP-24 collections against a real anchor. Deposits run through the partner interface, and today only `MockPartner` implements collection.
 - Cross-chain deposit addresses: Tron USDT over NEAR Intents, Solana and Base USDC over CCTP.
-- x402-paid endpoints and an MCP server. The SDK exports `agentTools` with JSON schemas, ready to register with an MCP server.
+- An MCP server. The SDK exports `agentTools` with JSON schemas, ready to register with one. x402-paid endpoints **are** built: a priced route answers `402` with v2 requirements and settles through a facilitator after the work succeeds.
 - Billing and invoices beyond the usage endpoint, and a dashboard UI.
 - A hosted deployment: the KMS behind the sponsor key, the managed Postgres, the domain. The code runs on Postgres; where it runs is undecided.
 

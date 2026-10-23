@@ -91,8 +91,32 @@ pnpm ramp:serve   # the API on :8787, mock anchor unless CORRIDOR_ANCHOR_BASE_UR
 pnpm ramp:demo    # signup → sponsored account + USDC trustline → payout in testnet USDC → usage
 ```
 
+## Paying per call: x402
+
+An agent can be charged for a Ramp call. Corridor is the resource server: a priced route answers an unpaid request with `402` and a `PAYMENT-REQUIRED` header, the agent signs Soroban authorization entries for a SEP-41 transfer, and a facilitator verifies and settles them.
+
+```ts
+rampServer(ramp, {
+  x402: {
+    payTo: "GCORRIDOR…",            // the account each call pays
+    network: "mainnet",
+    facilitator: new HTTPFacilitatorClient({ url: "https://channels.openzeppelin.com/x402" }),
+    resourceBase: "https://ramp.corridor.example",
+    prices: { "POST /v1/withdrawals": 10_000n },   // 0.001 USDC, at the ledger's 7 dp
+  },
+});
+```
+
+Three things worth knowing:
+
+- **Corridor never parses the payment.** The payload crosses this code opaquely and goes to the facilitator; the wire formats come from x402's own encoders rather than from anything written here. The requirements are x402 **v2**: the figure is `amount`, not v1's `maxAmountRequired`, and the resource is carried once per response rather than per requirement.
+- **Verify before the work, settle after it succeeds.** A payout that fails is not charged for, and a payment that cannot settle never produces a payout. The settlement receipt comes back in `PAYMENT-RESPONSE`.
+- **A route with no price is free.** The payment header is not even read on an unpriced route, so adding x402 changes nothing for existing callers.
+
+This is separate from agent **keys**, which carry Corridor's own spending policy. A key limits what an agent may pay out; x402 charges it for asking.
+
 ## Declared and not built
 
-A bundled wallet, SEP-6/24 collections against a real anchor, Tron/Solana/Base deposit addresses, x402, an MCP server, invoices and a dashboard. See [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built).
+A bundled wallet, SEP-6/24 collections against a real anchor, Tron/Solana/Base deposit addresses beyond CCTP, an MCP server, invoices and a dashboard. See [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built).
 
 MVP keeps the wallet out of Ramp: an app brings its own signer through `signXdr`, and Ramp sponsors the reserve, the trustline and the fee. Passkey login and Soroban smart accounts are a milestone after MVP, not a shipped feature.

@@ -1,3 +1,4 @@
+import { X402Charger, type X402Options } from "./x402.ts";
 import { createHash, randomUUID } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { Fiat } from "@corridor/core";
@@ -21,6 +22,11 @@ export interface RampServerOptions {
   bodyLimit?: number;
   /** Per-API-key request budget (token bucket). Default 600/min; `false` disables it. */
   rateLimit?: { requestsPerMinute: number } | false;
+  /**
+   * Charge agents per call over x402. Omitted, every route is free and no
+   * payment header is looked at.
+   */
+  x402?: X402Options;
   /**
    * One structured line per request. It carries the route template, status,
    * timing and the caller's app and key ids: never headers, bodies, query
@@ -90,6 +96,7 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
   const on = (method: string, path: string, handler: Handler, idempotent = method === "POST") =>
     routes.push({ method, path, pattern: new RegExp(`^${path.replace(/:[a-zA-Z]+/g, "([^/]+)")}$`), handler, idempotent });
   const limiter = opts.rateLimit === false ? undefined : new RateLimiter(opts.rateLimit?.requestsPerMinute ?? 600);
+  const charger = opts.x402 ? new X402Charger(opts.x402) : undefined;
 
   on("GET", "/v1/health", async () => ({ ok: true, network: ramp.network, asset: ramp.asset }));
 
@@ -255,6 +262,23 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
       };
       const ctx: Ctx = { req, params, query: url.searchParams, raw, body, caller };
 
+      // x402: verify before the work. A route with no price stays free.
+      let settle: (() => Promise<Record<string, string>>) | undefined;
+      const price = charger?.priceOf(req.method!, route.path);
+      if (charger && price !== undefined) {
+        const outcome = await charger.charge({
+          method: req.method!,
+          path: route.path,
+          price,
+          signatureHeader: headerOf(req, "payment-signature"),
+        });
+        if (!outcome.paid) return send(res, outcome.status, outcome.body, outcome.headers);
+        settle = outcome.settle;
+      }
+      // Settling only after the handler returns means a payout that failed is
+      // not charged for.
+      const settled = async () => (settle ? await settle() : undefined);
+
       const idemKey = route.idempotent ? headerOf(req, "idempotency-key") : undefined;
       if (idemKey) {
         const c = await caller();
@@ -266,10 +290,10 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
         }
         const out = normalize(await route.handler(ctx));
         await ramp.store.saveIdempotent(c.tenant.id, idemKey, requestHash, out.status, out.body);
-        return send(res, out.status, out.body);
+        return send(res, out.status, out.body, await settled());
       }
       const out = normalize(await route.handler(ctx));
-      return send(res, out.status, out.body);
+      return send(res, out.status, out.body, await settled());
     } catch (e) {
       if (e instanceof RampError) {
         const retry = e.code === "rate_limited" ? { "retry-after": String(e.details?.retryAfterSeconds ?? 60) } : undefined;

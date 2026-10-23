@@ -5,3 +5,4 @@ export { checkSpend, hashKey, newApiKey, type KeyKind, type SpendingPolicy } fro
 export { RampService, orderView, quoteView, tenantView, type Caller, type RampServiceOptions } from "./service.ts";
 export { amount, rampHandler, rampServer, RateLimiter, type RampServerOptions, type RequestLog } from "./server.ts";
 export { RampStore, type ApiKey, type OrderKind, type OrderStatus, type Quote, type RampEvent, type RampOrder, type Tenant } from "./store.ts";
+export { X402Charger, X402_DECIMALS, X402_VERSION, type ChargeOutcome, type FacilitatorClient, type PaymentRequirements, type ResourceInfo, type X402Options } from "./x402.ts";
