@@ -31,8 +31,8 @@ icon: "milestone"
   <Card title="Read-only reconciliation" icon="eye" href="/flows/read-only-pilot">
     Watch Stellar accounts by id, match the company's own payout records, exceptions queue and CSV. No keys. Both observers: Horizon payments and the Stellar Asset Contract's own events, so a contract-moved payment is not missed.
   </Card>
-  <Card title="x402 per-call payments" icon="bot" href="/ramp/overview">
-    A priced Ramp route answers 402 with x402 v2 requirements, verifies through a facilitator before the work and settles after it succeeds.
+  <Card title="Agent payments: x402 and MCP" icon="bot" href="/ramp/overview">
+    A priced Ramp route answers 402 with x402 v2 requirements, verifying through a facilitator before the work and settling after it succeeds. The same payouts are served as MCP tools, with limits enforced on the agent's key.
   </Card>
   <Card title="CCTP inflows" icon="arrow-left-right" href="/integrations/cctp">
     An attested burn on Base or Solana minted on Stellar through the forwarder, booked exactly once per burn, at the hub's 7 decimals.
@@ -53,7 +53,7 @@ icon: "milestone"
 | **MGUSD, PYUSD, USDT issuers** | Unset until each is verified against the issuer's own `stellar.toml` | Verification, or a deployment supplying its own with `CORRIDOR_STELLAR_ISSUER_…` |
 | **A treasury console** | The prototype's read Tempo and was removed rather than left misreporting | The engines already produce the data; it is a user interface |
 | **A mainnet run** | No anchor, no customer, nothing to run | A signed anchor and a design partner |
-| **Ramp's wallet providers and cross-chain deposits** | Out of MVP by decision: an app brings its own signer through `signXdr`, and Ramp sponsors the reserve, trustline and fee. Passkey login and Soroban smart accounts are a milestone after MVP — on Stellar they are two separate builds, and a wallet provider supplies neither the sponsorship nor a contract account ([ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built)). SEP-6/24 collections, Tron/Solana/Base deposit addresses beyond CCTP, and an MCP server are declared and not built; x402 is built | A first app on the sandbox, and the first collecting anchor |
+| **Ramp's wallet providers and cross-chain deposits** | Out of MVP by decision: an app brings its own signer through `signXdr`, and Ramp sponsors the reserve, trustline and fee. Passkey login and Soroban smart accounts are a milestone after MVP — on Stellar they are two separate builds, and a wallet provider supplies neither the sponsorship nor a contract account ([ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built)). SEP-6/24 collections and Tron/Solana/Base deposit addresses beyond CCTP are declared and not built; x402 and the MCP server are built | A first app on the sandbox, and the first collecting anchor |
 | **The confidential lane** | Deferred to Stellar confidential tokens rather than bolted on elsewhere ([ADR 0005](/decisions/0005-confidential-lane-deferred)) | Confidential tokens with auditor keys on Stellar |
 
 ## Next, in order

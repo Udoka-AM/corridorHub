@@ -13,7 +13,8 @@
     "ramp:serve": "tsx scripts/ramp-serve.ts",
     "ramp:demo": "tsx scripts/ramp-demo.ts",
     "docs:check": "tsx scripts/docs-check.ts",
-    "openapi:check": "vitest run packages/ramp/src/openapi.test.ts"
+    "openapi:check": "vitest run packages/ramp/src/openapi.test.ts",
+    "ramp:mcp": "tsx scripts/ramp-mcp.ts"
   },
   "devDependencies": {
     "@types/node": "22",
@@ -38,6 +39,7 @@
     "@corridor/webhooks": "workspace:*",
     "@electric-sql/pglite": "^0.5.8",
     "@stellar/stellar-sdk": "^17.2.1",
-    "viem": "2.56.9"
+    "viem": "2.56.9",
+    "@modelcontextprotocol/sdk": "^1.22.0"
   }
 }

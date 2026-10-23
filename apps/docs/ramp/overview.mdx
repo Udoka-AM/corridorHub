@@ -115,8 +115,20 @@ Three things worth knowing:
 
 This is separate from agent **keys**, which carry Corridor's own spending policy. A key limits what an agent may pay out; x402 charges it for asking.
 
+## As MCP tools
+
+`pnpm ramp:mcp` serves the same payouts as an MCP server, so an agent holds a Corridor payout as a tool rather than an HTTP call:
+
+```bash
+RAMP_API_KEY=rk_live_agent_… RAMP_API_URL=https://ramp.example pnpm ramp:mcp
+```
+
+It exposes `ramp_quote_payout`, `ramp_send_payout` and `ramp_payout_status`. The tools are the SDK's own `agentTools`, so there is one source of schemas for MCP and for any other agent runtime and a tool cannot drift between them.
+
+Spending limits are **not** enforced in the MCP layer. They belong to the agent key the server checks, so an agent holding these tools can only ever do what its key allows, whatever it asks for — and a refusal comes back as a result rather than a crash, naming the limit it hit and what is still allowed, so the agent can retry within it.
+
 ## Declared and not built
 
-A bundled wallet, SEP-6/24 collections against a real anchor, Tron/Solana/Base deposit addresses beyond CCTP, an MCP server, invoices and a dashboard. See [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built).
+A bundled wallet, SEP-6/24 collections against a real anchor, Tron/Solana/Base deposit addresses beyond CCTP, invoices and a dashboard. See [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built).
 
 MVP keeps the wallet out of Ramp: an app brings its own signer through `signXdr`, and Ramp sponsors the reserve, the trustline and the fee. Passkey login and Soroban smart accounts are a milestone after MVP, not a shipped feature.
