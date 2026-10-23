@@ -17,8 +17,16 @@ import { NonRetryableError, type Json, type Leg, type LegContext } from "@corrid
 
 export interface FxData {
   [k: string]: Json | undefined;
-  /** Exactly how much of the source asset to spend, in its minor units. */
-  sourceAmount: string;
+  /**
+   * Exactly how much of the source asset to spend, in its minor units.
+   *
+   * Optional inside a payout route, where every leg shares one data object:
+   * the amount to convert is then the balance the reserve leg held, which is
+   * `amount`.
+   */
+  sourceAmount?: string;
+  /** A payout's reserved balance, when this runs as a step of one. */
+  amount?: string;
   reference: Hex;
   /** Vault being converted. Defaults to the treasury. */
   vault?: string;
@@ -42,7 +50,9 @@ export function stellarPathPaymentLeg(opts: FxLegOptions): Leg<FxData> {
       const from = ctx.step.from.asset;
       const to = ctx.step.to.asset;
       if (from === to) throw new NonRetryableError("a path payment converts between two different assets");
-      const sourceAmount = BigInt(ctx.data.sourceAmount);
+      const source = ctx.data.sourceAmount ?? ctx.data.amount;
+      if (!source) throw new NonRetryableError("a path payment needs sourceAmount, or an amount to convert");
+      const sourceAmount = BigInt(source);
       const client = opts.treasury;
 
       const quote = await strictSendQuote(client, { from, sourceAmount, destAsset: to });

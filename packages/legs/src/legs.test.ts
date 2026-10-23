@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Keypair, Networks, Account as SdkAccount, type Transaction } from "@stellar/stellar-sdk";
-import { RefKind, customerTag, encodeRef, fromStellarMemo, money, uuidv7 } from "@corridor/core";
+import { RefKind, customerTag, encodeRef, fromStellarMemo, money, toStellarMemo, uuidv7 } from "@corridor/core";
 import { STELLAR_ISSUERS, localStellarSigner, type PaymentSource, type StellarClient, type StellarPaymentRecord } from "@corridor/chain-stellar";
 import { Accounts, Ledger, openLocalDb } from "@corridor/ledger";
 import { MockPartner, PartnerRegistry, type PartnerOrder } from "@corridor/partners";
@@ -8,7 +8,50 @@ import { reconcile } from "@corridor/recon";
 import { planRoute } from "@corridor/routing";
 import { SagaEngine, ledgerReserveLeg, type Leg, type PayoutData } from "@corridor/saga";
 import { PartnerEventStore, handlePartnerWebhook, partnerObservation } from "@corridor/webhooks";
-import { ledgerCreditLeg, partnerCollectLeg, partnerPayoutLeg, stellarAnchorFunder, type CollectionData } from "./index.ts";
+import { ledgerCreditLeg, partnerCollectLeg, partnerPayoutLeg, stellarAnchorFunder, stellarPathPaymentLeg, type CollectionData } from "./index.ts";
+
+// EURC has no testnet issuer in the registry on purpose (ADR 0007), so this
+// supplies one the way a deployment would.
+process.env.CORRIDOR_STELLAR_ISSUER_EURC_TESTNET = "GB3Q6QDZYTHWT7E5PVS3W7FUT5GVAFC5KSZFFLPU25GO7VTC3NM2ZTVO";
+
+/** A Stellar that prices and settles offline: the order books are the test's. */
+function fakeStellar(delivered: bigint, memo: () => string) {
+  const keys = Keypair.random();
+  const amountStr = (v: bigint) => (Number(v) / 1e7).toFixed(7);
+  const record = {
+    id: "op1",
+    paging_token: "1",
+    type: "path_payment_strict_send",
+    transaction_hash: "b".repeat(64),
+    created_at: "2026-10-23T09:00:00Z",
+    asset_type: "credit_alphanum4",
+    asset_code: "USDC",
+    asset_issuer: STELLAR_ISSUERS.USDC!.testnet!,
+    from: keys.publicKey(),
+    to: keys.publicKey(),
+    amount: amountStr(delivered),
+  };
+  const page = () => ({
+    call: async () => ({ records: [{ ...record, transaction_attr: { memo: memo(), memo_type: "hash", ledger_attr: 9, successful: true } }] }),
+  });
+  return {
+    network: "testnet" as const,
+    passphrase: Networks.TESTNET,
+    address: keys.publicKey(),
+    signer: { kind: "local", address: keys.publicKey(), sign: async (h: Uint8Array) => new Uint8Array(keys.sign(Buffer.from(h))) },
+    fee: async () => "100",
+    server: {
+      strictSendPaths: () => ({
+        call: async () => ({
+          records: [{ destination_amount: amountStr(delivered), source_amount: "0", path: [], asset_type: "credit_alphanum4", asset_code: "USDC" }],
+        }),
+      }),
+      loadAccount: async () => new SdkAccount(keys.publicKey(), "7"),
+      submitTransaction: async () => ({ hash: "b".repeat(64), successful: true, ledger: 9 }),
+      payments: () => ({ forAccount: () => ({ join: () => ({ order: () => ({ limit: () => ({ ...page(), cursor: () => page() }) }) }) }) }),
+    },
+  } as unknown as StellarClient;
+}
 
 const SECRET = "whsec_legs";
 let db: Awaited<ReturnType<typeof openLocalDb>>;
@@ -343,5 +386,138 @@ describe("funding an anchor on Stellar", () => {
     t.landed({ memo: "anchor-7f3a", memoType: "text", to: Keypair.random().publicKey() });
     await fundWith(t, order({ fundingMemo: "anchor-7f3a", fundingMemoType: "text" }));
     expect(t.submitted).toHaveLength(1);
+  });
+});
+
+describe("a payout funded in another asset", () => {
+  it("converts on the order books, pays the anchor and closes both clearing pairs", async () => {
+    const registry = new PartnerRegistry();
+    const mock = new MockPartner({
+      webhookSecret: SECRET,
+      chains: ["STELLAR"],
+      deliver: (b, h) => handlePartnerWebhook(registry, events, "mock", b, h).then(() => {}),
+    });
+    registry.register(mock);
+
+    // The customer holds EURC, not the settlement asset.
+    const held = 100_000_000n; // 10 EURC
+    const delivered = 108_000_000n; // the books give 10.8 USDC for it
+    await ledger.post({
+      kind: "deposit",
+      lines: [
+        { account: await accounts.vault("treasury", "EURC", "stellar"), direction: "D", money: money("EURC", held) },
+        { account: await accounts.customer("eu-payco", "EUR-KES", "EURC", "stellar"), direction: "C", money: money("EURC", held) },
+      ],
+    });
+
+    const data = payoutData({ corridor: "EUR-KES", asset: "EURC", amount: held.toString() });
+    const client = fakeStellar(delivered, () => Buffer.from(toStellarMemo(data.reference)).toString("base64"));
+    const payoutLeg = partnerPayoutLeg({
+      partners: registry,
+      events,
+      pollMs: 5,
+      fund: async ({ order }) => (await mock.observeFunding(order.id, "stellarTx1"), "stellarTx1"),
+    });
+
+    const plan = planRoute({
+      corridor: "EUR-KES",
+      privacy: "public",
+      source: { venue: "stellar", asset: "EURC" },
+      destination: { venue: "partner_fiat", asset: "KES" },
+      env: "mainnet",
+    });
+    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "stellar.pathPayment", "partner.payout"]);
+
+    const engine = await SagaEngine.open(db, ledger, accounts, [
+      ledgerReserveLeg,
+      stellarPathPaymentLeg({ treasury: client }),
+      payoutLeg,
+    ]);
+    const id = await engine.start({ kind: "payout", plan, data });
+    expect(await engine.run(id)).toBe("completed");
+
+    // The anchor was paid in the settlement asset, priced off what the books gave.
+    const out = (await engine.get(id)).steps[2]!.output as Record<string, unknown>;
+    expect(out).toMatchObject({ partner: "mock", status: "completed", currency: "KES", usdcPaid: delivered.toString() });
+
+    // The customer's EURC is gone and the treasury's EURC went with it.
+    expect((await ledger.balance(await accounts.customer("eu-payco", "EUR-KES", "EURC", "stellar"))).amount).toBe(0n);
+    expect((await ledger.balance(await accounts.customerHold("eu-payco", "EUR-KES", "EURC", "stellar"))).amount).toBe(0n);
+    expect((await ledger.balance(await accounts.vault("treasury", "EURC", "stellar"))).amount).toBe(0n);
+
+    // Both clearing pairs the conversion opened are closed: nothing stranded.
+    for (const asset of ["EURC", "USDC"] as const) {
+      expect((await ledger.balance(await accounts.clearing("EURC-USDC", asset, "stellar"))).amount).toBe(0n);
+    }
+    expect(await ledger.checkInvariants()).toEqual([]);
+  });
+
+  it("stops for review rather than booking a negative difference", async () => {
+    // An anchor that reports taking more than the conversion produced. The
+    // mock echoes what it is given, so this is its own stub.
+    const greedy = {
+      id: "greedy",
+      payoutCurrencies: ["KES"] as const,
+      collectionCurrencies: [] as const,
+      chains: ["STELLAR"] as const,
+      async rates() {
+        return { currency: "KES" as const, onRamp: "130", offRamp: "130", at: new Date() };
+      },
+      async openPayout(req: { usdcAmount: bigint }) {
+        return {
+          partner: "greedy",
+          id: "greedy-1",
+          kind: "payout" as const,
+          status: "completed" as const,
+          partnerStatus: "COMPLETED",
+          chain: "STELLAR" as const,
+          currency: "KES" as const,
+          // More than it was handed.
+          usdcAmount: req.usdcAmount * 2n,
+          fiatAmount: 1n,
+          rate: "130",
+          fundingAddress: Keypair.random().publicKey(),
+          createdAt: new Date(),
+        };
+      },
+      async openCollection() {
+        throw new Error("not used");
+      },
+      async getOrder() {
+        return this.openPayout({ usdcAmount: 108_000_000n });
+      },
+      verifyWebhook: () => false,
+      parseWebhook: () => {
+        throw new Error("not used");
+      },
+    };
+    const registry = new PartnerRegistry().register(greedy as never);
+
+    const held = 100_000_000n;
+    await ledger.post({
+      kind: "deposit",
+      lines: [
+        { account: await accounts.vault("treasury", "EURC", "stellar"), direction: "D", money: money("EURC", held) },
+        { account: await accounts.customer("eu-payco", "EUR-KES", "EURC", "stellar"), direction: "C", money: money("EURC", held) },
+      ],
+    });
+
+    const data = payoutData({ corridor: "EUR-KES", asset: "EURC", amount: held.toString() });
+    const client = fakeStellar(108_000_000n, () => Buffer.from(toStellarMemo(data.reference)).toString("base64"));
+    const payoutLeg = partnerPayoutLeg({ partners: registry, events, pollMs: 5, fund: async () => "stellarTx1" });
+    const plan = planRoute({
+      corridor: "EUR-KES",
+      privacy: "public",
+      source: { venue: "stellar", asset: "EURC" },
+      destination: { venue: "partner_fiat", asset: "KES" },
+      env: "mainnet",
+    });
+
+    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, stellarPathPaymentLeg({ treasury: client }), payoutLeg]);
+    const id = await engine.start({ kind: "payout", plan, data });
+    expect(await engine.run(id)).toBe("manual_review");
+    expect((await engine.get(id)).steps[2]!.error).toMatch(/with only 108000000 available/);
+    // Money left the vault, so nothing is unwound and the books still balance.
+    expect(await ledger.checkInvariants()).toEqual([]);
   });
 });

@@ -286,9 +286,16 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
       const partner = opts.partners.forPayout(currency, chain);
       // What reached the egress vault: the payout amount when the anchor is on
       // the hub, less bridge fees when it is not.
+      // What a preceding leg says reached the settlement side: a bridge
+      // reports what survived its fees, an on-ledger conversion what the order
+      // books delivered. Both speak through `received`.
       const bridged = Object.values(ctx.outputs).filter((o): o is { received: string; fee: string } => !!(o as { received?: string } | null)?.received);
-      const usdc = bridged.length ? BigInt(bridged.at(-1)!.received) : BigInt(d.amount);
       const bridgeFees = bridged.reduce((s, o) => s + BigInt(o.fee), 0n);
+      /** The customer's own balance, in the asset they hold. */
+      const held = BigInt(d.amount);
+      /** What is available to pay the anchor with, in the settlement asset. */
+      const settlement = bridged.length ? BigInt(bridged.at(-1)!.received) : held;
+      const usdc = settlement;
 
       // Exactly-once: reuse the order this step already opened (and funded) if any.
       let link = await opts.events.linkedOrder(ctx.idempotencyKey);
@@ -330,17 +337,37 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
       // An anchor on the hub is paid out of the treasury; one that settles
       // elsewhere is paid from the egress vault the bridge legs filled.
       const crossVenue = spoke !== d.venue;
-      const egress = await a.vault(crossVenue ? `${spoke}-egress` : "treasury", "USDC", spoke);
-      const paid = done.usdcAmount > 0n ? done.usdcAmount : usdc;
-      const total = BigInt(d.amount);
-      // Anything the anchor's rounding left in the egress vault is dust held for the customer.
-      const dust = total - paid - bridgeFees;
-      if (dust < 0n) throw new ManualReviewError(`partner ${partner.id} took ${paid} for a ${total} payout after ${bridgeFees} in bridge fees`);
-      const recovery = bridgeFees > 0n ? await a.revenue("bridge-fee-recovery", "USDC", spoke) : undefined;
-      const dustAccount = dust > 0n ? await a.clearing("payout-dust", "USDC", spoke) : undefined;
-      // On the hub the peg legs would be the same account twice, so they are left out.
-      const pegHub = crossVenue ? await a.clearing("usd-peg", d.asset, d.venue) : undefined;
-      const pegSpoke = crossVenue ? await a.clearing("usd-peg", "USDC", spoke) : undefined;
+      const settlementAsset = ctx.step.from.asset;
+      const crossAsset = d.asset !== settlementAsset;
+      const egress = await a.vault(crossVenue ? `${spoke}-egress` : "treasury", settlementAsset, spoke);
+      const paid = done.usdcAmount > 0n ? done.usdcAmount : settlement;
+      /** What the settlement side is debited: what arrived, plus the fees taken off it. */
+      const inbound = settlement + bridgeFees;
+      // Anything the anchor's rounding left behind is dust held for the customer.
+      const dust = settlement - paid;
+      if (dust < 0n) {
+        throw new ManualReviewError(
+          `partner ${partner.id} took ${paid} ${settlementAsset} for a payout with only ${settlement} available`,
+        );
+      }
+      const recovery = bridgeFees > 0n ? await a.revenue("bridge-fee-recovery", settlementAsset, spoke) : undefined;
+      const dustAccount = dust > 0n ? await a.clearing("payout-dust", settlementAsset, spoke) : undefined;
+
+      /**
+       * The customer holds one asset and the anchor is funded in another, so
+       * the entry closes in a chain: the hold against the conversion's
+       * clearing pair, that against the peg pair when the anchor is on another
+       * venue, and the peg against the vault the money actually left.
+       *
+       * Each pair was opened by the leg that did the work — the path payment
+       * or the bridge — so closing them here nets both to zero.
+       */
+      const fxPair = crossAsset ? `${d.asset}-${settlementAsset}` : undefined;
+      const fxSource = fxPair ? await a.clearing(fxPair, d.asset, d.venue) : undefined;
+      const fxDest = fxPair ? await a.clearing(fxPair, settlementAsset, d.venue) : undefined;
+      // On one venue in one asset the peg legs would be the same account twice.
+      const pegHub = crossVenue ? await a.clearing("usd-peg", settlementAsset, d.venue) : undefined;
+      const pegSpoke = crossVenue ? await a.clearing("usd-peg", settlementAsset, spoke) : undefined;
       return {
         output: {
           partner: partner.id,
@@ -361,15 +388,21 @@ export function partnerPayoutLeg(opts: PartnerLegOptions): Leg<PayoutData> {
             metadata: { currency, fiatAmount: done.fiatAmount.toString(), rate: done.rate, fundingRef: link!.fundingRef! },
             lines: [
               { account: hold, direction: "D", money: amountOf(d) },
-              ...(pegHub && pegSpoke
+              ...(fxSource && fxDest
                 ? [
-                    { account: pegHub, direction: "C" as const, money: amountOf(d) },
-                    { account: pegSpoke, direction: "D" as const, money: money("USDC", total) },
+                    { account: fxSource, direction: "C" as const, money: amountOf(d) },
+                    { account: fxDest, direction: "D" as const, money: money(settlementAsset, inbound) },
                   ]
                 : []),
-              { account: egress, direction: "C", money: money("USDC", paid) },
-              ...(recovery ? [{ account: recovery, direction: "C" as const, money: money("USDC", bridgeFees) }] : []),
-              ...(dustAccount ? [{ account: dustAccount, direction: "C" as const, money: money("USDC", dust) }] : []),
+              ...(pegHub && pegSpoke
+                ? [
+                    { account: pegHub, direction: "C" as const, money: money(settlementAsset, inbound) },
+                    { account: pegSpoke, direction: "D" as const, money: money(settlementAsset, inbound) },
+                  ]
+                : []),
+              { account: egress, direction: "C", money: money(settlementAsset, paid) },
+              ...(recovery ? [{ account: recovery, direction: "C" as const, money: money(settlementAsset, bridgeFees) }] : []),
+              ...(dustAccount ? [{ account: dustAccount, direction: "C" as const, money: money(settlementAsset, dust) }] : []),
             ],
           },
         ],
