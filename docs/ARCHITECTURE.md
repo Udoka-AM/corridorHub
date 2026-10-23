@@ -58,7 +58,9 @@ Why this shape:
 
 Corridors open in this order: **KES** (Minisend), **XOF** (lomi.) and **TZS** (ClickPesa) first, then **NGN** through a licensed partner, then Ghana and South Africa. None of these anchors is signed yet.
 
-**Naira is the exception.** No licensed naira anchor is live on Stellar, so NGN sits in `OFF_STELLAR_PAYOUT_CURRENCIES` and routes over one CCTP hop to a partner that settles on Solana. When a Stellar naira anchor exists, removing it from that list moves the corridor onto the hub.
+**Naira is on the hub as well.** A naira payout partner that settles in USDC on Stellar is available — a payout app rather than a SEP anchor, so it needs its own `RampPartner` adapter in the shape of the existing Paj one, and that adapter is not written yet. What the route graph says is already true: `OFF_STELLAR_PAYOUT_CURRENCIES` is empty, so NGN plans as `ledger.reserve → partner.payout` like every other launch corridor, and no payout crosses a chain.
+
+Putting a currency back into that list routes it over a bridge hop instead, which is what a new corridor does while its first partner settles elsewhere. Paj (Solana → NGN) stays supported as an alternate on exactly that basis.
 
 **Outbound regulation.** Outbound FX from markets like Nigeria is regulated; import payments, for example, need a Form M and an FX-licensed institution. The licensed customer holds the FX permissions and the KYC. Corridor carries the compliance references (invoice number, Form M number) in the saga data and the off-chain payload, and its reconciliation trail is audit evidence.
 
@@ -258,7 +260,7 @@ Both use XLM, because a funded testnet USDC trustline needs an issuer faucet; th
 
 | Risk | Mitigation |
 |---|---|
-| Anchor supply is thin, especially for naira | The partner interface is uniform, so a corridor moves between a Stellar anchor and an off-Stellar partner by changing one list in the route graph |
+| Anchor supply is thin | The partner interface is uniform, so a corridor moves between a Stellar anchor, a Stellar-settling payout app and an off-Stellar partner by changing one list in the route graph |
 | An anchor assigns its own memo on SEP-31 | The reference moves to the SEP-31 fields and the join key becomes the anchor's transaction id, which funding already records |
 | Anchor rounding and fees | The payout leg funds exactly the anchor's order and books fees and dust, so vaults still balance to the unit |
 | A look-alike asset from another issuer | Issuer is part of asset identity; unknown issuers are not booked |

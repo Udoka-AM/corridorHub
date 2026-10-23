@@ -86,7 +86,7 @@ const payoutPlan = planRoute({
 describe("partner payout leg", () => {
   it("opens the order, funds it once, waits for the webhook and books a matched payout", async () => {
     const registry = new PartnerRegistry();
-    const mock = new MockPartner({ webhookSecret: SECRET, deliver: (b, h) => handlePartnerWebhook(registry, events, "mock", b, h).then(() => {}) });
+    const mock = new MockPartner({ webhookSecret: SECRET, chains: ["STELLAR"], deliver: (b, h) => handlePartnerWebhook(registry, events, "mock", b, h).then(() => {}) });
     registry.register(mock);
     const funded: string[] = [];
     const leg = partnerPayoutLeg({
@@ -95,30 +95,34 @@ describe("partner payout leg", () => {
       pollMs: 5,
       fund: async ({ order, to }) => {
         funded.push(to);
-        await mock.observeFunding(order.id, "solanaSig1");
-        return "solanaSig1";
+        await mock.observeFunding(order.id, "stellarTx1");
+        return "stellarTx1";
       },
     });
-    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, fakeBridge, leg]);
+    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, leg]);
     const data = payoutData();
     const id = await engine.start({ kind: "payout", plan: payoutPlan, data });
     expect(await engine.run(id)).toBe("completed");
     expect(funded).toHaveLength(1);
 
-    const out = (await engine.get(id)).steps[2]!.output as Record<string, unknown>;
+    const out = (await engine.get(id)).steps[1]!.output as Record<string, unknown>;
     expect(out).toMatchObject({ partner: "mock", status: "completed", currency: "NGN", fiatAmount: "1071000" }); // 7 USDC × 1530
     const order = await mock.getOrder(out.orderId as string);
     const [match] = await reconcile(ledger, [partnerObservation(order)!]);
     expect(match!.status).toBe("matched");
     expect(await ledger.checkInvariants()).toEqual([]);
-    for (const name of ["solana-egress"]) expect((await ledger.balance(await accounts.vault(name, "USDC", "solana"))).amount).toBe(0n);
+    // Paid out of the treasury on the hub: no egress vault in the path.
+    expect((await ledger.balance(await accounts.vault("treasury", "USDC", "stellar"))).amount).toBe(430_000_000n);
   });
 
-  it("pays a Stellar anchor straight out of the treasury, with no bridge leg", async () => {
+  it("still pays a partner that settles off Stellar, across a bridge leg", async () => {
+    // Every launch currency has an on-hub partner now, so this path is
+    // constructed: the plan carries a bridge hop and the partner settles on
+    // Solana, as Paj does.
     const registry = new PartnerRegistry();
     const mock = new MockPartner({
       webhookSecret: SECRET,
-      chains: ["STELLAR"],
+      chains: ["SOLANA"],
       deliver: (b, h) => handlePartnerWebhook(registry, events, "mock", b, h).then(() => {}),
     });
     registry.register(mock);
@@ -126,43 +130,34 @@ describe("partner payout leg", () => {
       partners: registry,
       events,
       pollMs: 5,
-      fund: async ({ order, chain }) => {
-        expect(chain).toBe("STELLAR");
-        await mock.observeFunding(order.id, "stellarTx1");
-        return "stellarTx1";
+      fund: async ({ chain, order }) => {
+        expect(chain).toBe("SOLANA");
+        await mock.observeFunding(order.id, "solanaSig1");
+        return "solanaSig1";
       },
     });
 
-    const plan = planRoute({
-      corridor: "EUR-KES",
-      privacy: "public",
-      source: { venue: "stellar", asset: "USDC" },
-      destination: { venue: "partner_fiat", asset: "KES" },
-      env: "mainnet",
-    });
-    expect(plan.steps.map((s) => s.kind)).toEqual(["ledger.reserve", "partner.payout"]);
-
-    // Fund this corridor's customer balance, as a collection would have.
-    await ledger.post({
-      kind: "deposit",
-      lines: [
-        { account: await accounts.vault("treasury", "USDC", "stellar"), direction: "D", money: money("USDC", 70_000_000n) },
-        { account: await accounts.customer("eu-payco", "EUR-KES", "USDC", "stellar"), direction: "C", money: money("USDC", 70_000_000n) },
+    const bridged = {
+      ...payoutPlan,
+      steps: [
+        payoutPlan.steps[0]!,
+        { index: 1, kind: "bridge.simulated", from: { venue: "stellar", asset: "USDC" }, to: { venue: "solana", asset: "USDC" }, referenceScope: "payout" },
+        { index: 2, kind: "partner.payout", from: { venue: "solana", asset: "USDC" }, to: { venue: "partner_fiat", asset: "NGN" }, referenceScope: "payout" },
       ],
-    });
+    } as typeof payoutPlan;
 
-    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, leg]);
-    const id = await engine.start({ kind: "payout", plan, data: payoutData({ corridor: "EUR-KES" }) });
+    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, fakeBridge, leg]);
+    const id = await engine.start({ kind: "payout", plan: bridged, data: payoutData() });
     expect(await engine.run(id)).toBe("completed");
 
-    // The payout left the treasury on the hub; no egress vault is involved.
-    expect((await ledger.balance(await accounts.vault("treasury", "USDC", "stellar"))).amount).toBe(500_000_000n);
+    // The USDC left the Solana egress vault the bridge leg filled.
+    expect((await ledger.balance(await accounts.vault("solana-egress", "USDC", "solana"))).amount).toBe(0n);
     expect(await ledger.checkInvariants()).toEqual([]);
   });
 
   it("never funds an order twice across retries", async () => {
     const registry = new PartnerRegistry();
-    const mock = new MockPartner({ webhookSecret: SECRET });
+    const mock = new MockPartner({ webhookSecret: SECRET, chains: ["STELLAR"] });
     registry.register(mock);
     let fundCalls = 0;
     const leg = partnerPayoutLeg({
@@ -177,16 +172,16 @@ describe("partner payout leg", () => {
         return "sigX";
       },
     });
-    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, fakeBridge, { ...leg, backoffMs: 100 }]);
+    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, { ...leg, backoffMs: 100 }]);
     const id = await engine.start({ kind: "payout", plan: payoutPlan, data: payoutData() });
     expect(await engine.run(id)).toBe("completed");
     expect(fundCalls).toBe(1);
-    expect((await engine.get(id)).steps[2]!.attempts).toBeGreaterThan(1);
+    expect((await engine.get(id)).steps[1]!.attempts).toBeGreaterThan(1);
   });
 
   it("stops for manual review, without compensating, when a funded payout fails", async () => {
     const registry = new PartnerRegistry();
-    const mock = new MockPartner({ webhookSecret: SECRET, failPayouts: true });
+    const mock = new MockPartner({ webhookSecret: SECRET, chains: ["STELLAR"], failPayouts: true });
     registry.register(mock);
     const leg = partnerPayoutLeg({
       partners: registry,
@@ -194,35 +189,35 @@ describe("partner payout leg", () => {
       pollMs: 5,
       fund: async ({ order }) => (await mock.observeFunding(order.id, "sigF"), "sigF"),
     });
-    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, fakeBridge, leg]);
+    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, leg]);
     const id = await engine.start({ kind: "payout", plan: payoutPlan, data: payoutData() });
     expect(await engine.run(id)).toBe("manual_review");
     const view = await engine.get(id);
-    expect(view.steps.map((s) => s.status)).toEqual(["done", "done", "failed"]);
-    expect(view.steps[2]!.error).toMatch(/after it was funded/);
+    expect(view.steps.map((s) => s.status)).toEqual(["done", "failed"]);
+    expect(view.steps[1]!.error).toMatch(/after it was funded/);
   });
 
   it("rejects a payout without bank details before touching the partner", async () => {
-    const registry = new PartnerRegistry().register(new MockPartner({ webhookSecret: SECRET }));
+    const registry = new PartnerRegistry().register(new MockPartner({ webhookSecret: SECRET, chains: ["STELLAR"] }));
     const leg = partnerPayoutLeg({ partners: registry, events, fund: async () => "never" });
-    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, fakeBridge, leg]);
+    const engine = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, leg]);
     const id = await engine.start({ kind: "payout", plan: payoutPlan, data: payoutData({ recipient: { kind: "bank" } }) });
     expect(await engine.run(id)).toBe("compensated");
-    expect((await engine.get(id)).steps[2]!.attempts).toBe(1);
+    expect((await engine.get(id)).steps[1]!.attempts).toBe(1);
   });
 });
 
 describe("collection: importer pays naira, customer's hub balance is credited", () => {
   it("opens a virtual account, waits for the payer, bridges in and credits the customer", async () => {
     const registry = new PartnerRegistry();
-    const mock = new MockPartner({ webhookSecret: SECRET, deliver: (b, h) => handlePartnerWebhook(registry, events, "mock", b, h).then(() => {}) });
+    const mock = new MockPartner({ webhookSecret: SECRET, chains: ["STELLAR"], deliver: (b, h) => handlePartnerWebhook(registry, events, "mock", b, h).then(() => {}) });
     registry.register(mock);
     const shown: string[] = [];
     const leg = partnerCollectLeg({
       partners: registry,
       events,
       pollMs: 5,
-      ingressAddress: () => "CorridorSolanaIngress",
+      ingressAddress: () => "CorridorStellarIngress",
       onCollectionOpened: async (order) => {
         shown.push(order.virtualAccount!.accountNumber);
         setTimeout(() => void mock.payerTransferred(order.id), 20); // the importer pays from their bank
@@ -236,9 +231,9 @@ describe("collection: importer pays naira, customer's hub balance is credited", 
       destination: { venue: "stellar", asset: "USDC" },
       env: "testnet",
     });
-    expect(plan.steps.map((s) => s.kind)).toEqual(["partner.collect", "bridge.simulated", "ledger.credit"]);
+    expect(plan.steps.map((s) => s.kind)).toEqual(["partner.collect", "ledger.credit"]);
 
-    const engine = await SagaEngine.open(db, ledger, accounts, [leg, fakeBridge, ledgerCreditLeg]);
+    const engine = await SagaEngine.open(db, ledger, accounts, [leg, ledgerCreditLeg]);
     const data: CollectionData = {
       collectionId: uuidv7(),
       customerId: "acme-imports",
