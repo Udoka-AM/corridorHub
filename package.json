@@ -14,7 +14,9 @@
     "ramp:demo": "tsx scripts/ramp-demo.ts",
     "docs:check": "tsx scripts/docs-check.ts",
     "openapi:check": "vitest run packages/ramp/src/openapi.test.ts",
-    "ramp:mcp": "tsx scripts/ramp-mcp.ts"
+    "ramp:mcp": "tsx scripts/ramp-mcp.ts",
+    "console:serve": "tsx apps/console/src/server.ts",
+    "console:demo": "tsx apps/console/src/seed.ts"
   },
   "devDependencies": {
     "@types/node": "22",

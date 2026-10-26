@@ -76,7 +76,17 @@ importers:
         specifier: '3'
         version: 3.2.7(@types/node@22.20.4)(lightningcss@1.33.0)(tsx@4.23.15)
 
-  apps/console: {}
+  apps/console:
+    dependencies:
+      '@corridor/console':
+        specifier: workspace:*
+        version: link:../../packages/console
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@corridor/ledger':
+        specifier: workspace:*
+        version: link:../../packages/ledger
 
   apps/site:
     dependencies:
@@ -174,6 +184,18 @@ importers:
       '@stellar/stellar-sdk':
         specifier: ^17.2.1
         version: 17.2.1
+
+  packages/console:
+    dependencies:
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
+      '@corridor/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@corridor/recon':
+        specifier: workspace:*
+        version: link:../recon
 
   packages/core: {}
 

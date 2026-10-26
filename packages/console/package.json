@@ -1,0 +1,14 @@
+{
+  "name": "@corridor/console",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@corridor/core": "workspace:*",
+    "@corridor/ledger": "workspace:*",
+    "@corridor/recon": "workspace:*"
+  }
+}

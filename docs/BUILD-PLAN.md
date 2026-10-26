@@ -133,7 +133,7 @@ Verified by audit on 17 Oct 2026. "Run" means a script exercised it against Stel
 | `README.md`, `docs/ARCHITECTURE.md` | Rewritten for Stellar, authoritative |
 | `apps/docs` — 48 MDX files, 12 ADRs, 8 diagram pairs | Rewritten for Stellar (PR #1) |
 | `apps/site` — landing page | Rewritten for Stellar (PR #1) |
-| `apps/console` | The Tempo prototype's replay, labelled as such. No Stellar console. |
+| `apps/console` | The Stellar treasury console: six read-only panels over the ledger and sagas. The Tempo replay is kept beside it at `public/prototype.html`, labelled. |
 
 ---
 

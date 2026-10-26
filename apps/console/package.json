@@ -3,5 +3,12 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "tsx src/server.ts" }
+  "scripts": {
+    "start": "tsx src/server.ts"
+  },
+  "dependencies": {
+    "@corridor/console": "workspace:*",
+    "@corridor/ledger": "workspace:*",
+    "@corridor/core": "workspace:*"
+  }
 }

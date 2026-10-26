@@ -237,7 +237,11 @@ The ledger keeps Stellar's own 7 decimal places (ADR 0012), so a booked balance 
 
 ### 8.8 Treasury console (`apps/console`)
 
-**Not built for Stellar.** The prototype's console read Tempo, Solana and the Zcash lane; it was removed rather than left showing a chain this repo no longer settles on. The read-only reporting it fronted is available from `pnpm watch:report`.
+Six panels over the Stellar ledger and the saga tables: the corridor board (what each customer is owed, and how much is held against a payout in flight), the pre-funding forecast, venue balances with the clearing pairs and their net, the settlement timeline with each step's transaction, the exceptions queue, and booked fees. `pnpm console:serve`; `pnpm console:demo` fills a separate directory with invented figures so it can be looked at without a testnet run.
+
+It reads and nothing else — no keys are opened, nothing is posted, and non-GET methods are refused — so the console can never be the reason a number changed (ADR 0011). It binds to localhost, because it is Corridor's own operations view with no authentication in front of it. Amounts travel as minor units with the asset's scale alongside: the stablecoins are 7 dp, SOL is 9, fiat is mostly 2 and CLP is 0, so a page that assumed one scale would misprice the rest.
+
+Chain-side reconciliation stays with `pnpm watch:report`. Matching Horizon against the books means polling as an observer, and an observer advances its cursors — a write, and one that would consume movements the reconciler has not seen yet. The earlier Tempo console is kept at `public/prototype.html` as a labelled replay of the prototype.
 
 ## 9. Environments
 

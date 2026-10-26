@@ -1,40 +1,56 @@
 ---
 title: "Treasury console"
-description: "Not built for Stellar. The prototype's console read Tempo and Solana and was removed rather than left reporting a chain this build no longer settles on; read-only reporting runs from the command line today."
+description: "Six read-only panels over the Stellar ledger and the saga tables: the corridor board, pre-funding forecast, venue balances, settlement timeline, exceptions queue and booked fees. It reads and nothing else."
 icon: "layout-dashboard"
 ---
 
-<Warning>
-**There is no treasury console in the Stellar build.** The console that shipped with Corridor's earlier Tempo prototype read Tempo, Solana and the prototype's shielded lane. Its server was removed when Stellar became the only hub, rather than left reporting a chain this repository no longer settles on.
-</Warning>
+```bash
+pnpm console:serve     # http://127.0.0.1:8788
+```
 
-## What exists today
+The console is a window on the engines, not a second source of truth. Every panel is a select; no key is opened, nothing is posted, and anything other than a `GET` is refused — so the console can never be the reason a number changed ([ADR 0011](/decisions/0011-read-only-first)).
 
-The reporting the console fronted runs from the command line, against the Stellar accounts a company already operates:
+## The panels
+
+| Panel | What it reads | What it is for |
+|---|---|---|
+| Corridor board | Customer and customer-hold balances, per corridor and asset | What Corridor owes, and how much is committed to a payout still in flight |
+| Pre-funding forecast | Postings out of each customer's balance over 7 days, against what is left | When a customer needs to top up |
+| Venue balances | Vault balances per venue, and each clearing pair's legs and net | Where the float is, and what is in transit |
+| Settlement timeline | The 25 most recently touched sagas and their steps | Following a payout from the ledger to the chain |
+| Exceptions queue | Failed compensations, then `manual_review` stops | What needs a person |
+| Booked fees | The revenue accounts | What Corridor has actually earned |
+
+## Three things it refuses to guess
+
+**Direction.** `asset`, `expense` and `clearing` accounts are debit-normal; `liability`, `revenue` and `equity` are not. Reading a customer's balance the wrong way round would report what Corridor owes as a negative number, so the panels sign each balance by its account type.
+
+**Scale.** The ledger stores minor units and they are not all the same: the stablecoins are 7 dp to match Stellar, SOL is 9, fiat is mostly 2, CLP is 0. The server sends the scale with every response rather than letting the page assume one.
+
+**A rate that does not exist.** A customer who has not paid out yet has no spending rate, so the forecast shows *no rate yet* instead of an infinite runway. A well-funded tick there would be a guess dressed as a number.
+
+<Note>
+A clearing pair that does not net to zero is money in transit or an entry that never got its other half. The console shows the figure rather than hiding it behind a tick — the point of the panel is the number that is not zero.
+</Note>
+
+## What is deliberately absent
+
+**Chain-side reconciliation.** Matching Horizon against the books means polling as an observer, and an observer advances its cursors — a write, and one that would consume movements `watch:report` has not seen yet. A console that quietly starved the reconciler would be worse than one that sends you to it:
 
 ```bash
 CORRIDOR_WATCH=GABC…,GDEF… pnpm watch:report
 ```
 
-It polls Horizon for each account's payments, matches them against the ledger, and prints a summary and every movement that is not `matched`. Nothing moves and no key is needed. See [Read-only pilot](/flows/read-only-pilot).
+**Authentication.** There is none, which is why the console binds to localhost. It is Corridor's own operations view, not a tenant's; the tenant-facing surface is the [Ramp API](/ramp/overview), which has keys.
 
-`pnpm stellar:payout` prints the saga's steps, the anchor order, the ledger invariants and the customer's closing balance — the same facts a settlement timeline would show, for one run.
+## Looking at it without a testnet run
 
-## What a console would show
+```bash
+pnpm console:demo && RAMP_DATA_DIR=.data/console-demo pnpm console:serve
+```
 
-When one is built, these are the panels the engines already produce the data for:
-
-| Panel | Data it would read |
-|---|---|
-| Corridor board | `Accounts.customer` and `.customerHold` balances per customer and corridor |
-| Settlement timeline | `saga_steps` and `saga_events`, with a stellar.expert link per on-chain step |
-| Venue balances | Vault and clearing balances per venue, with clearing pairs netting to zero |
-| Reconciliation | `summarize(reconcile(...))`, the vault check and booked fees |
-| Exceptions queue | `reconcileReadOnly` statuses: short, over, missing, unexpected |
-| Pre-funding forecast | Daily outflow per customer against the hub balance |
-
-None of that is built. It is listed here so a reviewer can see the gap is a user interface rather than a missing engine, and the [Roadmap](/status/roadmap) says where it sits.
+Every figure that produces is invented, and it writes to its own directory so it cannot be mixed into a real run's books.
 
 ## The prototype's console
 
-The earlier console is kept as a static replay, as evidence of the prototype: a recording of real Tempo and Solana runs from 11 October 2026. Every figure in it is a Tempo-era run, not a Stellar one, and it is labelled as such. It is not part of this build and nothing in it reflects the Stellar code.
+The earlier Tempo console is kept beside it at `/prototype.html` as a static replay, as evidence of the prototype: a recording of real Tempo and Solana runs from 11 October 2026. Every figure in it is a Tempo-era run, not a Stellar one, and nothing in it reflects this build.
