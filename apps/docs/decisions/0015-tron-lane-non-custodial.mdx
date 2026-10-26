@@ -1,0 +1,35 @@
+---
+title: "0015 · The Tron lane, without custody"
+description: "Tron USDT reaches the hub in two hops. The USDC in between sits at the user's own Solana address — the same Ed25519 key as their Stellar account — so Corridor never holds it. Corridor sponsors the gas instead."
+icon: "key-round"
+---
+
+## Context
+
+USDT on Tron is the largest stablecoin float in the corridors Corridor serves, and none of it can reach the hub directly.
+
+- The solver network ([NEAR Intents 1Click](https://docs.near-intents.org)) does not route Stellar in either direction. Checked again 26 Oct 2026: `Tron USDT → Solana USDC` quotes in about 0.16% on $150, and anything with Stellar as origin or destination answers that quoting for the pair is unavailable.
+- CCTP does not reach Tron at all. Circle has no Tron domain.
+
+So the lane has to be two hops: Tron USDT to Solana USDC through the solver network, then Solana to Stellar by burn and mint. Which raises the question the lane turns on — between the two hops, somebody owns USDC on Solana and has to sign the burn. If that somebody is Corridor, then Corridor has taken custody of a user's funds, which [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core) says it does not do.
+
+## Decision
+
+Pay the swap out to the user's **own** Solana address, and sign the burn with their key.
+
+A Stellar account and a Solana address are the same 32-byte Ed25519 public key in two encodings — Stellar in StrKey (`G…`), Solana in base58. A user who holds one key therefore already has an account on both chains, and the key that signs their Stellar transactions can sign a Solana one. `solanaAddressOfStellar` is that conversion, and it is the whole reason the lane can stay non-custodial.
+
+- The 1Click quote names the user's own Solana address as `recipient` and their own Tron address as `refundTo`. Both ends of the swap are theirs.
+- The burn's **owner** is the user's key, supplied by the app's wallet the same way it supplies the Stellar signer.
+- The burn's **fee payer** is a Corridor Solana vault. This is the one thing Corridor contributes: a Solana address derived from a Stellar key starts with no SOL, so without sponsorship the user could not pay for the burn that moves their own money. `buildBurnToStellar` takes payer and owner separately, which is what makes this expressible.
+- Tron is **not** a venue. Corridor holds no balance there, so the path planner does not route through it and `tron.swap` books nothing; the hub credit is booked by `cctp.transfer`, from the burn.
+
+## Consequences
+
+- Corridor is never in a position to spend the money in transit. It quotes, watches, sponsors a fee, and completes a mint it was already allowed to complete.
+- The app must be able to sign Solana with the user's key. Under the v1 delegated-signer model that is the same arrangement as Stellar, so it costs the app nothing new — but an app that holds a Stellar-only key cannot offer this lane.
+- The solver network sets a floor of **$100** per swap, which it calls temporary. Corridor checks it before quoting so a smaller deposit gets an answer instead of a 400, and passes the server's own refusal through when the floor moves.
+- Two hops means two ways to end badly, and they are not the same. A **refund** puts the USDT back on Tron at the user's own address: the deposit is simply over, and retrying would re-quote against money that has gone. An **incomplete deposit** — less arrived than the quote priced — leaves the solver holding it, filling nothing and refunding nothing, so it goes to `manual_review`. `assertDelivered` is where that distinction lives.
+- The amount burned is what the solver actually delivered, read from the swap step's output, not what the quote predicted. Slippage is real and burning more than arrived would fail.
+- The burn is recorded against the solver's **deposit address**, not the saga step, so a second saga over the same deposit cannot burn again — the same reasoning that re-keyed the CCTP mint store in [ADR 0014](/decisions/0014-cctp-receive-only).
+- Not yet run with real money. The lane is built and tested against recorded API shapes; a first mainnet run needs $100 of USDT on Tron, which is also the smallest test the solver network will accept.

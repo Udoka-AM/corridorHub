@@ -27,6 +27,21 @@ export type LegKind =
   | "stellar.pathPayment"
   /** USDC in from Base or Solana over CCTP. */
   | "cctp.transfer"
+  /**
+   * Tron USDT swapped to Solana USDC through the solver network, on the way
+   * to the hub over CCTP. Tron is not a venue: the funds are the user's own,
+   * on their own chain, and Corridor never holds a balance there — so this
+   * leg books nothing and the path planner does not route through it. The
+   * Ramp deposit flow drives it directly.
+   */
+  | "tron.swap"
+  /**
+   * The second hop of a Tron deposit: the swapped USDC burned on Solana so
+   * CCTP mints it on the hub. The user owns it and signs; Corridor only pays
+   * the Solana fee, since a Solana address derived from a Stellar key holds
+   * no SOL.
+   */
+  | "tron.burn"
   | "bridge.simulated"
   | "solana.transfer"
   /** Anchor spokes, over the normalised partner interface (SEP-6/24/31/38). */

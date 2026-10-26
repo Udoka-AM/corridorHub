@@ -213,9 +213,15 @@ importers:
       '@corridor/saga':
         specifier: workspace:*
         version: link:../saga
+      '@corridor/swap-intents':
+        specifier: workspace:*
+        version: link:../swap-intents
       '@corridor/webhooks':
         specifier: workspace:*
         version: link:../webhooks
+      '@solana/kit':
+        specifier: ^8.4.0
+        version: 8.4.0(typescript@5.9.3)
 
   packages/partners:
     dependencies:
@@ -312,6 +318,12 @@ importers:
       viem:
         specifier: 2.56.9
         version: 2.56.9(typescript@5.9.3)(zod@3.25.76)
+
+  packages/swap-intents:
+    dependencies:
+      '@corridor/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/webhooks:
     dependencies:

@@ -17,6 +17,18 @@ import type { PartnerEventStore } from "@corridor/webhooks";
 export { ledgerReserveLeg } from "@corridor/saga";
 export { CctpMintStore, cctpTransferLeg, depositInstruction, type CctpInboundData, type CctpLegOptions } from "./cctp.ts";
 export { stellarPathPaymentLeg, type FxData, type FxLegOptions } from "./fx.ts";
+export {
+  TronBurnStore,
+  assertDelivered,
+  planTronDeposit,
+  quoteTronDeposit,
+  tronBurnLeg,
+  tronSwapLeg,
+  type TronDepositData,
+  type TronBurnLegOptions,
+  type TronDepositPlan,
+  type TronSwapLegOptions,
+} from "./tron.ts";
 
 /** Saga data for a collection: local currency collected into the customer's hub balance. */
 export interface CollectionData {

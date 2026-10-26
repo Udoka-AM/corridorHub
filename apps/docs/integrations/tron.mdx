@@ -1,0 +1,69 @@
+---
+title: "Tron"
+description: "USDT on Tron reaches the Stellar hub in two hops — a solver swap to Solana USDC, then a CCTP burn and mint — without Corridor ever holding the funds in between."
+icon: "arrow-right-left"
+---
+
+USDT on Tron is the biggest stablecoin float in the corridors Corridor serves, and nothing carries it to Stellar in one move. The solver network will not quote Stellar in either direction; CCTP has no Tron domain. So the lane is two hops, and the interesting part is what happens between them.
+
+## The route
+
+<Steps>
+  <Step title="Tron USDT → Solana USDC">
+    `planTronDeposit` takes a live quote from [NEAR Intents 1Click](https://docs.near-intents.org) and returns a one-off Tron address to hand the user. The quote fixes the amount, the recipient and the refund address before anything is sent.
+  </Step>
+  <Step title="Solana USDC → Stellar USDC">
+    `tronBurnLeg` burns what actually arrived, and `cctp.transfer` waits for Circle's attestation and completes the mint on the hub. That half is the [CCTP lane](/integrations/cctp) already in place.
+  </Step>
+</Steps>
+
+## Who owns the money in between
+
+Somebody has to own the USDC on Solana and sign the burn. If that were Corridor, this would be custody.
+
+It is the user. A Stellar account and a Solana address are the same 32-byte Ed25519 key written two ways — StrKey for Stellar, base58 for Solana — so a user holding one key already has an account on both chains:
+
+```ts
+import { solanaAddressOfStellar } from "@corridor/bridge-cctp";
+
+solanaAddressOfStellar("GB3GBC2AGV2BIWWK5LCDW5EHGXVIBRROWJJT44VYENLAM7L65F6LJ6UY");
+// "8y6VZ5L8aQHVSpf2NhW8soP9yKM14HuFpqPqyAuoAUgB" — same key, same person
+```
+
+The swap pays out there, and the burn is signed with that key by the app's wallet. Corridor's only contribution is gas: an address derived this way starts with no SOL, so a Corridor vault signs the burn as **fee payer** while the user signs as **owner**. Corridor pays for the move and cannot make it. See [ADR 0015](/decisions/0015-tron-lane-non-custodial).
+
+<Note>
+Tron is not a venue in the ledger. Corridor holds no balance there, so `tron.swap` books nothing and the path planner does not route through it — the hub credit is booked by `cctp.transfer`, from the burn.
+</Note>
+
+## Quoting
+
+A dry quote prices the lane without reserving anything, which is what a rate in a UI should use:
+
+```ts
+const rate = await quoteTronDeposit({
+  oneClick,
+  stellarAccount,          // the user's G… account
+  amount: 150_000_000n,    // USDT, Tron's 6 decimals
+  refundTo: tronAddress,   // the user's own Tron address
+});
+```
+
+The solver network refuses anything under **$100**, a floor it describes as temporary. Corridor checks it before calling out so a smaller deposit gets a usable answer, and when the floor moves it passes the server's own wording through rather than substituting a stale constant.
+
+## When it goes wrong
+
+The two failure modes are not the same, and `assertDelivered` keeps them apart:
+
+| State | What it means | What Corridor does |
+| --- | --- | --- |
+| `SUCCESS` | Delivered, with an amount and a Solana payout | Burn that amount onward |
+| `REFUNDED` | The USDT went back to the user's Tron address | The deposit is over. No retry — re-quoting would price money that has gone |
+| `FAILED` | No solver filled it | No retry |
+| `INCOMPLETE_DEPOSIT` | Less arrived than the quote priced; the solver holds it, filling nothing and refunding nothing | `manual_review` — only a person can decide |
+
+A `SUCCESS` missing its amount or its payout transaction also goes to review rather than being booked as a delivery nobody can point at.
+
+## Status
+
+Built and tested against recorded API shapes, with the quote and status endpoints verified live on 26 Oct 2026. **Not yet run with real money** — a first mainnet run needs $100 of USDT on Tron, which is also the smallest swap the solver network accepts. See the [roadmap](/status/roadmap).

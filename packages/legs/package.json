@@ -14,6 +14,8 @@
     "@corridor/partners": "workspace:*",
     "@corridor/webhooks": "workspace:*",
     "@corridor/routing": "workspace:*",
-    "@corridor/bridge-cctp": "workspace:*"
+    "@corridor/bridge-cctp": "workspace:*",
+    "@corridor/swap-intents": "workspace:*",
+    "@solana/kit": "^8.4.0"
   }
 }
