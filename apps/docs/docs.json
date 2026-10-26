@@ -170,7 +170,8 @@
           {
             "group": "Hosted API and SDK",
             "pages": [
-              "ramp/overview"
+              "ramp/overview",
+              "ramp/deploy"
             ]
           }
         ]

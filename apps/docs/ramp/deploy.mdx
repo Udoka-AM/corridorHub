@@ -1,0 +1,52 @@
+---
+title: "Running Ramp on a VPS"
+description: "Three files put the Ramp API, its database and a certificate on a box you own. The sponsor key is the part to get right."
+icon: "server"
+---
+
+Ramp is an ordinary Node service with a Postgres database. It needs no platform: a VPS, Docker and a domain are enough.
+
+```bash
+cp .env.production.example .env && chmod 600 .env   # then fill it in
+docker compose up -d
+curl https://ramp.example.com/v1/health
+```
+
+Three files do it. `Dockerfile` runs the TypeScript directly through `tsx`, so the image is the repository as it stands with no build step to drift from the source. `compose.yaml` brings up the API, Postgres and Caddy. `deploy/Caddyfile` terminates TLS — point the domain's A record at the host first, or the certificate request fails.
+
+## The sponsor key is the part to get right
+
+Ramp sponsors each user's account reserve, trustline and fee, so this key spends. It is the only secret on the box that matters.
+
+Preferred: `CORRIDOR_SIGNER=turnkey`, so the secret never reaches the host at all — Corridor sends a hash and gets a signature back. The same interface takes an AWS KMS key.
+
+The alternative is `RAMP_SPONSOR_STELLAR_SECRET` in `.env`, which is why that file is `chmod 600`.
+
+<Warning>
+**On mainnet, Corridor will not invent a key.** In development a missing secret is generated and written to `.env.local`. On mainnet that would be a fresh, empty account — and in a container, a different one on every restart — so a missing value stops the container instead.
+</Warning>
+
+## What the environment decides
+
+| Variable | Why it matters |
+| --- | --- |
+| `CORRIDOR_NETWORK` | `mainnet` turns off self-serve signup and the key generator. Everything else follows from it |
+| `RAMP_ADMIN_TOKEN` | How an app is created on mainnet, since signup is testnet-only. Without it nobody can onboard |
+| `CORRIDOR_ANCHOR_BASE_URL` | Unset means the built-in mock anchor. Development only — it settles nothing |
+| `CORRIDOR_SOROBAN_RPC_URL` | Required on mainnet: Soroban RPC has no public endpoint, and the CCTP mint needs one |
+| `CORRIDOR_TAG_SECRET` | Keys the customer tag inside each reference. Set it once and keep it — changing it changes every tag |
+| `DATABASE_URL` | Built by compose from the Postgres variables. Set by hand only when the database lives elsewhere |
+
+## After it is up
+
+`GET /v1/health` is public and reports the network and settlement asset, which is the quickest way to catch a container running against the wrong one. Caddy polls it too, so a failing API stops receiving traffic.
+
+The service runs two loops of its own: it retries undelivered webhooks every 30 seconds, and reconciles orders against what Horizon shows every 10. Both log to stdout, so `docker compose logs -f ramp` is the operational view. Request logs carry the route template, status and ids only — never a header or a body, which would otherwise carry API keys and signed transactions.
+
+## What this does not do
+
+**Back anything up.** The Postgres volume is the ledger. Take dumps somewhere off the box before real money moves through it.
+
+**Enable x402.** Per-call agent payments are configured in code, not environment, and are off unless the server is given an `x402` block.
+
+**Prove mainnet.** Nothing in the Stellar build has run against mainnet. The first deployment should run on testnet against a real anchor before `CORRIDOR_NETWORK` changes.

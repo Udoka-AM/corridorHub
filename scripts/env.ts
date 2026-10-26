@@ -23,15 +23,24 @@ export function testnetKey(name: string): Hex {
   return v as Hex;
 }
 
-/** Read a Stellar secret from .env.local, generating a fresh testnet keypair on first use. */
+/**
+ * Read a Stellar secret from .env.local, generating a fresh testnet keypair on
+ * first use.
+ *
+ * It will not generate one on mainnet. A generated key is empty and, in a
+ * container, different on every restart — so a missing mainnet secret is a
+ * misconfiguration to stop on, not a key to invent. Supply the secret, or
+ * point `CORRIDOR_SIGNER` at a key holder that never exposes one.
+ */
 export function testnetStellarSecret(name: string): string {
-  let v = process.env[name];
-  if (!v) {
-    const keypair = Keypair.random();
-    v = keypair.secret();
-    appendFileSync(ENV_FILE, `${name}=${v}\n`);
-    process.env[name] = v;
-    console.log(`generated ${name} (${keypair.publicKey()}) -> ${ENV_FILE}`);
+  const v = process.env[name];
+  if (v) return v;
+  if (process.env.CORRIDOR_NETWORK === "mainnet") {
+    throw new Error(`${name} is not set. On mainnet Corridor will not generate a key: set it, or set CORRIDOR_SIGNER=turnkey with ${name.replace(/_STELLAR_SECRET$/, "")}_TURNKEY_SIGN_WITH`);
   }
-  return v;
+  const keypair = Keypair.random();
+  appendFileSync(ENV_FILE, `${name}=${keypair.secret()}\n`);
+  process.env[name] = keypair.secret();
+  console.log(`generated ${name} (${keypair.publicKey()}) -> ${ENV_FILE}`);
+  return keypair.secret();
 }

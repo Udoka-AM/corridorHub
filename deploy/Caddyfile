@@ -1,0 +1,23 @@
+# Caddy gets and renews the certificate itself; point RAMP_DOMAIN's A record at
+# this host first, or the certificate request fails.
+{$RAMP_DOMAIN} {
+	encode zstd gzip
+
+	# The API is the whole site. Health is public; everything else needs a key.
+	reverse_proxy ramp:8787 {
+		health_uri /v1/health
+		health_interval 30s
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

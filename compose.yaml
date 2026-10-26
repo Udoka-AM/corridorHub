@@ -1,0 +1,52 @@
+# Ramp on a VPS: the API, its database, and a reverse proxy that gets its own
+# certificate. `docker compose up -d` after filling in .env.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-corridor}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-corridor}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-corridor} -d ${POSTGRES_DB:-corridor}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ramp:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Inside the compose network the database is reached by service name.
+      DATABASE_URL: postgres://${POSTGRES_USER:-corridor}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-corridor}
+      RAMP_PORT: 8787
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # No published port: only Caddy reaches it.
+    expose:
+      - "8787"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RAMP_DOMAIN: ${RAMP_DOMAIN:?set RAMP_DOMAIN in .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddydata:/data
+      - caddyconfig:/config
+    depends_on:
+      - ramp
+
+volumes:
+  pgdata:
+  caddydata:
+  caddyconfig:
