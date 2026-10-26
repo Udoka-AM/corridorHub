@@ -34,8 +34,8 @@ icon: "milestone"
   <Card title="Agent payments: x402 and MCP" icon="bot" href="/ramp/overview">
     A priced Ramp route answers 402 with x402 v2 requirements, verifying through a facilitator before the work and settling after it succeeds. The same payouts are served as MCP tools, with limits enforced on the agent's key.
   </Card>
-  <Card title="CCTP inflows" icon="arrow-left-right" href="/integrations/cctp">
-    An attested burn on Base or Solana minted on Stellar through the forwarder, booked exactly once per burn, at the hub's 7 decimals.
+  <Card title="CCTP, both directions" icon="arrow-left-right" href="/integrations/cctp">
+    An attested burn minted on Stellar through the forwarder, booked once per burn — and burning on Solana and on Stellar, each signature taken from the program itself.
   </Card>
   <Card title="Ramp: hosted API and SDK" icon="plug-zap" href="/ramp/overview">
     Apps, API keys, quotes, sponsored onboarding, user-signed payouts, collections, webhooks and usage, on the Hub's own anchors, reference and ledger.
@@ -48,7 +48,6 @@ icon: "milestone"
 |---|---|---|
 | **A signed anchor** | Nobody has signed one | A design partner or an anchor agreeing to a testnet integration. Everything below is downstream of this |
 | **SEP-6 collections** | No signed anchor has exercised the flow, so it would be a guess | The first collecting anchor, then the deposit flow behind `openCollection` |
-| **The Soroban CCTP burn** | Burning is built on Solana and receiving on Stellar ([ADR 0014](/decisions/0014-cctp-receive-only)). Only `deposit_for_burn` on *Stellar* is missing, which has no published argument order — so float cannot move off the hub. No corridor needs that: every launch currency has a partner settling in USDC on Stellar | Reading the Soroban contract source, when Hub treasury rebalancing needs it |
 | **`stellar.pathPayment`** | The planner produces the edge; the leg is unwritten | Writing it, so a balance in EURC or MGUSD can fund a payout |
 | **MGUSD, PYUSD, USDT issuers** | Unset until each is verified against the issuer's own `stellar.toml` | Verification, or a deployment supplying its own with `CORRIDOR_STELLAR_ISSUER_…` |
 | **A treasury console** | The prototype's read Tempo and was removed rather than left misreporting | The engines already produce the data; it is a user interface |

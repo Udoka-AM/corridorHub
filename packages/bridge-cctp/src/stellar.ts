@@ -1,6 +1,7 @@
-import { Contract, TransactionBuilder, nativeToScVal, rpc } from "@stellar/stellar-sdk";
-import type { StellarSigner } from "@corridor/chain-stellar";
+import { Contract, TransactionBuilder, nativeToScVal, rpc, xdr } from "@stellar/stellar-sdk";
+import { sacContractId, type StellarSigner } from "@corridor/chain-stellar";
 import { STELLAR_CONTRACTS, type CctpNetwork } from "./domains.ts";
+import type { Asset } from "@corridor/core";
 import { decodeForwardHook } from "./hook.ts";
 import type { CctpMessage } from "./iris.ts";
 
@@ -118,4 +119,93 @@ export async function receivedOnStellar(txHash: string, opts: StellarMintOptions
   const server = serverFor(opts);
   const got = await server.getTransaction(txHash);
   return got.status === "SUCCESS";
+}
+
+/**
+ * The outbound half on Stellar: burn USDC here so it mints on another domain.
+ *
+ * The signature is the deployed contract's own, read from its interface spec
+ * on the network rather than from documentation — Circle publishes the
+ * function names but not their arguments. It is worth seeing why that
+ * mattered: `burn_token` sits *between* `mint_recipient` and
+ * `destination_caller`, which is not where the EVM or Solana entry points put
+ * it, and `amount` is an `i128`, not a `u64`. Guessing from the other chains
+ * would have produced a transaction that spent from the wrong place.
+ *
+ *   deposit_for_burn(caller: Address, amount: i128, destination_domain: u32,
+ *                    mint_recipient: BytesN<32>, burn_token: Address,
+ *                    destination_caller: BytesN<32>, max_fee: i128,
+ *                    min_finality_threshold: u32)
+ *   deposit_for_burn_with_hook(... the same ..., hook_data: Bytes)
+ */
+export interface StellarBurnArgs {
+  /** Amount in the hub's own 7 decimals. */
+  amount: bigint;
+  destinationDomain: number;
+  /** 32 bytes. What this means is the destination's business: a token account on Solana, a padded address on an EVM chain. */
+  mintRecipient: Uint8Array;
+  /** 32 bytes; all zeros leaves the message callable by anyone. */
+  destinationCaller?: Uint8Array;
+  maxFee?: bigint;
+  minFinalityThreshold?: number;
+  /** The asset to burn. Its Stellar Asset Contract is the `burn_token`. */
+  asset?: Asset;
+  /** Overrides the contract derived from `asset`. */
+  burnToken?: string;
+  hookData?: Uint8Array;
+}
+
+/** The argument vector for `deposit_for_burn`, in the contract's own order. */
+export function depositForBurnArgs(caller: string, burnToken: string, args: StellarBurnArgs): xdr.ScVal[] {
+  const bytes32 = (name: string, value: Uint8Array) => {
+    if (value.length !== 32) throw new Error(`${name} must be 32 bytes, got ${value.length}`);
+    return nativeToScVal(Buffer.from(value), { type: "bytes" });
+  };
+  const vector = [
+    nativeToScVal(caller, { type: "address" }),
+    nativeToScVal(args.amount, { type: "i128" }),
+    nativeToScVal(args.destinationDomain, { type: "u32" }),
+    bytes32("mintRecipient", args.mintRecipient),
+    nativeToScVal(burnToken, { type: "address" }),
+    bytes32("destinationCaller", args.destinationCaller ?? new Uint8Array(32)),
+    nativeToScVal(args.maxFee ?? 0n, { type: "i128" }),
+    nativeToScVal(args.minFinalityThreshold ?? 2000, { type: "u32" }),
+  ];
+  return args.hookData ? [...vector, nativeToScVal(Buffer.from(args.hookData), { type: "bytes" })] : vector;
+}
+
+/**
+ * Burn on Stellar. The vault is the `caller`, so it is the account whose
+ * authorization the contract requires and whose balance is spent.
+ */
+export async function burnFromStellar(args: StellarBurnArgs, opts: StellarMintOptions): Promise<{ txHash: string }> {
+  const signer = opts.signer;
+  const burnToken = args.burnToken ?? sacContractId(args.asset ?? "USDC", opts.network);
+  const server = serverFor(opts);
+  const messenger = opts.forwarder ?? STELLAR_CONTRACTS[opts.network].tokenMessengerMinter;
+
+  const source = await server.getAccount(signer.address);
+  const contract = new Contract(messenger);
+  const built = new TransactionBuilder(source, { fee: opts.fee ?? "100", networkPassphrase: opts.passphrase })
+    .addOperation(
+      contract.call(
+        args.hookData ? "deposit_for_burn_with_hook" : "deposit_for_burn",
+        ...depositForBurnArgs(signer.address, burnToken, args),
+      ),
+    )
+    .setTimeout(180)
+    .build();
+
+  // Simulation resolves the footprint and the contract's authorization, so it
+  // runs before signing: the prepared transaction is a different transaction.
+  const prepared = await server.prepareTransaction(built);
+  prepared.addSignature(signer.address, Buffer.from(await signer.sign(prepared.hash())).toString("base64"));
+
+  const sent = await server.sendTransaction(prepared);
+  if (sent.status === "ERROR") throw new Error(`Stellar refused the CCTP burn: ${JSON.stringify(sent.errorResult ?? {})}`);
+  await opts.onSubmitted?.(sent.hash);
+
+  const settled = await waitForTx(server, sent.hash, opts.sleep);
+  if (settled.status !== "SUCCESS") throw new Error(`CCTP burn ${sent.hash} did not succeed: ${settled.status}`);
+  return { txHash: sent.hash };
 }

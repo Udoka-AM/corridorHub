@@ -7,7 +7,15 @@ export {
   hubAmountOf,
   type DepositInstruction,
 } from "./deposit.ts";
-export { mintAndForward, receivedOnStellar, type MintResult, type StellarMintOptions } from "./stellar.ts";
+export {
+  burnFromStellar,
+  depositForBurnArgs,
+  mintAndForward,
+  receivedOnStellar,
+  type MintResult,
+  type StellarBurnArgs,
+  type StellarMintOptions,
+} from "./stellar.ts";
 export {
   DISCRIMINATOR,
   SOLANA_CCTP,

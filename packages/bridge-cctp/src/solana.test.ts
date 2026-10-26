@@ -2,8 +2,9 @@ import { describe, expect, it } from "vitest";
 import { AccountRole, address } from "@solana/kit";
 import { TOKEN_PROGRAM_ADDRESS } from "@solana-program/token";
 import { SYSTEM_PROGRAM_ADDRESS } from "@solana-program/system";
-import { Keypair } from "@stellar/stellar-sdk";
+import { Keypair, scValToNative } from "@stellar/stellar-sdk";
 import { DOMAIN, STELLAR_CONTRACTS } from "./domains.ts";
+import { depositForBurnArgs } from "./stellar.ts";
 import { contractToBytes32, decodeForwardHook } from "./hook.ts";
 import {
   DISCRIMINATOR,
@@ -165,5 +166,56 @@ describe("burning to Stellar", () => {
     // Stellar side uses: the two halves of the lane cannot disagree.
     const hookLength = data.readUInt32LE(96);
     expect(decodeForwardHook(data.subarray(100, 100 + hookLength))).toEqual({ version: 0, recipient });
+  });
+});
+
+describe("burning on Stellar", () => {
+  const base = {
+    amount: 29_000_000n, // 2.90 USDC at the hub's 7 dp
+    destinationDomain: DOMAIN.solana,
+    mintRecipient: new Uint8Array(32).fill(0xcc),
+  };
+  const caller = Keypair.random().publicKey();
+  const burnToken = STELLAR_CONTRACTS.testnet.tokenMessengerMinter; // any contract id will do here
+
+  const kinds = (vals: ReturnType<typeof depositForBurnArgs>) => vals.map((v) => (v as unknown as { type: string }).type);
+
+  it("orders the arguments the way the deployed contract declares them", () => {
+    // Read off the contract's own interface spec: burn_token sits between
+    // mint_recipient and destination_caller, which is not where the EVM or
+    // Solana entry points put it.
+    expect(kinds(depositForBurnArgs(caller, burnToken, base))).toEqual([
+      "scvAddress", // caller
+      "scvI128", // amount
+      "scvU32", // destination_domain
+      "scvBytes", // mint_recipient
+      "scvAddress", // burn_token
+      "scvBytes", // destination_caller
+      "scvI128", // max_fee
+      "scvU32", // min_finality_threshold
+    ]);
+  });
+
+  it("appends hook data only for the hook variant", () => {
+    const withHook = depositForBurnArgs(caller, burnToken, { ...base, hookData: Uint8Array.from([1, 2, 3]) });
+    expect(kinds(withHook)).toHaveLength(9);
+    expect(kinds(withHook).at(-1)).toBe("scvBytes");
+  });
+
+  it("carries the amount as i128, not a 64-bit number", () => {
+    // A u64 would silently truncate a large balance; the contract takes i128.
+    const big = 2n ** 80n;
+    const [, amount] = depositForBurnArgs(caller, burnToken, { ...base, amount: big });
+    expect(scValToNative(amount!)).toBe(big);
+  });
+
+  it("defaults to an open destination caller and the standard finality", () => {
+    const vals = depositForBurnArgs(caller, burnToken, base);
+    expect(Uint8Array.from(scValToNative(vals[5]!))).toEqual(new Uint8Array(32)); // anyone may call it
+    expect(scValToNative(vals[7]!)).toBe(2000);
+  });
+
+  it("refuses an address field that is not 32 bytes", () => {
+    expect(() => depositForBurnArgs(caller, burnToken, { ...base, mintRecipient: new Uint8Array(20) })).toThrow(/mintRecipient must be 32 bytes/);
   });
 });

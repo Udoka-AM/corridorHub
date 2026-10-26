@@ -17,9 +17,9 @@ Most of Corridor's work never leaves Stellar: anchors settle on the hub, so the 
 **Burning is built on Solana.** `buildBurnToStellar` writes a `depositForBurnWithHook` instruction for Circle's `TokenMessengerMinterV2`, addressed at the Stellar forwarder with the beneficiary in hook data, so Corridor can bring USDC from Solana to the hub under its own key. The instruction data and the twenty-account list are tested byte for byte, because argument order and account order are the ABI.
 </Note>
 
-<Warning>
-**Burning on Stellar is not built.** The Soroban `deposit_for_burn` has no published argument order, so float cannot be moved *off* the hub. No corridor needs that today — every launch currency has a partner that settles in USDC on Stellar — but Hub treasury rebalancing does.
-</Warning>
+<Note>
+**Burning on Stellar is built too.** `burnFromStellar` invokes the Soroban `deposit_for_burn`, so float can move off the hub — Hub treasury rebalancing, and the second hop of a Tron deposit. The argument order came from the deployed contract's own interface spec rather than from documentation: `burn_token` sits between `mint_recipient` and `destination_caller`, and `amount` is an `i128` ([ADR 0014](/decisions/0014-cctp-receive-only)).
+</Note>
 
 ## Why CCTP and not a bridge
 

@@ -1,6 +1,6 @@
 ---
-title: "0014 · Receive CCTP, and burn on Solana"
-description: "Corridor completes inbound CCTP transfers on Stellar, hands out the instruction for an external sender's burn, and burns on Solana itself. The Soroban burn is still unwritten."
+title: "0014 · CCTP, both directions"
+description: "Corridor completes inbound CCTP transfers on Stellar, hands out the instruction for an external sender's burn, and burns on both Solana and Stellar. The signatures came from the programs themselves, not from prose."
 icon: "arrow-left-right"
 ---
 
@@ -46,3 +46,21 @@ What this changes:
 - The Tron lane becomes possible as two hops: Tron USDT → Solana USDC by intent, then Solana → Stellar by burn-and-mint. NEAR Intents' $100 minimum still applies, and it still does not route Stellar directly.
 
 What it does **not** change: the Soroban `deposit_for_burn` on Stellar is still unwritten, so float cannot be moved *off* the hub. That direction needs the same treatment — the contract source read for its argument order.
+
+## Amended again, 26 October 2026
+
+The Soroban burn is built, so CCTP now runs in both directions and float can move off the hub.
+
+Circle still publishes the function names without their arguments. The signature came from **the deployed contract's own interface spec**, fetched off the network — a Soroban contract carries its spec in its WASM, so the authority was there the whole time:
+
+```
+deposit_for_burn(caller: Address, amount: i128, destination_domain: u32,
+                 mint_recipient: BytesN<32>, burn_token: Address,
+                 destination_caller: BytesN<32>, max_fee: i128,
+                 min_finality_threshold: u32)
+deposit_for_burn_with_hook(... the same ..., hook_data: Bytes)
+```
+
+Two details vindicate having refused to guess. `burn_token` sits **between** `mint_recipient` and `destination_caller`, which is not where the EVM or Solana entry points put it — an order copied from those chains would have compiled and spent from the wrong place. And `amount` is an `i128`, not the `u64` Solana takes, so a large balance would have truncated silently.
+
+The lesson generalises: when a protocol will not document its ABI, the deployed artefact usually declares it. Ask the chain rather than the docs.
