@@ -193,15 +193,37 @@ describe("saga engine", () => {
     expect(log.filter((l) => l === "fwd bridge.simulated")).toHaveLength(1);
   });
 
+  /** A promise the test resolves by hand, so the two workers interleave in a fixed order. */
+  const deferred = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
   it("fences out a worker whose lease expired mid-leg: its bookings and step result are never committed", async () => {
     const calls: string[] = [];
-    /** A leg whose every call books a distinct movement, so only fencing (not idempotency) can stop a double booking. */
-    const slowThenFast = (worker: string, delayMs: number): Leg<PayoutData> => ({
+    let booked = 0;
+    const insideA = deferred();
+    const releaseA = deferred();
+
+    /**
+     * A leg whose every call books a distinct movement, so only fencing (not
+     * idempotency) can stop a double booking.
+     *
+     * Worker A parks inside the leg until the test lets it go. That is what
+     * makes this a sequence rather than a bet on wall-clock timing: the old
+     * version slept, and under load A could still be in the step before it —
+     * or not have taken the lease at all — when the sleep elapsed.
+     */
+    const bridge = (worker: string): Leg<PayoutData> => ({
       kind: "bridge.simulated",
       backoffMs: 1,
       async forward(ctx) {
         calls.push(worker);
-        await new Promise((r) => setTimeout(r, delayMs));
+        if (worker === "A") {
+          insideA.resolve();
+          await releaseA.promise;
+        }
         const vault = await ctx.accounts.vault("treasury", "USDC", "stellar");
         const clearing = await ctx.accounts.clearing("bridge", "USDC", "stellar");
         return {
@@ -209,7 +231,11 @@ describe("saga engine", () => {
           bookings: [
             {
               kind: "bridge.move",
-              external: { venue: "internal", ref: `${worker}:${Date.now()}` },
+              // Distinct per call by construction. Keying this on the clock
+              // meant two calls in the same millisecond shared a reference
+              // and were deduplicated — which would pass whether or not
+              // fencing worked.
+              external: { venue: "internal", ref: `${worker}:${++booked}` },
               lines: [
                 { account: clearing, direction: "D", money: money("USDC", 1n) },
                 { account: vault, direction: "C", money: money("USDC", 1n) },
@@ -219,13 +245,19 @@ describe("saga engine", () => {
         };
       },
     });
-    const a = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, slowThenFast("A", 250), fakeLeg("partner.payout", [])], { leaseMs: 60 });
-    const b = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, slowThenFast("B", 0), fakeLeg("partner.payout", [])], { leaseMs: 60_000 });
+    const a = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, bridge("A"), fakeLeg("partner.payout", [])]);
+    const b = await SagaEngine.open(db, ledger, accounts, [ledgerReserveLeg, bridge("B"), fakeLeg("partner.payout", [])]);
     const id = await a.start({ kind: "payout", plan, data });
 
-    const runA = a.run(id); // A takes the lease, then stalls inside the bridge leg
-    await new Promise((r) => setTimeout(r, 120)); // A's 60 ms lease lapses
+    const runA = a.run(id);
+    await insideA.promise; // A holds the lease and is inside the bridge leg
+    // Lapse A's lease outright. What is under test is a lease that expired,
+    // not how long one takes to expire, and the engine compares against the
+    // database's clock — so this is the same condition without the race.
+    await db.query(`update sagas set lease_until = now() - interval '1 minute' where id = $1`, [id]);
+
     expect(await b.run(id)).toBe("completed"); // B takes over and finishes
+    releaseA.resolve();
     expect(await runA).toBe("completed"); // A wakes up, is fenced out, and reports the real status
 
     expect(calls).toEqual(["A", "B"]);
