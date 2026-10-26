@@ -256,6 +256,9 @@ importers:
 
   packages/ramp:
     dependencies:
+      '@corridor/bridge-cctp':
+        specifier: workspace:*
+        version: link:../bridge-cctp
       '@corridor/chain-stellar':
         specifier: workspace:*
         version: link:../chain-stellar
@@ -265,6 +268,9 @@ importers:
       '@corridor/ledger':
         specifier: workspace:*
         version: link:../ledger
+      '@corridor/legs':
+        specifier: workspace:*
+        version: link:../legs
       '@corridor/partners':
         specifier: workspace:*
         version: link:../partners
@@ -274,6 +280,12 @@ importers:
       '@corridor/saga':
         specifier: workspace:*
         version: link:../saga
+      '@corridor/swap-intents':
+        specifier: workspace:*
+        version: link:../swap-intents
+      '@solana/kit':
+        specifier: ^8.4.0
+        version: 8.4.0(typescript@5.9.3)
       '@stellar/stellar-sdk':
         specifier: ^17.2.1
         version: 17.2.1

@@ -10,6 +10,10 @@ import { PENDING_PARTNER_ORDER, matchOnChain, partnerCall, rampAccounts, rampCol
 import { PLANS, formatRate, planOf, rampFee, scaleRate, toFiat, toSettlement, type PlanId } from "./fees.ts";
 import { checkSpend, hashKey, newApiKey, newSecret, type SpendingPolicy } from "./keys.ts";
 import { RampStore, toJson, type ApiKey, type OrderKind, type OrderStatus, type Quote, type RampEvent, type RampOrder, type Tenant } from "./store.ts";
+import { DOMAIN } from "@corridor/bridge-cctp";
+import { planTronDeposit, quoteTronDeposit } from "@corridor/legs";
+import { OneClick, OneClickError } from "@corridor/swap-intents";
+import { TronDepositStore, tronDepositPlan, tronLaneLegs, tronStatusOf, type TronDeposit, type TronLaneOptions } from "./tron.ts";
 
 /**
  * Ramp: the hosted front door onto the hub's core (plan §Architecture).
@@ -38,6 +42,12 @@ export interface RampServiceOptions {
   /** Outbound webhook transport. */
   fetch?: typeof fetch;
   now?: () => Date;
+  /**
+   * The Tron deposit lane. Omitted, the lane's endpoints answer
+   * `not_configured`: it needs a Solana fee payer and a signer the app lets
+   * Ramp use on the user's behalf, which not every deployment has.
+   */
+  tron?: TronLaneOptions;
 }
 
 export interface Caller {
@@ -54,6 +64,7 @@ export class RampService {
   private readonly now: () => Date;
   private readonly ttl: number;
   private saga!: SagaEngine;
+  private tronDeposits!: TronDepositStore;
 
   private constructor(
     readonly store: RampStore,
@@ -72,7 +83,11 @@ export class RampService {
     const accounts = new Accounts(ledger);
     const service = new RampService(await RampStore.open(opts.db), ledger, accounts, opts);
     const host = service.flowHost();
-    service.saga = await SagaEngine.open(opts.db, ledger, accounts, [rampPayoutLeg(host), rampCollectLeg(host)]);
+    service.tronDeposits = await TronDepositStore.open(opts.db);
+    // The Tron legs are only registered when the lane is configured, so the
+    // engine never holds a leg it has no signer or fee payer to run.
+    const tron = await tronLaneLegs(opts.db, opts.tron);
+    service.saga = await SagaEngine.open(opts.db, ledger, accounts, [rampPayoutLeg(host), rampCollectLeg(host), ...tron]);
     return service;
   }
 
@@ -366,6 +381,165 @@ export class RampService {
       await this.store.releaseQuote(caller.tenant.id, q.id);
       throw e;
     }
+  }
+
+  // ── Tron deposits ─────────────────────────────────────────────────────
+
+  private tronLane(): TronLaneOptions {
+    const lane = this.opts.tron;
+    if (!lane) {
+      throw new RampError("not_configured", "the Tron deposit lane is not configured on this deployment");
+    }
+    return lane;
+  }
+
+  /**
+   * What a Tron deposit would deliver, without reserving anything.
+   *
+   * Priced as a dry quote, so it costs the solver network nothing and hands
+   * out no deposit address — a rate to show, not a commitment.
+   */
+  async quoteTron(caller: Caller, args: { account: string; amount: bigint; refundTo: string }) {
+    const lane = this.tronLane();
+    assertAddress(args.account);
+    return laneCall(() =>
+      quoteTronDeposit({
+        oneClick: lane.oneClick ?? new OneClick(),
+        stellarAccount: args.account,
+        amount: args.amount,
+        refundTo: args.refundTo,
+        slippageBps: lane.slippageBps,
+      }),
+    );
+  }
+
+  /**
+   * Open a Tron deposit: take a live quote and hand back the address to send
+   * USDT to.
+   *
+   * The saga is started but deliberately not run here. Its first step waits
+   * for the solver, which takes a minute or more and may take twenty — the
+   * caller gets the deposit instruction straight away and the ticker moves it
+   * along (`advanceTronDeposits`).
+   */
+  async createTronDeposit(caller: Caller, args: { account: string; amount: bigint; refundTo: string }): Promise<TronDeposit> {
+    const lane = this.tronLane();
+    assertAddress(args.account);
+    if (!args.refundTo?.trim()) {
+      throw new RampError("invalid_request", "refundTo is required: the user's own Tron address, where an unfilled swap is refunded");
+    }
+    if (args.amount <= 0n) throw new RampError("invalid_request", "amount must be positive");
+
+    const plan = await laneCall(() =>
+      planTronDeposit({
+        oneClick: lane.oneClick ?? new OneClick(),
+        stellarAccount: args.account,
+        amount: args.amount,
+        refundTo: args.refundTo,
+        slippageBps: lane.slippageBps,
+        ttlMinutes: lane.ttlMinutes,
+      }),
+    );
+
+    const id = uuidv7();
+    const now = this.now();
+    // A dollar stablecoin in, a dollar stablecoin out: the reference's
+    // corridor is USD-USD, and its kind is Deposit rather than Collection,
+    // which is the fiat flow.
+    const reference = this.referenceFor(caller.tenant, RefKind.Deposit, "USD", id);
+    const deposit: TronDeposit = {
+      id: `td_${id.replaceAll("-", "")}`,
+      tenantId: caller.tenant.id,
+      keyId: caller.key.id,
+      account: args.account,
+      solanaAddress: plan.solanaAddress,
+      refundTo: args.refundTo,
+      depositAddress: plan.depositAddress,
+      tronAmount: plan.amount,
+      expectedUsdc: plan.expectedUsdc,
+      minUsdc: plan.minUsdc,
+      expiresAt: new Date(plan.expiresAt),
+      status: "awaiting_deposit",
+      reference,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await this.tronDeposits.insert(deposit);
+    deposit.sagaId = await this.saga.start({
+      kind: "ramp.tron_deposit",
+      reference,
+      plan: tronDepositPlan(),
+      data: {
+        depositAddress: deposit.depositAddress,
+        tronAmount: deposit.tronAmount.toString(),
+        solanaAddress: deposit.solanaAddress,
+        stellarAccount: deposit.account,
+        refundTo: deposit.refundTo,
+        reference,
+        // What the CCTP leg needs once the burn has happened.
+        sourceDomain: DOMAIN.solana,
+        recipient: deposit.account,
+        sourceAmount: deposit.expectedUsdc.toString(),
+        source: "external",
+      },
+    });
+    await this.tronDeposits.patch(deposit.tenantId, deposit.id, { sagaId: deposit.sagaId, updatedAt: now });
+    await this.emit(caller.tenant, "tron_deposit.created", tronView(deposit));
+    return deposit;
+  }
+
+  /** A Tron deposit, with its status read off the saga rather than tracked twice. */
+  async getTronDeposit(caller: Caller, id: string): Promise<TronDeposit> {
+    const deposit = await this.tronDeposits.get(caller.tenant.id, id);
+    if (!deposit) throw new RampError("not_found", `no tron deposit ${id}`);
+    return this.refreshTron(caller.tenant, deposit);
+  }
+
+  async listTronDeposits(caller: Caller, limit = 25): Promise<TronDeposit[]> {
+    return this.tronDeposits.list(caller.tenant.id, limit);
+  }
+
+  /**
+   * Move every open Tron deposit along. Called on an interval, like webhook
+   * delivery and reconciliation, because the lane's first step waits on a
+   * solver and must not hold a request open.
+   */
+  async advanceTronDeposits(): Promise<number> {
+    if (!this.opts.tron) return 0;
+    const open = await this.tronDeposits.pending();
+    let moved = 0;
+    for (const deposit of open) {
+      const tenant = await this.store.tenant(deposit.tenantId);
+      if (!tenant) continue;
+      try {
+        await this.saga.run(deposit.sagaId!);
+      } catch {
+        // The saga records its own failure; the status read below reflects it.
+      }
+      const before = deposit.status;
+      const after = await this.refreshTron(tenant, deposit);
+      if (after.status !== before) moved++;
+    }
+    return moved;
+  }
+
+  /** Read the saga's state onto the deposit, without running it. */
+  private async refreshTron(tenant: Tenant, deposit: TronDeposit): Promise<TronDeposit> {
+    if (!deposit.sagaId || deposit.status === "completed" || deposit.status === "failed") return deposit;
+    const view = await this.saga.get(deposit.sagaId);
+    const next = tronStatusOf(view);
+    const failed = view.steps.find((st) => st.error);
+    if (next === deposit.status && (failed?.error ?? undefined) === deposit.error) return deposit;
+    deposit.status = next;
+    deposit.error = failed?.error ?? undefined;
+    deposit.updatedAt = this.now();
+    await this.tronDeposits.patch(deposit.tenantId, deposit.id, {
+      status: next,
+      error: deposit.error ?? null,
+      updatedAt: deposit.updatedAt,
+    });
+    await this.emit(tenant, "tron_deposit.updated", tronView(deposit));
+    return deposit;
   }
 
   collectionLink(order: RampOrder): string {
@@ -663,6 +837,30 @@ export function tenantView(t: Tenant) {
 }
 
 /** What the API returns for an order. */
+/**
+ * The solver network's refusals are the caller's problem, not a server fault:
+ * an amount under the floor, an address it will not pay out to, a pair it has
+ * stopped routing. Its own wording is more specific than anything Ramp could
+ * substitute, so it is passed through with a 400 — except a rate limit or an
+ * outage, which is Ramp's upstream to own.
+ */
+async function laneCall<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (e) {
+    if (e instanceof OneClickError) {
+      throw new RampError(e.retryable ? "partner_error" : "invalid_request", e.message);
+    }
+    throw e;
+  }
+}
+
+/** What a tenant may see of a Tron deposit: no tenant or saga internals. */
+export function tronView(d: TronDeposit) {
+  const { tenantId: _t, keyId: _k, sagaId: _s, ...rest } = d;
+  return rest;
+}
+
 export function orderView(o: RampOrder) {
   const { tenantId: _t, keyId: _k, sagaId: _s, error: _e, xdrHash, unsignedXdr, ...rest } = o;
   return {

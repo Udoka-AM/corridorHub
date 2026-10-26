@@ -129,6 +129,6 @@ Spending limits are **not** enforced in the MCP layer. They belong to the agent 
 
 ## Declared and not built
 
-A bundled wallet, SEP-6/24 collections against a real anchor, invoices and a dashboard. The [Tron USDT deposit lane](/integrations/tron) is built but has not been run with real money. See [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built).
+A bundled wallet, SEP-6/24 collections against a real anchor, invoices and a dashboard. The [Tron USDT deposit lane](/integrations/tron) is built and exposed as `POST /v1/deposits/tron`, but has not been run with real money and needs an app willing to delegate a Solana signer. See [ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built).
 
 MVP keeps the wallet out of Ramp: an app brings its own signer through `signXdr`, and Ramp sponsors the reserve, the trustline and the fee. Passkey login and Soroban smart accounts are a milestone after MVP, not a shipped feature.

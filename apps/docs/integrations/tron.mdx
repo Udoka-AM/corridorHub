@@ -64,6 +64,46 @@ The two failure modes are not the same, and `assertDelivered` keeps them apart:
 
 A `SUCCESS` missing its amount or its payout transaction also goes to review rather than being booked as a delivery nobody can point at.
 
+## Through the Ramp API
+
+```bash
+# What it would deliver, reserving nothing
+curl -X POST $RAMP/v1/deposits/tron/quotes -H "authorization: Bearer $KEY" \
+  -d '{"account":"GB3G…","amount":"150000000","refundTo":"TJRy…"}'
+
+# Open one: returns the Tron address to send USDT to
+curl -X POST $RAMP/v1/deposits/tron -H "authorization: Bearer $KEY" \
+  -d '{"account":"GB3G…","amount":"150000000","refundTo":"TJRy…"}'
+```
+
+```json
+{
+  "id": "td_01JD…",
+  "depositAddress": "TWd4JxMVfwRTqtPEAjNRMBXvAUPuTqy4tL",
+  "tronAmount": "150000000",
+  "expectedUsdc": "149767242",
+  "minUsdc": "148269569",
+  "solanaAddress": "8y6VZ5L8aQHVSpf2NhW8soP9yKM14HuFpqPqyAuoAUgB",
+  "account": "GB3G…",
+  "status": "awaiting_deposit",
+  "expiresAt": "2026-10-26T12:17:37.545Z"
+}
+```
+
+`POST` returns as soon as the quote is taken. It does **not** wait for the solver: that wait is a minute at best and twenty at worst, so the saga is started and a ticker moves it along, exactly as webhook delivery and reconciliation are moved along. Poll `GET /v1/deposits/tron/{id}`, or take the `tron_deposit.updated` webhook.
+
+| Status | What has happened |
+| --- | --- |
+| `awaiting_deposit` | The address is live; the user's USDT has not arrived |
+| `processing` | The swap filled; the burn and mint are running |
+| `completed` | USDC is on the user's Stellar account |
+| `failed` | Refunded to the user's Tron address, or unfillable |
+| `manual_review` | A short deposit, or a success missing its amount or payout |
+
+<Warning>
+The lane answers **501 `not_configured`** unless the deployment supplies a Solana fee payer and a signer it may use for the user's Solana account. That second piece is the same delegation question as embedded wallets ([ADR 0013](/decisions/0013-ramp-and-hub-share-one-core#declared-and-not-built)): an app holding only a Stellar key cannot offer this lane.
+</Warning>
+
 ## Status
 
 Built and tested against recorded API shapes, with the quote and status endpoints verified live on 26 Oct 2026. **Not yet run with real money** — a first mainnet run needs $100 of USDT on Tron, which is also the smallest swap the solver network accepts. See the [roadmap](/status/roadmap).

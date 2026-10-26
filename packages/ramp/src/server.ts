@@ -5,7 +5,7 @@ import type { Fiat } from "@corridor/core";
 import { RampError } from "./errors.ts";
 import type { PlanId } from "./fees.ts";
 import type { SpendingPolicy } from "./keys.ts";
-import { orderView, quoteView, tenantView, type Caller, type RampService } from "./service.ts";
+import { orderView, quoteView, tenantView, tronView, type Caller, type RampService } from "./service.ts";
 import { toJson, type RampOrder } from "./store.ts";
 
 /**
@@ -177,6 +177,35 @@ export function rampHandler(ramp: RampService, opts: RampServerOptions = {}) {
     orderView(await ramp.submitWithdrawal(await caller(), params[0]!, str(body.signedXdr, "signedXdr"))),
   );
   on("GET", "/v1/withdrawals/:id", async ({ caller, params }) => orderView(await kindOf(await ramp.getOrder(await caller(), params[0]!), "withdrawal")));
+
+  // The Tron lane is registered before the generic deposit routes: the first
+  // matching pattern wins, and `/v1/deposits/:id` would otherwise swallow
+  // `/v1/deposits/tron`.
+  on("POST", "/v1/deposits/tron/quotes", async ({ caller, body }) => ({
+    status: 200,
+    body: await ramp.quoteTron(await caller(), {
+      account: str(body.account, "account"),
+      amount: amount(body.amount),
+      refundTo: str(body.refundTo, "refundTo"),
+    }),
+  }));
+
+  on("POST", "/v1/deposits/tron", async ({ caller, body }) => ({
+    status: 201,
+    body: tronView(
+      await ramp.createTronDeposit(await caller(), {
+        account: str(body.account, "account"),
+        amount: amount(body.amount),
+        refundTo: str(body.refundTo, "refundTo"),
+      }),
+    ),
+  }));
+
+  on("GET", "/v1/deposits/tron", async ({ caller, query }) => ({
+    data: (await ramp.listTronDeposits(await caller(), Math.min(Number(query.get("limit") ?? 25), 100))).map(tronView),
+  }));
+
+  on("GET", "/v1/deposits/tron/:id", async ({ caller, params }) => tronView(await ramp.getTronDeposit(await caller(), params[0]!)));
 
   on("POST", "/v1/deposits", async ({ caller, body }) => {
     const o = await ramp.createDeposit(await caller(), { quoteId: str(body.quoteId, "quoteId"), account: str(body.account, "account"), metadata: meta(body.metadata) });

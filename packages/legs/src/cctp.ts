@@ -72,10 +72,13 @@ export interface CctpInboundData {
   [k: string]: Json | undefined;
   /** Circle's domain the burn happened on. */
   sourceDomain: number;
-  /** The burn transaction on that chain. */
-  burnTx: string;
-  /** Amount burned, in the source chain's 6-decimal USDC units. */
-  sourceAmount: string;
+  /**
+   * The burn transaction on that chain. Optional: a burn an earlier step of
+   * the same saga made is read from that step's output instead.
+   */
+  burnTx?: string;
+  /** Amount burned, in the source chain's 6-decimal USDC units. Optional for the same reason as `burnTx`. */
+  sourceAmount?: string;
   /** The Stellar account the forwarder pays: a Corridor vault, or an app's user. */
   recipient: string;
   reference: Hex;
@@ -123,12 +126,26 @@ export function cctpTransferLeg(opts: CctpLegOptions): Leg<CctpInboundData> {
         throw new NonRetryableError((e as Error).message);
       }
 
-      const amount = hubAmountOf(BigInt(d.sourceAmount));
+      // The burn may have been made by an external sender, in which case it
+      // is named in the saga's data — or by an earlier step of this saga, as
+      // the Tron lane's `tron.burn` does, in which case it is in that step's
+      // output. A leg that only looked at the data would retry against an
+      // undefined transaction until the saga gave up.
+      const burned = burnFromSteps(ctx.outputs);
+      const burnTx = d.burnTx ?? burned?.burnTx;
+      if (!burnTx) {
+        throw new NonRetryableError("cctp.transfer needs a burn: none in the saga's data, and no earlier step produced one");
+      }
+      const sourceAmount = d.sourceAmount ?? burned?.amount;
+      if (!sourceAmount) {
+        throw new NonRetryableError(`cctp.transfer has no amount for burn ${burnTx}`);
+      }
+      const amount = hubAmountOf(BigInt(sourceAmount));
       const mintOpts: StellarMintOptions = { ...opts.mint, network: opts.network };
 
       // Has this burn already been minted, by this saga or another?
-      await opts.mints.claim(d.burnTx, ctx.idempotencyKey);
-      let mintTx = await opts.mints.submitted(d.burnTx);
+      await opts.mints.claim(burnTx, ctx.idempotencyKey);
+      let mintTx = await opts.mints.submitted(burnTx);
       if (mintTx && !(await receivedOnStellar(mintTx, mintOpts))) {
         // Submitted but not successful: the message is still unminted, so the
         // nonce is free and it is safe to send again.
@@ -138,13 +155,13 @@ export function cctpTransferLeg(opts: CctpLegOptions): Leg<CctpInboundData> {
       if (!mintTx) {
         const attested = await opts.iris.waitForAttestation({
           sourceDomain: d.sourceDomain,
-          transactionHash: d.burnTx,
+          transactionHash: burnTx,
           timeoutMs: opts.timeoutMs,
           pollMs: opts.pollMs,
         });
         const minted = await mintAndForward(attested, encodeForwardHook(d.recipient), {
           ...mintOpts,
-          onSubmitted: (hash) => opts.mints.recordSubmitted(d.burnTx, hash),
+          onSubmitted: (hash) => opts.mints.recordSubmitted(burnTx, hash),
         });
         mintTx = minted.txHash;
       }
@@ -165,7 +182,7 @@ export function cctpTransferLeg(opts: CctpLegOptions): Leg<CctpInboundData> {
       const pegHub = await a.clearing("usd-peg", "USDC", "stellar");
 
       return {
-        output: { burnTx: d.burnTx, mintTx, amount: amount.toString(), recipient: d.recipient, source: d.source ?? "external" },
+        output: { burnTx, mintTx, amount: amount.toString(), recipient: d.recipient, source: d.source ?? "external" },
         bookings: [
           {
             // The burn: USDC left the spoke. Keyed by the burn transaction, so
@@ -173,7 +190,7 @@ export function cctpTransferLeg(opts: CctpLegOptions): Leg<CctpInboundData> {
             kind: "cctp.burn",
             reference: d.reference,
             sagaId: ctx.sagaId,
-            external: { venue: spoke as Venue, ref: d.burnTx },
+            external: { venue: spoke as Venue, ref: burnTx },
             lines: pair(pegSpoke, burnCredit),
           },
           {
@@ -181,13 +198,23 @@ export function cctpTransferLeg(opts: CctpLegOptions): Leg<CctpInboundData> {
             reference: d.reference,
             sagaId: ctx.sagaId,
             external: { venue: "stellar", ref: mintTx },
-            metadata: { sourceDomain: String(d.sourceDomain), sourceAmount: d.sourceAmount, source: d.source ?? "external" },
+            metadata: { sourceDomain: String(d.sourceDomain), sourceAmount, source: d.source ?? "external" },
             lines: pair(vault, pegHub),
           },
         ],
       };
     },
   };
+}
+
+/** A burn an earlier step of this saga made, if one did. */
+function burnFromSteps(outputs: Record<number, Json>): { burnTx: string; amount?: string } | undefined {
+  for (const out of Object.values(outputs) as ({ burnTx?: unknown; amount?: unknown } | null)[]) {
+    if (typeof out?.burnTx === "string" && out.burnTx) {
+      return { burnTx: out.burnTx, amount: typeof out.amount === "string" ? out.amount : undefined };
+    }
+  }
+  return undefined;
 }
 
 /** Re-exported so an app or a script can hand out a deposit instruction without reaching past the legs. */

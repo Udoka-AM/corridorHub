@@ -5,6 +5,7 @@ import { openLocalDb, type Db } from "@corridor/ledger";
 import { MockPartner, PartnerRegistry } from "@corridor/partners";
 import { stellarRampChain } from "./chain.ts";
 import { RampService } from "./service.ts";
+import type { TronLaneOptions } from "./tron.ts";
 
 /**
  * A complete Ramp on an in-memory database, a mock anchor and an offline
@@ -12,7 +13,7 @@ import { RampService } from "./service.ts";
  * records them instead of sending. For tests and local development.
  */
 export async function testRamp(
-  opts: { now?: () => Date; fetch?: typeof fetch; failPayouts?: boolean; publicUrl?: string; db?: Db & { close(): Promise<void> } } = {},
+  opts: { now?: () => Date; fetch?: typeof fetch; failPayouts?: boolean; publicUrl?: string; db?: Db & { close(): Promise<void> }; tron?: TronLaneOptions } = {},
 ) {
   const db = opts.db ?? (await openLocalDb());
   const sponsorKeys = Keypair.random();
@@ -56,6 +57,7 @@ export async function testRamp(
     publicUrl: opts.publicUrl ?? "http://localhost:8787",
     fetch: opts.fetch ?? (async () => new Response("ok")),
     now: opts.now,
+    tron: opts.tron,
   });
   return { ramp, db, mock, chain, sent, known, ledger, sponsorKeys, anchorAccount, close: () => db.close() };
 }

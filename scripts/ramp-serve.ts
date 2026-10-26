@@ -28,6 +28,10 @@ const server = rampServer(ramp, {
 setInterval(() => void ramp.deliverPending().catch((e) => console.error("webhook retry:", e)), 30_000).unref();
 // Orders settle only from what Horizon shows (ADR 0008).
 setInterval(() => void ramp.reconcile().catch((e) => console.error("reconcile:", e)), 10_000).unref();
+// The Tron lane's first step waits on a solver, which takes minutes, so it is
+// moved along here rather than inside a request. A no-op unless the lane is
+// configured (see apps/docs/integrations/tron.mdx).
+setInterval(() => void ramp.advanceTronDeposits().catch((e) => console.error("tron:", e)), 15_000).unref();
 server.listen(port, () => {
   console.log(`Ramp API on ${publicUrl} (${NETWORK}, settling in ${RAMP_ASSET})`);
   console.log(`sponsor ${sponsor.address}, anchor ${anchor.id}`);

@@ -15,6 +15,8 @@ export type RampErrorCode =
   | "transaction_mismatch"
   | "partner_error"
   | "chain_error"
+  /** The deployment does not offer this lane — a missing signer or fee payer, not a bad request. */
+  | "not_configured"
   | "rate_limited";
 
 const STATUS: Record<RampErrorCode, number> = {
@@ -30,6 +32,7 @@ const STATUS: Record<RampErrorCode, number> = {
   transaction_mismatch: 422,
   partner_error: 502,
   chain_error: 502,
+  not_configured: 501,
   rate_limited: 429,
 };
 
