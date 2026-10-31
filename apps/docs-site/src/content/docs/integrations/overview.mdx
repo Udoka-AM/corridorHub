@@ -1,0 +1,92 @@
+---
+title: "Stellar and the spokes"
+description: "Stellar settles and anchors pay local currency. Other chains appear only as inflows and for the one corridor whose licensed partner has not arrived on Stellar yet."
+---
+
+import Card from '../../../components/Card.astro';
+import CardGroup from '../../../components/CardGroup.astro';
+import Frame from '../../../components/Frame.astro';
+
+Corridor settles in one place. **Stellar is the hub**, anchors are the fiat spokes and they settle on the hub itself, so the common payout path has no bridge in it at all. Everything is reconciled by the same 32-byte Corridor Reference.
+
+<Frame caption="Fig. 03 · The Stellar hub with anchors settling on it directly, and USDC inflows from Base and Solana over CCTP.">
+
+<img className="block dark:hidden" src="/images/diagrams/chain-topology-light.svg" alt="Network topology: the Stellar hub, anchors, and CCTP inflows" />
+<img className="hidden dark:block" src="/images/diagrams/chain-topology-dark.svg" alt="Network topology: the Stellar hub, anchors, and CCTP inflows" />
+
+</Frame>
+
+<CardGroup cols={3}>
+
+<Card title="Stellar" img="/images/chains/stellar.svg" href="/integrations/stellar">
+
+**Settlement hub.** USDC balances, the reference carried whole in `MEMO_HASH`, 7-decimal amounts, a Horizon observer that resumes from a cursor.
+
+</Card>
+<Card title="Anchors" icon="plug" href="/integrations/sep-anchors">
+
+**The fiat spokes.** SEP-1, 10, 12, 38 and 31 behind one partner interface. Adding a corridor is a domain and an asset.
+
+</Card>
+<Card title="Partner interface" icon="arrow-left-right" href="/integrations/partner-interface">
+
+**One shape for every provider.** Six methods and a normalised order lifecycle, so an anchor and an off-Stellar partner are interchangeable to the legs.
+
+</Card>
+
+</CardGroup>
+
+<CardGroup cols={3}>
+
+<Card title="CCTP" icon="arrow-left-right" href="/integrations/cctp">
+
+**Inflows.** USDC from Base and Solana by burn-and-mint, so no wrapped asset reaches the hub. Declared, not built.
+
+</Card>
+<Card title="Solana" img="/images/chains/solana.svg" href="/integrations/solana">
+
+**The one spoke off the hub.** Where the naira partner settles, until a licensed naira anchor is live on Stellar.
+
+</Card>
+<Card title="Base" img="/images/chains/base.svg" href="/integrations/base">
+
+**An inflow source.** USDC a customer already holds, brought to the hub.
+
+</Card>
+
+</CardGroup>
+
+## What settles where
+
+| Role | Venue | Status |
+|---|---|---|
+| Customer balances, treasury, clearing | Stellar, in USDC | Running on testnet |
+| Local currency in and out | Anchors, over SEP-31 | Adapter built; **no anchor signed** |
+| Naira payouts | A licensed partner on Solana | Carried over from the prototype; the hop to reach it is not built |
+| USDC inflows | Base and Solana, over CCTP | Edges declared; **the leg is not built** |
+
+## Networks and environments
+
+| | Testnet | Mainnet |
+|---|---|---|
+| Stellar | Test network, funded by Friendbot. Payments with references, read back off Horizon | Public network. Code paths identical; **no run yet** |
+| Anchors | `MockPartner` with the same lifecycle and signed webhooks; `SepAnchor` against a stubbed anchor | None signed |
+| CCTP | `bridge.simulated`, whose Stellar side is real | Leg not built |
+| Solana | Devnet | Carried over from the prototype for the naira corridor |
+| Base | Base Sepolia | Carried over from the prototype |
+
+## Issuers and identifiers
+
+An asset is its code **and** its issuer ([ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity)).
+
+| Asset | Network | Issuer or mint |
+|---|---|---|
+| USDC | Stellar mainnet | `GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN` |
+| USDC | Stellar testnet | `GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5` |
+| EURC | Stellar mainnet | `GDHU6WRG4IEQXM5NZ4BMPKOXHW76MZM4Y2IEMFDVXBSDP6SJY4ITNPP2` |
+| MGUSD, PYUSD, USDT | Stellar | **Unset on purpose**, until verified against each issuer's own `stellar.toml` |
+| USDC | Base | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
+| USDC | Solana | `EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v` |
+| USDC | Solana devnet | `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU` |
+
+Supply an issuer Corridor does not ship with `CORRIDOR_STELLAR_ISSUER_<CODE>_<NETWORK>`.

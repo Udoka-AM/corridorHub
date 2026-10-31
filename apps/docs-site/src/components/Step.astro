@@ -1,0 +1,7 @@
+---
+const { title } = Astro.props;
+---
+<div class="mx-step">
+  {title && <p class="mx-step-title">{title}</p>}
+  <div class="mx-step-body"><slot /></div>
+</div>

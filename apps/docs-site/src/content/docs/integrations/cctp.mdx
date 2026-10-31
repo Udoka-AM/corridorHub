@@ -1,0 +1,123 @@
+---
+title: "CCTP: cross-chain inflows"
+description: "USDC reaches the hub from Base and Solana by burn-and-mint, so no wrapped asset is ever credited. Receiving is built and tested; burning from the hub is not."
+---
+
+import Note from '../../../components/Note.astro';
+import Warning from '../../../components/Warning.astro';
+
+Most of Corridor's work never leaves Stellar: anchors settle on the hub, so the common payout path has no bridge in it. Other chains appear in two places only:
+
+- **Inflows.** A customer already holding USDC on Base or Solana brings it to the hub, so its balance is one balance.
+- **The one corridor whose licensed partner settles elsewhere.** Naira, today.
+
+<Note>
+
+**Receiving is built.** `cctpTransferLeg` takes a burn someone already made on a spoke, waits for Circle's attestation, mints on Stellar through the forwarder contract and books both sides. It is covered by tests for the hook layout, the attestation client, the mint, and the exactly-once behaviour.
+
+</Note>
+
+<Note>
+
+**Burning is built on Solana.** `buildBurnToStellar` writes a `depositForBurnWithHook` instruction for Circle's `TokenMessengerMinterV2`, addressed at the Stellar forwarder with the beneficiary in hook data, so Corridor can bring USDC from Solana to the hub under its own key. The instruction data and the twenty-account list are tested byte for byte, because argument order and account order are the ABI.
+
+</Note>
+
+<Note>
+
+**Burning on Stellar is built too.** `burnFromStellar` invokes the Soroban `deposit_for_burn`, so float can move off the hub — Hub treasury rebalancing, and the second hop of a Tron deposit. The argument order came from the deployed contract's own interface spec rather than from documentation: `burn_token` sits between `mint_recipient` and `destination_caller`, and `amount` is an `i128` ([ADR 0014](/decisions/0014-cctp-receive-only)).
+
+</Note>
+
+## Why CCTP and not a bridge
+
+CCTP burns USDC on the source chain and mints canonical USDC on the destination. There is no wrapped asset, no bridge liquidity to trust and no second representation of the dollar to reconcile — which matters for a ledger whose whole claim is that it matches the chain.
+
+That is also why these edges exist at all. Corridor settles in one asset on one hub; an inflow that arrived as a wrapped token would be a different asset with a different risk, and the ledger would have to say so.
+
+## The edges
+
+```ts
+{ kind: "cctp.transfer", from: { venue: "base",    asset: "USDC" }, to: { venue: "stellar", asset: "USDC" }, env: ["mainnet"] },
+{ kind: "cctp.transfer", from: { venue: "solana",  asset: "USDC" }, to: { venue: "stellar", asset: "USDC" }, env: ["mainnet"] },
+{ kind: "cctp.transfer", from: { venue: "stellar", asset: "USDC" }, to: { venue: "base",    asset: "USDC" }, env: ["mainnet"] },
+{ kind: "cctp.transfer", from: { venue: "stellar", asset: "USDC" }, to: { venue: "solana",  asset: "USDC" }, env: ["mainnet"] },
+```
+
+Both directions, mainnet only. The routes they produce:
+
+| Flow | Mainnet route |
+|---|---|
+| EUR → NGN payout | `reserve → cctp.transfer (Stellar → Solana) → partner.payout` |
+| NGN collection | `partner.collect (→ Solana) → cctp.transfer (Solana → Stellar) → ledger.credit` |
+| USDC inflow from Base | `cctp.transfer (Base → Stellar) → ledger.credit` |
+
+## The testnet stand-in
+
+`bridge.simulated` has the same interface and the same bookings:
+
+- **The Stellar side is real.** USDC (or XLM on a funded-asset-free testnet) moves between the treasury vault and an escrow vault, carrying the flow's Corridor Reference as `MEMO_HASH`.
+- **The far side is simulated**, booked against `sim:${idempotencyKey}` and marked `simulated: true` in the entry's metadata, so no run can be mistaken for a real cross-chain movement.
+- **It compensates.** On failure it sends the value back on Stellar with the same reference and books `bridge.unfill` and `bridge.refund`.
+
+Both sides go through the `usd-peg` clearing pair, which nets to zero across the flow — the same shape the real leg will book.
+
+## Precision at the boundary
+
+USDC is **6 decimal places** on Solana and Base, and **7** on Stellar. Corridor converts through `rescale`:
+
+```ts
+export const toHubPrecision   = (amount: bigint) => rescale(amount, 6, 7);
+export const toSpokePrecision = (amount: bigint) => rescale(amount, 7, 6);
+```
+
+Going up is exact. Going down, an amount carrying a seventh decimal **throws** rather than rounding it away, so a stroop of dust surfaces as an error instead of disappearing ([ADR 0012](/decisions/0012-seven-decimal-ledger)).
+
+## When this goes away
+
+No corridor needs this today: naira has a partner that settles in USDC on Stellar, so `OFF_STELLAR_PAYOUT_CURRENCIES` is empty and every payout stays on the hub. The list is what decides it, and routing a currency over a bridge again is one line:
+
+```ts
+export const OFF_STELLAR_PAYOUT_CURRENCIES: readonly Fiat[] = ["NGN"];
+```
+
+Inflows from Base and Solana stay useful regardless, for customers whose balances start somewhere else.
+
+## How receiving works
+
+Three recorded steps with a wait in the middle, which is why it is a saga leg rather than a call.
+
+1. **The instruction.** `depositInstruction({ recipient, network })` returns the fields a sender's wallet needs: the destination domain (27), `mintRecipient`, `destinationCaller`, and `hookData`. Corridor does not burn — on the way in the funds are the sender's, on the sender's own chain.
+2. **The attestation.** Circle observes the burn and signs the message. `Iris.waitForAttestation` polls every five seconds, treats a 404 as "not indexed yet" rather than an error, and doubles its wait on a 429 because going over Circle's rate limit blocks for five minutes.
+3. **The mint.** `mint_and_forward(message, attestation)` on the forwarder: it verifies Circle's signature, mints the USDC to itself and pays it on to the account in the hook data, in one transaction. The hook is decoded and the recipient checked *before* anything is signed.
+
+### The two addresses are the forwarder, never the beneficiary
+
+CCTP treats `mintRecipient` as a **contract** address. A burn aimed at a `G…` account mints nowhere and the funds cannot be recovered. So `mintRecipient` and `destinationCaller` are both the `CctpForwarder`, and the real beneficiary travels in hook data as a strkey:
+
+```
+bytes 0–23   zero
+bytes 24–27  hook version (uint32 big-endian)
+bytes 28–31  strkey length in bytes (uint32 big-endian)
+bytes 32+    the strkey, UTF-8
+```
+
+A `G…` or `M…` recipient must already hold a USDC trustline or the mint fails — which is exactly what Ramp's sponsored onboarding guarantees.
+
+### Precision
+
+USDC is 6 decimals on Base and Solana and 7 on Stellar, so a burn of `2900000` is `29000000` on the hub. That conversion goes through `rescale`, which scales up exactly and refuses the direction that could lose value ([ADR 0012](/decisions/0012-seven-decimal-ledger)).
+
+### Exactly once
+
+The mint record is keyed by the **burn transaction**, not by the saga step: one burn can only be minted once, and two sagas started over the same burn would otherwise each mint and each book. The hash is written down the moment it is submitted, before the wait for settlement, so a crash in between is recoverable — and a recorded mint that never settled is re-sent, because the message's nonce is still unspent.
+
+<Warning>
+
+**A CCTP mint does not appear in Horizon's payment stream.** The mint is a contract call, so the Horizon observer that backs reconciliation ([ADR 0003](/decisions/0003-reference-in-memo-hash)) does not see it. Corridor books it from the transaction it submitted itself, which is sound for money Corridor moves. Watching *someone else's* account for inbound CCTP — read-only mode — would need Soroban RPC `getEvents`, and that is not built.
+
+</Warning>
+
+## What is verified
+
+Domain ids, the Stellar contract ids, the hook layout, the Iris endpoint shape and `minFinalityThreshold: 2000` for a standard transfer all come from Circle's own references, checked on 22 October 2026. Verify a contract id against those pages again before a mainnet deployment uses it.

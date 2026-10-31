@@ -1,0 +1,105 @@
+---
+title: "Core model"
+description: "Venues, assets with the issuer as part of their identity, money in integer minor units at 7 decimal places, corridors as currency pairs, and the Observation shape every observer emits."
+---
+
+The core package (`@corridor/core`) defines the vocabulary every other package uses. It has no I/O.
+
+## Venues
+
+A venue is a place where value physically sits.
+
+```ts
+export const VENUES = ["stellar", "base", "solana", "partner_fiat"] as const;
+```
+
+| Venue | Holds | Observed by |
+|---|---|---|
+| `stellar` | USDC and the other classic assets Corridor settles in | Horizon payments on a watched account, filtered by memo |
+| `partner_fiat` | Local currency at an anchor or a licensed partner | SEP-31 status polling; signed webhooks where a provider has them |
+| `solana` | USDC at the egress and ingress vaults, for currencies no Stellar anchor serves yet | Memo program logs |
+| `base` | USDC arriving over CCTP | ERC-20 `Transfer` logs |
+
+```ts
+/** Venues where value is only observable with a viewing key. Empty for now. */
+export const SHIELDED_VENUES: ReadonlySet<Venue> = new Set<Venue>();
+```
+
+`SHIELDED_VENUES` is empty on purpose. The confidential lane arrives with Stellar confidential tokens and auditor keys, and until then `privacy: "shielded"` is refused with that reason. See [ADR 0005](/decisions/0005-confidential-lane-deferred).
+
+## Currencies
+
+32 fiat currencies across four regions, each with a **stable one-byte index** used in the [Corridor Reference](/architecture/corridor-reference). The table is append-only: indices are never renumbered.
+
+| Region | Currencies (index) |
+|---|---|
+| Americas | USD 1 · CAD 2 · MXN 3 · BRL 4 · COP 5 · ARS 6 · CLP 7 · PEN 8 |
+| Europe | EUR 20 · GBP 21 · CHF 22 |
+| Africa | NGN 40 · KES 41 · GHS 42 · ZAR 43 · EGP 44 · UGX 45 · TZS 46 · RWF 47 · XOF 48 · XAF 49 · MAD 50 |
+| Asia & Middle East | CNY 70 · HKD 71 · INR 72 · AED 73 · SGD 74 · JPY 75 · TRY 76 · IDR 77 · VND 78 · PHP 79 |
+
+Each fiat carries its own decimals: 2 for NGN and KES, 0 for XOF, UGX, RWF, CLP, JPY and VND.
+
+## Digital assets
+
+```ts
+export const DIGITAL_ASSETS = {
+  USDC:  { decimals: 7, currency: "USD" },
+  USDT:  { decimals: 7, currency: "USD" },
+  PYUSD: { decimals: 7, currency: "USD" },
+  MGUSD: { decimals: 7, currency: "USD" },
+  EURC:  { decimals: 7, currency: "EUR" },
+  // Native gas assets. Held only as fee float and booked to expense:gas.
+  XLM:   { decimals: 7, currency: "XLM" },
+  SOL:   { decimals: 9, currency: "SOL" },
+  ETH:   { decimals: 18, currency: "ETH" },
+} as const;
+```
+
+**7 decimal places is Stellar's own precision**, and the ledger keeps it so a booked balance can equal an on-chain balance exactly ([ADR 0012](/decisions/0012-seven-decimal-ledger)). Stablecoins are issuer-neutral and each is booked in its own asset; `pegOf` says which fiat it tracks ([ADR 0010](/decisions/0010-issuer-neutral-stablecoins)).
+
+**Which issuer** an asset belongs to is part of its identity, and lives in the Stellar package's registry: `assetOf` matches code *and* issuer, so a look-alike token from another issuer is never booked as USDC ([ADR 0007](/decisions/0007-issuer-is-part-of-asset-identity)).
+
+## Money
+
+Every amount is an integer count of minor units of its asset. There are no floats anywhere in monetary code.
+
+```ts
+interface Money {
+  asset: Asset;
+  amount: bigint;   // non-negative; direction lives on the posting
+}
+
+parseMoney("KES", "1560.00")     // { asset: "KES", amount: 156000n }
+formatMoney(money("USDC", 70_000_000n))  // "7 USDC"
+```
+
+### Rescaling between precisions
+
+```ts
+rescale(amount, from, to)
+```
+
+Spokes with fewer decimals than the hub convert through this. USDC is 6 dp on Solana and Base and 7 dp on Stellar, so going up is exact; going down, an amount carrying a seventh decimal **throws** rather than rounding it away. A stroop of dust surfaces as an error instead of disappearing.
+
+## Corridors
+
+A corridor is the pair (currency the customer funds in, currency the beneficiary receives), written `SOURCE-DESTINATION`: `EUR-KES` is a diaspora payout into Kenya, `NGN-CNY` is a Nigerian importer paying a Chinese supplier. Because a corridor is just a pair, and the pair is encoded in the reference, adding one needs no registry or code change.
+
+## Observation
+
+Every observer, whatever the venue, emits the same shape, so one reconciliation engine serves every corridor:
+
+```ts
+interface Observation {
+  venue: Venue;
+  externalRef: string;      // unique on the venue, e.g. `${txHash}:${operationId}`
+  reference: Hex | null;    // the Corridor Reference, if the movement carried one
+  asset: Asset;
+  amount: bigint;
+  from?: string;
+  to?: string;
+  blockNumber?: bigint;     // the Stellar ledger sequence
+  observedAt: Date;
+}
+```

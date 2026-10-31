@@ -1,0 +1,7 @@
+---
+const { title } = Astro.props;
+---
+<section class="mx-tab">
+  {title && <p class="mx-tab-title">{title}</p>}
+  <slot />
+</section>

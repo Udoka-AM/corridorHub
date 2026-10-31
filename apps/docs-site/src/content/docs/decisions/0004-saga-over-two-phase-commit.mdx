@@ -1,0 +1,26 @@
+---
+title: "ADR 0004: A compensating saga, not two-phase commit"
+description: "Banks, anchors and blockchains do not take part in distributed transactions, so each payout runs as durable legs with compensations, executed in reverse on failure."
+sidebar:
+  label: "0004 · Saga over 2PC"
+---
+
+## Context
+
+A cross-border payout moves value on Stellar, at an anchor, sometimes on a second chain, and in a ledger. None of these will hold a lock or prepare a commit on Corridor's behalf.
+
+## Decision
+
+**Each plan runs as a saga**: durable steps in Postgres, each leg with `forward` and an optional `compensate`, retries with backoff, one worker per saga through a lease, and compensation in reverse order on failure. Failures after money has left Corridor's control stop at `manual_review` instead of compensating.
+
+## Consequences
+
+- Every intermediate state is a real state, with the transaction that caused it recorded against it.
+- Legs must be idempotent. Every external step is recorded before Corridor waits on it, and a leg that moves money first asks the network whether an identical movement — same memo, parties, amount and asset — already landed.
+- Compensation runs last-to-first. Unwinding out of order can leave a balanced ledger describing a sequence that never happened.
+- A lease that expires mid-leg can let a slow worker finish a call, so every commit carries a fencing token: bookings, step results and status changes are all refused if the token has moved on. A test runs exactly that race and checks that only one booking exists.
+
+## Alternatives rejected
+
+- **Two-phase commit:** impossible with external parties that do not participate.
+- **Fire-and-forget with nightly repair:** leaves money in unknown states for hours, which is the failure mode this product exists to remove.

@@ -1,0 +1,86 @@
+---
+title: "First market: Africa"
+description: "Why Corridor starts in Africa: five years of on-chain value in Sub-Saharan Africa, the share already moving in stablecoins, and the trade flows behind it."
+sidebar:
+  label: "First market: Africa"
+---
+
+import Card from '../../../components/Card.astro';
+import CardGroup from '../../../components/CardGroup.astro';
+import Info from '../../../components/Info.astro';
+
+Corridor is built for cross-border payments anywhere (see [The global opportunity](/market/global-opportunity)) and starts in Africa, where stablecoins are already the settlement asset of choice for cross-border flows. The rails exist; what is missing is the ledger that lets licensed payment companies run on them across providers and chains.
+
+## Five years of on-chain value
+
+On-chain value received in Sub-Saharan Africa, from Chainalysis' annual Geography of Cryptocurrency reports (July-to-June years, labelled by the year they end):
+
+| Period | Value received | Change |
+|---|---|---|
+| Jul 2020 – Jun 2021 | **$105.6B** | |
+| Jul 2021 – Jun 2022 | **$100.6B** | −5% |
+| Jul 2022 – Jun 2023 | **$117.1B** | +16% |
+| Jul 2023 – Jun 2024 | **$125B** | +7% |
+| Jul 2024 – Jun 2025 | **$205B** | **+52%** |
+| **Five-year total** | **$653B** | |
+
+```mermaid
+xychart-beta
+  title "On-chain value received, Sub-Saharan Africa ($B)"
+  x-axis ["2021", "2022", "2023", "2024", "2025"]
+  y-axis "USD billions" 0 --> 220
+  line [105.6, 100.6, 117.1, 125, 205]
+```
+
+The last year made Sub-Saharan Africa the third fastest-growing crypto region in the world, behind Asia-Pacific and Latin America. Nigeria alone received more than $92 billion.
+
+## The stablecoin share
+
+Stablecoins account for **43% of the region's on-chain transaction volume**, which puts last year's stablecoin flow at roughly **$88 billion**. Chainalysis also reports frequent multi-million-dollar stablecoin transfers linking Africa, the Middle East and Asia for energy and merchant payments: trade settlement, not speculation.
+
+<Info>
+
+No one publishes stablecoin volume for licensed PSPs on their own. Corridor sizes its opportunity against the region's total stablecoin flow and positions itself as the licensed layer on top of it. The [business model](/market/business-model) shows revenue at different shares of that flow.
+
+</Info>
+
+## The trade behind the flows
+
+| Measure | Value | Source |
+|---|---|---|
+| Africa's merchandise trade with the world, 2024 | **$1.5 trillion** (+13.9%) | Afreximbank African Trade Report 2025 |
+| Intra-African trade, 2024 | **$220.3 billion** (+12.4%) | Afreximbank African Trade Report 2025 |
+
+Every import is a payment out of Africa, and every export a payment in. Corridor serves both directions on the same hub: collections in, payouts out.
+
+## Why now
+
+<CardGroup cols={2}>
+
+<Card title="A payments chain exists" icon="zap">
+
+Stellar carries a 32-byte `MEMO_HASH` on every transaction, settles in seconds for fractions of a cent, and converts between issued assets on its own order books.
+
+</Card>
+<Card title="The fiat spokes are already there" icon="arrow-left-right">
+
+Anchors settle on Stellar itself, over the same SEPs, so a corridor is a home domain and an asset rather than an integration.
+
+</Card>
+<Card title="Ramps have APIs" icon="plug">
+
+Where no anchor serves a currency yet, licensed partners such as Paj expose business APIs with signed webhooks, behind the same interface.
+
+</Card>
+<Card title="Custody is solvable" icon="shield">
+
+KMS and MPC providers sign Ed25519, so a licensed company can route payouts without handing anyone its keys.
+
+</Card>
+
+</CardGroup>
+
+## Sources
+
+- Chainalysis, *Geography of Cryptocurrency* reports: [2025](https://www.chainalysis.com/blog/subsaharan-africa-crypto-adoption-2025/), [2024](https://www.chainalysis.com/blog/subsaharan-africa-crypto-adoption-2024/), [2023](https://www.chainalysis.com/blog/africa-cryptocurrency-adoption/), [2022](https://www.chainalysis.com/blog/sub-saharan-africa-cryptocurrency-geography-report-2022-preview/), [2021](https://www.chainalysis.com/blog/africas-grassroots-cryptocurrency-adoption/)
+- Afreximbank, [*African Trade Report 2025*](https://www.afreximbank.com/afreximbank-launches-2025-report-on-african-trade-in-a-shifting-global-financial-landscape/)

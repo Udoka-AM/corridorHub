@@ -1,0 +1,12 @@
+---
+const { name, type, required, default: def } = Astro.props;
+---
+<div class="mx-field">
+  <p class="mx-field-head">
+    <code class="mx-field-name">{name}</code>
+    {type && <span class="mx-field-type">{type}</span>}
+    {required && <span class="mx-field-req">required</span>}
+    {def !== undefined && <span class="mx-field-def">default: {String(def)}</span>}
+  </p>
+  <div class="mx-field-body"><slot /></div>
+</div>

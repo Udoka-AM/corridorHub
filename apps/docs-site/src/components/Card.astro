@@ -1,0 +1,8 @@
+---
+const { title, href } = Astro.props;
+const Tag = href ? 'a' : 'div';
+---
+<Tag class="mx-card" href={href}>
+  {title && <span class="mx-card-title">{title}</span>}
+  <span class="mx-card-body"><slot /></span>
+</Tag>

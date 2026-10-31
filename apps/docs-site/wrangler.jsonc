@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "corridor-docs",
+  "compatibility_date": "2026-10-31",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    {
+      "pattern": "docs.corridorfinance.tech",
+      "custom_domain": true
+    }
+  ]
+}

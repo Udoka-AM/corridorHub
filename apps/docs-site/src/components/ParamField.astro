@@ -1,0 +1,12 @@
+---
+const { body, query, path, name, type, required } = Astro.props;
+const label = name ?? body ?? query ?? path;
+---
+<div class="mx-field">
+  <p class="mx-field-head">
+    <code class="mx-field-name">{label}</code>
+    {type && <span class="mx-field-type">{type}</span>}
+    {required && <span class="mx-field-req">required</span>}
+  </p>
+  <div class="mx-field-body"><slot /></div>
+</div>

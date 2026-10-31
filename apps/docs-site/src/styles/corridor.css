@@ -1,0 +1,175 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&display=swap');
+
+/* Corridor's own tokens, carried over from the Mintlify theme. */
+:root {
+	--sl-font: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	--sl-font-system-mono: 'Space Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+	--corridor-accent: #16a34a;
+	--corridor-rule: color-mix(in srgb, var(--sl-color-gray-5) 70%, transparent);
+}
+
+:root[data-theme='dark'] {
+	--sl-color-accent-low: #052e16;
+	--sl-color-accent: #16a34a;
+	--sl-color-accent-high: #86efac;
+	--sl-color-bg: #050505;
+	--sl-color-bg-nav: #050505;
+	--sl-color-bg-sidebar: #050505;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #bbf7d0;
+	--sl-color-accent: #15803d;
+	--sl-color-accent-high: #052e16;
+	--sl-color-bg: #f4f4f0;
+	--sl-color-bg-nav: #f4f4f0;
+	--sl-color-bg-sidebar: #f4f4f0;
+}
+
+.site-title img {
+	max-height: 1.75rem;
+}
+
+/* Callouts: Note, Info, Tip, Warning, Check. */
+.mx-callout {
+	border: 1px solid var(--corridor-rule);
+	border-left-width: 3px;
+	border-radius: 0.5rem;
+	padding: 0.75rem 1rem;
+	margin: 1.25rem 0;
+	font-size: var(--sl-text-sm);
+}
+.mx-callout > :first-child { margin-top: 0; }
+.mx-callout > :last-child { margin-bottom: 0; }
+.mx-note { border-left-color: var(--sl-color-accent); }
+.mx-tip { border-left-color: #0891b2; }
+.mx-warning { border-left-color: #d97706; }
+
+/* Cards. */
+.mx-cardgroup {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+	gap: 0.75rem;
+	margin: 1.25rem 0;
+}
+.mx-card {
+	display: block;
+	border: 1px solid var(--corridor-rule);
+	border-radius: 0.5rem;
+	padding: 0.85rem 1rem;
+	text-decoration: none;
+	color: inherit;
+	font-size: var(--sl-text-sm);
+}
+a.mx-card:hover {
+	border-color: var(--sl-color-accent);
+	text-decoration: none;
+}
+.mx-card-title {
+	display: block;
+	font-weight: 700;
+	color: var(--sl-color-white);
+	margin-bottom: 0.3rem;
+}
+.mx-card-body > :first-child { margin-top: 0; }
+.mx-card-body > :last-child { margin-bottom: 0; }
+
+/* Steps. */
+.mx-steps {
+	counter-reset: mx-step;
+	border-left: 1px solid var(--corridor-rule);
+	margin: 1.25rem 0;
+	padding-left: 1.5rem;
+}
+.mx-step {
+	counter-increment: mx-step;
+	position: relative;
+	padding-bottom: 1rem;
+}
+.mx-step::before {
+	content: counter(mx-step);
+	position: absolute;
+	left: -2.4rem;
+	top: 0;
+	width: 1.6rem;
+	height: 1.6rem;
+	border: 1px solid var(--corridor-rule);
+	border-radius: 50%;
+	background: var(--sl-color-bg);
+	display: grid;
+	place-items: center;
+	font-size: 0.75rem;
+}
+.mx-step-title {
+	font-weight: 700;
+	color: var(--sl-color-white);
+	margin: 0 0 0.4rem;
+}
+.mx-step-body > :first-child { margin-top: 0; }
+.mx-step-body > :last-child { margin-bottom: 0; }
+
+/* Accordions. */
+.mx-accordion {
+	border: 1px solid var(--corridor-rule);
+	border-radius: 0.5rem;
+	padding: 0.65rem 1rem;
+	margin: 0.75rem 0;
+}
+.mx-accordion > summary {
+	cursor: pointer;
+	font-weight: 700;
+	color: var(--sl-color-white);
+}
+.mx-accordion-body { padding-top: 0.6rem; }
+.mx-accordion-body > :last-child { margin-bottom: 0; }
+
+/* Response and parameter fields. */
+.mx-field {
+	border-top: 1px solid var(--corridor-rule);
+	padding: 0.75rem 0;
+}
+.mx-field-head {
+	margin: 0 0 0.35rem;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+	align-items: baseline;
+	font-size: var(--sl-text-sm);
+}
+.mx-field-name { font-weight: 700; }
+.mx-field-type,
+.mx-field-def {
+	color: var(--sl-color-gray-3);
+	font-size: var(--sl-text-xs);
+}
+.mx-field-req {
+	color: #d97706;
+	font-size: var(--sl-text-xs);
+	text-transform: uppercase;
+}
+.mx-field-body > :first-child { margin-top: 0; }
+.mx-field-body > :last-child { margin-bottom: 0; }
+
+/* Tabs, rendered as stacked sections rather than real tabs. */
+.mx-tabs {
+	border: 1px solid var(--corridor-rule);
+	border-radius: 0.5rem;
+	padding: 0.25rem 1rem;
+	margin: 1.25rem 0;
+}
+.mx-tab + .mx-tab { border-top: 1px solid var(--corridor-rule); }
+.mx-tab { padding: 0.75rem 0; }
+.mx-tab-title {
+	font-weight: 700;
+	color: var(--sl-color-white);
+	margin: 0 0 0.4rem;
+}
+
+/* Figures. */
+.mx-frame { margin: 1.25rem 0; }
+.mx-frame img { border-radius: 0.5rem; }
+.mx-frame figcaption {
+	font-size: var(--sl-text-xs);
+	color: var(--sl-color-gray-3);
+	margin-top: 0.4rem;
+}

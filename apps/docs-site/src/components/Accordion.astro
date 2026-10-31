@@ -1,0 +1,7 @@
+---
+const { title, defaultOpen } = Astro.props;
+---
+<details class="mx-accordion" open={defaultOpen}>
+  <summary>{title}</summary>
+  <div class="mx-accordion-body"><slot /></div>
+</details>
