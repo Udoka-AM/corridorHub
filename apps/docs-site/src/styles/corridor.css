@@ -165,6 +165,55 @@ a.mx-card:hover {
 	margin: 0 0 0.4rem;
 }
 
+/* Brand details carried over from the Mintlify theme: tight display type, small
+   radii, uppercase section labels, tabular figures and the film grain. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.content-panel h1 {
+	letter-spacing: -0.045em;
+}
+.sl-markdown-content h3,
+.sl-markdown-content h4 {
+	letter-spacing: -0.02em;
+}
+
+.mx-card,
+.mx-callout,
+.mx-accordion,
+.mx-tabs,
+.expressive-code .frame,
+.sl-markdown-content pre {
+	border-radius: 8px;
+}
+.sl-markdown-content img[src*='/images/product/'] {
+	border-radius: 14px;
+}
+
+.sidebar-content .large,
+.sidebar-content summary > .large {
+	text-transform: uppercase;
+	letter-spacing: 0.18em;
+	font-size: 11px;
+}
+
+.sl-markdown-content table {
+	font-variant-numeric: tabular-nums;
+}
+
+/* Decorative and inert. */
+body::after {
+	content: '';
+	pointer-events: none;
+	position: fixed;
+	inset: 0;
+	z-index: 60;
+	opacity: 0.05;
+	background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+@media (prefers-reduced-motion: reduce) {
+	body::after { opacity: 0.03; }
+}
+
 /* Figures. */
 .mx-frame { margin: 1.25rem 0; }
 .mx-frame img { border-radius: 0.5rem; }

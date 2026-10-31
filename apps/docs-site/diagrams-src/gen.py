@@ -1,13 +1,13 @@
 """
 Corridor architecture diagrams, cloud-architecture style, in the website's brand:
 black/white, Space Mono (embedded), small radii, single ink, FIG markers.
-Emits <name>-light.svg and <name>-dark.svg per diagram into ../images/diagrams.
+Emits <name>-light.svg and <name>-dark.svg per diagram into ../public/images/diagrams.
 Run: python3 diagrams-src/gen.py   (icons: Lucide, ISC; font: Space Mono, OFL; marks: @web3icons)
 """
 import base64, os, re, html
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT = os.path.join(HERE, "..", "images", "diagrams")
+OUT = os.path.join(HERE, "..", "public", "images", "diagrams")
 os.makedirs(OUT, exist_ok=True)
 
 FONT400 = base64.b64encode(open(f"{HERE}/fonts/sm400.woff2", "rb").read()).decode()

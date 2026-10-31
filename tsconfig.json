@@ -6,6 +6,7 @@
     "apps/*/src/**/*.ts"
   ],
   "exclude": [
-    "apps/site/**"
+    "apps/site/**",
+    "apps/docs-site/**"
   ]
 }

@@ -73,7 +73,7 @@ packages/
   chain-evm/       Base, for USDC inflows
 apps/
   site/            The public landing page (React + three.js)
-  docs/            The documentation site (48 Mintlify MDX files)
+  docs-site/       The documentation site (53 Astro Starlight pages)
   console/         The Tempo prototype's console, kept as a static replay. No server.
 scripts/           stellar-wallets · stellar-smoke · stellar-payout · watch-report · runtime · signers · env
 examples/          Recorded runs and sample read-only configs
@@ -131,7 +131,7 @@ Verified by audit on 17 Oct 2026. "Run" means a script exercised it against Stel
 | | State |
 |---|---|
 | `README.md`, `docs/ARCHITECTURE.md` | Rewritten for Stellar, authoritative |
-| `apps/docs` — 48 MDX files, 12 ADRs, 8 diagram pairs | Rewritten for Stellar (PR #1) |
+| `apps/docs-site` — 53 MDX files, 15 ADRs, 8 diagram pairs | Rewritten for Stellar (PR #1) |
 | `apps/site` — landing page | Rewritten for Stellar (PR #1) |
 | `apps/console` | The Stellar treasury console: six read-only panels over the ledger and sagas. The Tempo replay is kept beside it at `public/prototype.html`, labelled. |
 
@@ -264,8 +264,8 @@ Plus: `partnerPayoutLeg` falls back to the order's receiving account when the st
 **W1-5 · Write it down** — ✅ **done 17 Oct.** Evidence page, the anchor integration page, the quickstart, the reviewer path and `examples/anchor/README.md`.
 
 <details><summary>Original task</summary>
-- Add the run to `apps/docs/status/evidence.mdx` under Stellar testnet, with the transaction link and the reproducing command.
-- Update `apps/docs/integrations/sep-anchors.mdx`: the "no anchor is signed" warning stays, but "only ever run against an in-process stub" becomes "run against Stellar's Anchor Platform".
+- Add the run to `apps/docs-site/src/content/docs/status/evidence.mdx` under Stellar testnet, with the transaction link and the reproducing command.
+- Update `apps/docs-site/src/content/docs/integrations/sep-anchors.mdx`: the "no anchor is signed" warning stays, but "only ever run against an in-process stub" becomes "run against Stellar's Anchor Platform".
 - Update `README.md`, `docs/ARCHITECTURE.md` §9 and §4 of this file.
 </details>
 
@@ -300,7 +300,7 @@ Plus: `partnerPayoutLeg` falls back to the order's receiving account when the st
 - Regenerate `eu-payco-demo-records.csv` from the real testnet runs, with one record deliberately short and one deliberately missing, so the output shows every status. Say in the file header that it is a sample.
 - **Done when:** the committed example runs end to end against testnet and produces at least one `matched`, one `short` and one `missing`.
 
-**W3-3 · Write it down** *(~1h)* — update `apps/docs/flows/read-only-pilot.mdx` and ADR 0011 with the real command and real output. Both currently describe the library more precisely than the script delivers; this closes that gap in the honest direction.
+**W3-3 · Write it down** *(~1h)* — update `apps/docs-site/src/content/docs/flows/read-only-pilot.mdx` and ADR 0011 with the real command and real output. Both currently describe the library more precisely than the script delivers; this closes that gap in the honest direction.
 
 ### W4 · Proof and hygiene
 
@@ -322,7 +322,7 @@ Plus: `partnerPayoutLeg` falls back to the order's receiving account when the st
 1. `pnpm test` · `npx tsc -b` · `pnpm --filter @corridor/site build` all clean.
 2. Re-run all four scripts end to end from a clean clone, following only the README. Anything the README does not cover is a README bug.
 3. `grep -rni "tempo\|zcash\|across\|pathusd" apps/ packages/ scripts/ examples/` — every hit must be a deliberate, labelled reference to the prototype.
-4. Update §4 and §5 of this file, the README's "Not done yet" sentence, `ARCHITECTURE.md` §8–9, `apps/docs/status/evidence.mdx`, `apps/docs/status/roadmap.mdx`, `apps/docs/start/ten-minute-review.mdx`.
+4. Update §4 and §5 of this file, the README's "Not done yet" sentence, `ARCHITECTURE.md` §8–9, `apps/docs-site/src/content/docs/status/evidence.mdx`, `apps/docs-site/src/content/docs/status/roadmap.mdx`, `apps/docs-site/src/content/docs/start/ten-minute-review.mdx`.
 5. Confirm the landing page and docs site are live (D5).
 6. Tag `v0.2.0-testnet`.
 

@@ -30,7 +30,7 @@ setInterval(() => void ramp.deliverPending().catch((e) => console.error("webhook
 setInterval(() => void ramp.reconcile().catch((e) => console.error("reconcile:", e)), 10_000).unref();
 // The Tron lane's first step waits on a solver, which takes minutes, so it is
 // moved along here rather than inside a request. A no-op unless the lane is
-// configured (see apps/docs/integrations/tron.mdx).
+// configured (see apps/docs-site/src/content/docs/integrations/tron.mdx).
 setInterval(() => void ramp.advanceTronDeposits().catch((e) => console.error("tron:", e)), 15_000).unref();
 server.listen(port, () => {
   console.log(`Ramp API on ${publicUrl} (${NETWORK}, settling in ${RAMP_ASSET})`);
